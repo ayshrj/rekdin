@@ -7,13 +7,24 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useChat } from "@/contexts/chat-context"
-import { ClipboardDocumentList, Sparkles } from "@/lib/icons"
+import { ClipboardDocumentList, Cog8Tooth, Sparkles } from "@/lib/icons"
 
 import { ChatInput } from "./chat-input"
 import { ChatMessage } from "./chat-message"
 
 export function ChatPanel() {
-  const { messages, isLoading, isThinking, sendMessage, currentSessionId, sessions } = useChat()
+  const {
+    messages,
+    isLoading,
+    isThinking,
+    sendMessage,
+    currentSessionId,
+    sessions,
+    llmProvider,
+    openRouterApiKey,
+    openAIApiKey,
+    azureOpenAIApiKey,
+  } = useChat()
   const scrollRef = React.useRef<HTMLDivElement | null>(null)
   const scrollViewportRef = React.useRef<HTMLDivElement | null>(null)
   const stickToBottomRef = React.useRef(true)
@@ -24,6 +35,19 @@ export function ChatPanel() {
   const lastDraftLenRef = React.useRef(0)
   const [hydrated, setHydrated] = React.useState(false)
   const [showAllTools, setShowAllTools] = React.useState(false)
+  const missingApiKey = React.useMemo(() => {
+    if (llmProvider === "openai") return !openAIApiKey
+    if (llmProvider === "azure_openai") return !azureOpenAIApiKey
+    return !openRouterApiKey
+  }, [azureOpenAIApiKey, llmProvider, openAIApiKey, openRouterApiKey])
+  const missingApiKeyMessage = React.useMemo(() => {
+    if (!missingApiKey) return ""
+    if (llmProvider === "openai") return "Add your OpenAI API key to use chat."
+    if (llmProvider === "azure_openai") {
+      return "Add your Azure OpenAI API key to use chat."
+    }
+    return "Add your OpenRouter API key to use chat."
+  }, [llmProvider, missingApiKey])
 
   React.useEffect(() => {
     const viewport = scrollRef.current?.closest<HTMLDivElement>(
@@ -209,6 +233,22 @@ export function ChatPanel() {
               <p className="text-muted-foreground mb-6 text-xs">
                 Tip: be specific about the output format (JSON/table/bullets) and constraints.
               </p>
+
+              {missingApiKeyMessage ? (
+                <div className="bg-muted/40 border-border mb-4 rounded-xl border px-4 py-3 text-left text-sm">
+                  <div className="flex items-start gap-2">
+                    <span className="bg-primary/10 text-primary mt-0.5 rounded-full p-1">
+                      <Cog8Tooth className="h-4 w-4" />
+                    </span>
+                    <div className="space-y-1">
+                      <p className="text-foreground">{missingApiKeyMessage}</p>
+                      <p className="text-muted-foreground text-xs">
+                        Open Settings in the top-right corner to add it.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="bg-muted/30 border-border rounded-xl border p-4 text-left">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
