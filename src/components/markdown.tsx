@@ -42,7 +42,7 @@ export function Markdown({ children, className }: { children: string; className?
           pre: ({ className: preClassName, ...props }) => (
             <pre
               className={cn(
-                "my-2 overflow-x-auto rounded-md border bg-muted p-3 font-mono text-xs",
+                "bg-muted my-2 overflow-x-auto rounded-md border p-3 font-mono text-xs",
                 preClassName
               )}
               {...props}
@@ -54,7 +54,7 @@ export function Markdown({ children, className }: { children: string; className?
               <code
                 className={cn(
                   !isBlock
-                    ? "rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]"
+                    ? "bg-muted rounded px-1 py-0.5 font-mono text-[0.85em]"
                     : "bg-transparent p-0 font-mono text-xs",
                   codeClassName
                 )}

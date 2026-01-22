@@ -1,6 +1,8 @@
-import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
+
+import type { Metadata } from "next"
+import { Geist, Geist_Mono, Manrope } from "next/font/google"
+
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { ChatProvider } from "@/contexts/chat-context"
@@ -15,8 +17,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 })
 
+const manrope = Manrope({
+  variable: "--font-manrope",
+  subsets: ["latin"],
+})
+
 export const metadata: Metadata = {
-  title: "Terminator Next",
+  title: "REKDIN",
   description: "LangChain + OpenRouter research and automation workspace",
 }
 
@@ -27,7 +34,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={`${manrope.variable} ${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <ChatProvider>
             {children}

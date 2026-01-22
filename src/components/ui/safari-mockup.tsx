@@ -33,7 +33,7 @@ export function SafariMockup({
     >
       {/* Top chrome */}
       <div className="h-13">
-        <div className="h-full w-full rounded-t-xl bg-white dark:bg-[#262626] flex items-center gap-3 px-3">
+        <div className="flex h-full w-full items-center gap-3 rounded-t-xl bg-white px-3 dark:bg-[#262626]">
           {/* mac dots */}
           <div className="flex items-center gap-2">
             <span className="h-3 w-3 rounded-full bg-[#E5E5E5] dark:bg-[#404040]" />
@@ -49,13 +49,13 @@ export function SafariMockup({
           </div>
 
           {/* address area */}
-          <div className="flex-1 flex items-center gap-2 min-w-0">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <SafariIconShield />
 
-            <div className="flex-1 min-w-0">
-              <div className="h-7 rounded-md bg-[#E5E5E5] dark:bg-[#404040] flex items-center gap-2 px-3 min-w-0">
+            <div className="min-w-0 flex-1">
+              <div className="flex h-7 min-w-0 items-center gap-2 rounded-md bg-[#E5E5E5] px-3 dark:bg-[#404040]">
                 <SafariIconLock />
-                <span className="text-xs text-[#A3A3A3] truncate">{display}</span>
+                <span className="truncate text-xs text-[#A3A3A3]">{display}</span>
               </div>
             </div>
 
@@ -63,7 +63,7 @@ export function SafariMockup({
           </div>
 
           {/* right controls */}
-          <div className="flex items-center gap-3 ml-2">
+          <div className="ml-2 flex items-center gap-3">
             <SafariIconShare />
             <SafariIconPlus />
             <SafariIconTabs />
@@ -90,7 +90,7 @@ function IconSvg({
 }) {
   return (
     <svg
-      className={["mix-blend-luminosity shrink-0", className].join(" ")}
+      className={["shrink-0 mix-blend-luminosity", className].join(" ")}
       width="18"
       height="18"
       viewBox={viewBox}
@@ -105,7 +105,7 @@ function IconSvg({
 
 function SafariIconLock() {
   return (
-    <IconSvg viewBox="565 19 9 14" className="w-4 h-4">
+    <IconSvg viewBox="565 19 9 14" className="h-4 w-4">
       <path
         d="M566.269 32.0852H572.426C573.277 32.0852 573.696 31.6663 573.696 30.7395V25.9851C573.696 25.1472 573.353 24.7219 572.642 24.6521V23.0842C572.642 20.6721 571.036 19.5105 569.348 19.5105C567.659 19.5105 566.053 20.6721 566.053 23.0842V24.6711C565.393 24.7727 565 25.1917 565 25.9851V30.7395C565 31.6663 565.418 32.0852 566.269 32.0852ZM567.272 22.97C567.272 21.491 568.211 20.6785 569.348 20.6785C570.478 20.6785 571.423 21.491 571.423 22.97V24.6394L567.272 24.6458V22.97Z"
         fill="#A3A3A3"

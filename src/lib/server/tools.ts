@@ -1,21 +1,80 @@
 import { tool } from "@langchain/core/tools"
-import { z } from "zod"
 import { Readability } from "@mozilla/readability"
-import TurndownService from "turndown"
-import { JSDOM } from "jsdom"
-import { readFile, writeFile, stat, readdir } from "fs/promises"
 import { spawn } from "child_process"
+import crypto from "crypto"
+import { unzipSync, zipSync } from "fflate"
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "fs/promises"
+import { JSDOM } from "jsdom"
 import os from "os"
-import puppeteer, { Browser, Page } from "puppeteer"
+import path from "path"
+import type { Browser, Page } from "puppeteer"
+import puppeteer from "puppeteer-extra"
+import AdblockerPlugin from "puppeteer-extra-plugin-adblocker"
+import RecaptchaPlugin from "puppeteer-extra-plugin-recaptcha"
+import StealthPlugin from "puppeteer-extra-plugin-stealth"
+import TurndownService from "turndown"
+import { z } from "zod"
 
 import { ensureWorkspaceDirs, getWorkspaceRoot, resolveWorkspacePath } from "./workspace"
 
 const turndown = new TurndownService({ headingStyle: "atx" })
 
 let browserPromise: Promise<Browser> | null = null
+let stealthInitialized = false
+let adblockInitialized = false
+let recaptchaInitialized = false
+
+function ensureStealthPlugin() {
+  if (stealthInitialized) return
+  stealthInitialized = true
+  try {
+    puppeteer.use(StealthPlugin())
+  } catch (err) {
+    console.warn(
+      "Failed to initialize puppeteer-extra-plugin-stealth, continuing without stealth mode.",
+      err
+    )
+  }
+}
+
+function ensureAdblockPlugin() {
+  if (adblockInitialized) return
+  adblockInitialized = true
+  try {
+    puppeteer.use(AdblockerPlugin({ blockTrackers: true }))
+  } catch (err) {
+    console.warn(
+      "Failed to initialize puppeteer-extra-plugin-adblocker, continuing without adblock.",
+      err
+    )
+  }
+}
+
+function ensureRecaptchaPlugin() {
+  if (recaptchaInitialized) return
+  recaptchaInitialized = true
+  try {
+    const token = process.env.CAPTCHA_SOLVER_TOKEN || process.env.RECAPTCHA_SOLVER_TOKEN || ""
+    // If no solver token is configured, still register the plugin to auto-detect challenges; user must provide token at runtime for solving.
+    puppeteer.use(
+      RecaptchaPlugin({
+        provider: token ? { id: "2captcha", token } : { id: "none" },
+        visualFeedback: false,
+      })
+    )
+  } catch (err) {
+    console.warn(
+      "Failed to initialize puppeteer-extra-plugin-recaptcha, continuing without recaptcha helper.",
+      err
+    )
+  }
+}
 
 async function getBrowser() {
   if (!browserPromise) {
+    ensureStealthPlugin()
+    ensureAdblockPlugin()
+    ensureRecaptchaPlugin()
     browserPromise = puppeteer.launch({
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -34,8 +93,440 @@ async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
   }
 }
 
+async function goto(
+  page: Page,
+  url: string,
+  waitUntil: "domcontentloaded" | "networkidle0" = "domcontentloaded"
+) {
+  const response = await page.goto(url, { waitUntil, timeout: 30000 })
+  return { status: response?.status() ?? null, url: page.url() }
+}
+
+async function screenshotDataUrl(page: Page, fullPage = true) {
+  const shot = await page.screenshot({ fullPage, encoding: "base64" })
+  return `data:image/png;base64,${shot}`
+}
+
+async function centerOfSelector(page: Page, selector: string) {
+  const handle = await page.$(selector)
+  if (!handle) return null
+  const box = await handle.boundingBox()
+  if (!box) return null
+  return { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) }
+}
+
+function truncateString(value: string, max = 4000) {
+  if (value.length <= max) return value
+  return `${value.slice(0, max)}\n\n...(truncated, ${value.length} chars total)`
+}
+
+async function runCommand(command: string, cwd?: string, timeoutMs = 30000) {
+  await ensureWorkspaceDirs()
+  const workingDir = cwd ? resolveWorkspacePath(cwd) : getWorkspaceRoot()
+  return await new Promise<{ stdout: string; stderr: string; exitCode: number; duration: number }>(
+    (resolve) => {
+      const child = spawn(command, {
+        shell: os.platform() === "win32" ? "powershell.exe" : "bash",
+        cwd: workingDir,
+        env: process.env,
+      })
+      const start = Date.now()
+      let stdout = ""
+      let stderr = ""
+      let finished = false
+
+      child.stdout.on("data", (chunk) => (stdout += chunk.toString()))
+      child.stderr.on("data", (chunk) => (stderr += chunk.toString()))
+
+      const timer = setTimeout(() => {
+        if (finished) return
+        child.kill("SIGTERM")
+      }, timeoutMs)
+
+      child.on("close", (code) => {
+        finished = true
+        clearTimeout(timer)
+        resolve({ stdout, stderr, exitCode: code ?? 0, duration: Date.now() - start })
+      })
+    }
+  )
+}
+
+async function runCommandUnsafe(command: string, cwd?: string, timeoutMs = 30000) {
+  return await new Promise<{ stdout: string; stderr: string; exitCode: number; duration: number }>(
+    (resolve) => {
+      const child = spawn(command, {
+        shell: os.platform() === "win32" ? "powershell.exe" : "bash",
+        cwd,
+        env: process.env,
+      })
+      const start = Date.now()
+      let stdout = ""
+      let stderr = ""
+      let finished = false
+
+      child.stdout.on("data", (chunk) => (stdout += chunk.toString()))
+      child.stderr.on("data", (chunk) => (stderr += chunk.toString()))
+
+      const timer = setTimeout(() => {
+        if (finished) return
+        child.kill("SIGTERM")
+      }, timeoutMs)
+
+      child.on("close", (code) => {
+        finished = true
+        clearTimeout(timer)
+        resolve({ stdout, stderr, exitCode: code ?? 0, duration: Date.now() - start })
+      })
+    }
+  )
+}
+
+const LATEX_ENGINES = ["tectonic", "pdflatex", "xelatex", "lualatex"]
+
+function sanitizePdfBaseName(name?: string) {
+  const base = path.basename(name ?? "document").replace(/\.pdf$/i, "")
+  const safe = base.replace(/[^a-zA-Z0-9._-]/g, "_")
+  return safe.length > 0 ? safe : "document"
+}
+
+async function fileExists(filePath: string) {
+  try {
+    await stat(filePath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function findLatexEngine() {
+  for (const engine of LATEX_ENGINES) {
+    const res = await runCommandUnsafe(`${engine} --version`, undefined, 5000)
+    if (res.exitCode === 0) return engine
+  }
+  return null
+}
+
+type CloudinaryConfig = { cloudName: string; apiKey: string; apiSecret: string }
+
+function parseCloudinaryConfig(headers?: HeadersInit): CloudinaryConfig | null {
+  const get = (key: string) => {
+    if (!headers) return ""
+    if (headers instanceof Headers) return headers.get(key) ?? ""
+    if (Array.isArray(headers)) {
+      const match = headers.find(([k]) => k.toLowerCase() === key.toLowerCase())
+      return match ? (match[1] ?? "") : ""
+    }
+    const record = headers as Record<string, string>
+    return record[key] ?? ""
+  }
+
+  const cloudName =
+    get("x-cloudinary-cloud-name") ||
+    process.env.CLOUDINARY_CLOUD_NAME ||
+    process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
+    ""
+  const apiKey = get("x-cloudinary-api-key") || process.env.CLOUDINARY_API_KEY || ""
+  const apiSecret = get("x-cloudinary-api-secret") || process.env.CLOUDINARY_API_SECRET || ""
+
+  if (!cloudName || !apiKey || !apiSecret) return null
+  return { cloudName: cloudName.trim(), apiKey: apiKey.trim(), apiSecret: apiSecret.trim() }
+}
+
+async function readWorkspaceText(filePath: string) {
+  await ensureWorkspaceDirs()
+  const resolved = resolveWorkspacePath(filePath)
+  return await readFile(resolved, "utf-8")
+}
+
+async function writeWorkspaceText(filePath: string, content: string) {
+  await ensureWorkspaceDirs()
+  const resolved = resolveWorkspacePath(filePath)
+  await writeFile(resolved, content, "utf-8")
+  return resolved
+}
+
+function parseJsonPointer(pointer: string) {
+  const parts = pointer.split("/").slice(1)
+  return parts.map((p) => p.replace(/~1/g, "/").replace(/~0/g, "~"))
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyOperation(target: any, op: { op: string; path: string; value?: any }) {
+  const tokens = parseJsonPointer(op.path)
+  if (tokens.length === 0) {
+    if (op.op === "replace" || op.op === "add") return op.value
+    if (op.op === "remove") return undefined
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let curr: any = target
+  for (let i = 0; i < tokens.length - 1; i += 1) {
+    const key = tokens[i]
+    if (curr[key] == null) {
+      curr[key] = Number.isInteger(Number(tokens[i + 1])) ? [] : {}
+    }
+    curr = curr[key]
+  }
+  const last = tokens[tokens.length - 1]
+
+  if (op.op === "add" || op.op === "replace") {
+    if (Array.isArray(curr)) {
+      const index = last === "-" ? curr.length : Number(last)
+      if (op.op === "add") {
+        curr.splice(index, 0, op.value)
+      } else {
+        curr[index] = op.value
+      }
+    } else {
+      curr[last] = op.value
+    }
+    return target
+  }
+
+  if (op.op === "remove") {
+    if (Array.isArray(curr)) {
+      const index = Number(last)
+      if (!Number.isNaN(index)) curr.splice(index, 1)
+    } else {
+      delete curr[last]
+    }
+    return target
+  }
+
+  throw new Error(`Unsupported op: ${op.op}`)
+}
+
+function applyJsonPatch(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  document: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  operations: Array<{ op: string; path: string; value?: any }>
+) {
+  let target = JSON.parse(JSON.stringify(document))
+  for (const op of operations) {
+    target = applyOperation(target, op)
+  }
+  return target
+}
+
+async function loadYamlModule() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require("yaml")
+    return mod
+  } catch {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mod = await import("yaml" as any)
+      return mod
+    } catch {
+      return null
+    }
+  }
+}
+
+async function fetchBuffer(source: string): Promise<Buffer> {
+  if (/^data:/i.test(source)) {
+    const base64 = source.split(",")[1] ?? ""
+    return Buffer.from(base64, "base64")
+  }
+  const res = await fetch(source)
+  if (!res.ok) throw new Error(`Failed to fetch resource (${res.status})`)
+  const arrayBuffer = await res.arrayBuffer()
+  return Buffer.from(arrayBuffer)
+}
+
+function decodeDataInput(data: string): Buffer {
+  if (/^data:/i.test(data)) {
+    const base64 = data.split(",")[1] ?? ""
+    return Buffer.from(base64, "base64")
+  }
+  if (/^[A-Za-z0-9+/=\\n\\r]+$/.test(data.trim())) {
+    try {
+      return Buffer.from(data.trim(), "base64")
+    } catch {
+      // fall through to utf-8 buffer
+    }
+  }
+  return Buffer.from(data)
+}
+
+async function loadSharp() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require("sharp")
+    return mod
+  } catch {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mod = await import("sharp" as any)
+      return mod
+    } catch {
+      return null
+    }
+  }
+}
+
+function markdownToLatex(markdown: string) {
+  const lines = markdown.split(/\r?\n/)
+  const latexLines: string[] = []
+  for (const line of lines) {
+    if (/^#{1,6}\s+/.test(line)) {
+      const level = line.match(/^#+/)?.[0].length ?? 1
+      const text = line.replace(/^#{1,6}\s+/, "").trim()
+      const cmd = level === 1 ? "\\section" : level === 2 ? "\\subsection" : "\\subsubsection"
+      latexLines.push(`${cmd}{${text}}`)
+      continue
+    }
+    const transformed = line
+      .replace(/\*\*(.+?)\*\*/g, "\\textbf{$1}")
+      .replace(/\*(.+?)\*/g, "\\textit{$1}")
+      .replace(/`([^`]+)`/g, "\\texttt{$1}")
+    latexLines.push(transformed)
+  }
+  return latexLines.join("\n\n")
+}
+
+async function uploadPdfToCloudinary(
+  pdf: Buffer,
+  publicId: string,
+  config: CloudinaryConfig
+): Promise<string> {
+  const timestamp = Math.floor(Date.now() / 1000)
+  const signature = crypto
+    .createHash("sha1")
+    .update(`public_id=${publicId}&timestamp=${timestamp}${config.apiSecret}`)
+    .digest("hex")
+
+  const form = new FormData()
+  const base64 = pdf.toString("base64")
+  form.append("file", `data:application/pdf;base64,${base64}`)
+  form.append("api_key", config.apiKey)
+  form.append("timestamp", String(timestamp))
+  form.append("signature", signature)
+  form.append("public_id", publicId)
+
+  const endpoint = `https://api.cloudinary.com/v1_1/${config.cloudName}/raw/upload`
+  const res = await fetch(endpoint, { method: "POST", body: form })
+  const data = (await res.json().catch(() => ({}))) as {
+    secure_url?: string
+    url?: string
+    error?: unknown
+  }
+  if (!res.ok) {
+    const message =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      typeof data?.error === "object" && data?.error && "message" in (data.error as any)
+        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (data.error as any).message
+        : JSON.stringify(data).slice(0, 500) || "Unknown Cloudinary error"
+    throw new Error(`Cloudinary upload failed (${res.status}): ${message}`)
+  }
+  const url = data.secure_url || data.url
+  if (!url) throw new Error("Cloudinary response missing URL")
+  return url
+}
+
+async function compileLatexToPdf(
+  texContent: string,
+  baseName: string,
+  cloudinaryConfig?: CloudinaryConfig
+) {
+  const started = Date.now()
+  const safeBase = sanitizePdfBaseName(baseName)
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "latex-"))
+  const texFilename = "document.tex"
+  const texPath = path.join(tempDir, texFilename)
+  const pdfTempPath = path.join(tempDir, "document.pdf")
+
+  let engine: string | null = null
+  let uploadedUrl: string | null = null
+  let dataUrl: string | null = null
+
+  try {
+    await writeFile(texPath, texContent, "utf-8")
+    engine = await findLatexEngine()
+    if (!engine) {
+      return {
+        success: false,
+        pdfGenerated: false,
+        filename: safeBase,
+        texContent,
+        error:
+          "No LaTeX engine found (tried tectonic, pdflatex, xelatex, lualatex). Install one locally, e.g. `brew install tectonic`.",
+      }
+    }
+
+    const command =
+      engine === "tectonic"
+        ? `${engine} -o . ${texFilename}`
+        : `${engine} -interaction=nonstopmode -halt-on-error -output-directory=. ${texFilename}`
+
+    const res = await runCommandUnsafe(command, tempDir, 60000)
+    const pdfExists = await fileExists(pdfTempPath)
+    const duration = Date.now() - started
+
+    if (!pdfExists || res.exitCode !== 0) {
+      return {
+        success: false,
+        pdfGenerated: false,
+        filename: safeBase,
+        texContent,
+        engine,
+        duration,
+        error: `LaTeX compilation failed using ${engine} (exit code ${res.exitCode}).`,
+        output: truncateString(
+          [res.stdout, res.stderr].filter(Boolean).join("\n\n").trim() || "No output captured",
+          4000
+        ),
+      }
+    }
+
+    const pdfBuffer = await readFile(pdfTempPath)
+
+    if (cloudinaryConfig) {
+      const publicId = `latex/${safeBase}-${Date.now()}`
+      uploadedUrl = await uploadPdfToCloudinary(pdfBuffer, publicId, cloudinaryConfig)
+    } else {
+      dataUrl = `data:application/pdf;base64,${pdfBuffer.toString("base64")}`
+    }
+
+    return {
+      success: true,
+      pdfGenerated: true,
+      filename: safeBase,
+      texContent,
+      engine,
+      duration,
+      cloudinaryUrl: uploadedUrl ?? undefined,
+      dataUrl: dataUrl ?? undefined,
+      output: truncateString(
+        res.stdout.trim() || res.stderr.trim() || "LaTeX compilation succeeded.",
+        4000
+      ),
+    }
+  } catch (err) {
+    const duration = Date.now() - started
+    const message = err instanceof Error ? err.message : "Unknown error"
+    return {
+      success: false,
+      pdfGenerated: false,
+      filename: safeBase,
+      texContent,
+      engine,
+      duration,
+      cloudinaryUrl: uploadedUrl ?? undefined,
+      dataUrl: dataUrl ?? undefined,
+      error: message,
+    }
+  } finally {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
 async function fetchJson<T = unknown>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { "User-Agent": "Terminator/NextJS" } })
+  const res = await fetch(url, { headers: { "User-Agent": "Rekdin/NextJS" } })
   if (!res.ok) throw new Error(`Failed request (${res.status})`)
   return (await res.json()) as T
 }
@@ -106,7 +597,7 @@ export const webSearchTool = tool(
 
 export const visitUrlTool = tool(
   async ({ url }) => {
-    const response = await fetch(url, { headers: { "User-Agent": "Terminator/NextJS" } })
+    const response = await fetch(url, { headers: { "User-Agent": "Rekdin/NextJS" } })
     if (!response.ok) return { url, error: `Failed to fetch (${response.status})` }
     const html = await response.text()
     const dom = new JSDOM(html, { url })
@@ -166,12 +657,18 @@ export const browserGetMarkdownTool = tool(
       const steps: Array<Record<string, unknown>> = []
       steps.push({ label: "Start", detail: `Loading ${url}`, at: new Date().toISOString() })
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 })
-      steps.push({ label: "Loaded", detail: "DOM ready, extracting readable content", at: new Date().toISOString() })
+      steps.push({
+        label: "Loaded",
+        detail: "DOM ready, extracting readable content",
+        at: new Date().toISOString(),
+      })
       const html = await page.content()
       const dom = new JSDOM(html, { url })
       const reader = new Readability(dom.window.document)
       const article = reader.parse()
-      const markdown = article?.content ? turndown.turndown(article.content) : turndown.turndown(html)
+      const markdown = article?.content
+        ? turndown.turndown(article.content)
+        : turndown.turndown(html)
       const content = markdown
       return {
         url: page.url(),
@@ -198,7 +695,11 @@ export const browserScreenshotTool = tool(
       const steps: Array<Record<string, unknown>> = []
       steps.push({ label: "Start", detail: `Loading ${url}`, at: new Date().toISOString() })
       await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 })
-      steps.push({ label: "Loaded", detail: "Network idle, capturing screenshot", at: new Date().toISOString() })
+      steps.push({
+        label: "Loaded",
+        detail: "Network idle, capturing screenshot",
+        at: new Date().toISOString(),
+      })
       const screenshot = await page.screenshot({ fullPage: fullPage ?? true, encoding: "base64" })
       const title = await page.title()
       return {
@@ -217,6 +718,1491 @@ export const browserScreenshotTool = tool(
     schema: z.object({ url: z.string().url(), fullPage: z.boolean().optional() }),
   }
 )
+
+export const browserClickTool = tool(
+  async ({ url, selector, x, y, button, clickCount }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      let clickX = typeof x === "number" ? x : null
+      let clickY = typeof y === "number" ? y : null
+      if ((!clickX || !clickY) && selector) {
+        const center = await centerOfSelector(page, selector)
+        clickX = center?.x ?? null
+        clickY = center?.y ?? null
+      }
+      if (typeof clickX === "number" && typeof clickY === "number") {
+        await page.mouse.click(clickX, clickY, {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          button: (button ?? "left") as any,
+          clickCount: clickCount ?? 1,
+        })
+      } else if (selector) {
+        await page.click(selector, {
+          clickCount: clickCount ?? 1,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          button: (button ?? "left") as any,
+        })
+      }
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        x: clickX,
+        y: clickY,
+        status: "success",
+        type: "browser_click",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_click",
+    description: "Click an element in a headless browser using a selector or coordinates.",
+    schema: z.object({
+      url: z.string().url(),
+      selector: z.string().optional(),
+      x: z.number().optional(),
+      y: z.number().optional(),
+      button: z.enum(["left", "right", "middle"]).optional(),
+      clickCount: z.number().int().min(1).max(3).optional(),
+    }),
+  }
+)
+
+export const browserDoubleClickTool = tool(
+  async (args) => {
+    return await browserClickTool.invoke({ ...args, clickCount: 2 })
+  },
+  {
+    name: "browser_double_click",
+    description: "Double click an element in a headless browser.",
+    schema: z.object({
+      url: z.string().url(),
+      selector: z.string().optional(),
+      x: z.number().optional(),
+      y: z.number().optional(),
+    }),
+  }
+)
+
+export const browserRightClickTool = tool(
+  async (args) => {
+    return await browserClickTool.invoke({ ...args, button: "right", clickCount: 1 })
+  },
+  {
+    name: "browser_right_click",
+    description: "Right click an element in a headless browser.",
+    schema: z.object({
+      url: z.string().url(),
+      selector: z.string().optional(),
+      x: z.number().optional(),
+      y: z.number().optional(),
+    }),
+  }
+)
+
+export const browserHoverTool = tool(
+  async ({ url, selector, x, y }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      let hoverX = typeof x === "number" ? x : null
+      let hoverY = typeof y === "number" ? y : null
+      if ((!hoverX || !hoverY) && selector) {
+        const center = await centerOfSelector(page, selector)
+        hoverX = center?.x ?? null
+        hoverY = center?.y ?? null
+      }
+      if (typeof hoverX === "number" && typeof hoverY === "number") {
+        await page.mouse.move(hoverX, hoverY)
+      } else if (selector) {
+        await page.hover(selector)
+      }
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        x: hoverX,
+        y: hoverY,
+        status: "success",
+        type: "browser_hover",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_hover",
+    description: "Hover an element in a headless browser using a selector or coordinates.",
+    schema: z.object({
+      url: z.string().url(),
+      selector: z.string().optional(),
+      x: z.number().optional(),
+      y: z.number().optional(),
+    }),
+  }
+)
+
+export const browserScrollTool = tool(
+  async ({ url, deltaY, deltaX }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      await page.mouse.wheel({ deltaY: deltaY ?? 800, deltaX: deltaX ?? 0 })
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        action: "scroll",
+        status: "success",
+        type: "browser_scroll",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_scroll",
+    description: "Scroll the page in a headless browser.",
+    schema: z.object({
+      url: z.string().url(),
+      deltaY: z.number().optional(),
+      deltaX: z.number().optional(),
+    }),
+  }
+)
+
+export const browserTypeTool = tool(
+  async ({ url, selector, text, clear }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      if (clear) {
+        await page.focus(selector)
+        await page.keyboard.down(os.platform() === "darwin" ? "Meta" : "Control")
+        await page.keyboard.press("A")
+        await page.keyboard.up(os.platform() === "darwin" ? "Meta" : "Control")
+        await page.keyboard.press("Backspace")
+      }
+      await page.type(selector, text, { delay: 10 })
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        status: "success",
+        type: "browser_type",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_type",
+    description: "Type into an input element in a headless browser.",
+    schema: z.object({
+      url: z.string().url(),
+      selector: z.string().min(1),
+      text: z.string(),
+      clear: z.boolean().optional(),
+    }),
+  }
+)
+
+export const browserFormFillTool = tool(
+  async ({ url, selector, value, clear }) => {
+    return await browserTypeTool.invoke({ url, selector, text: value, clear })
+  },
+  {
+    name: "browser_form_input_fill",
+    description: "Fill a form input in a headless browser.",
+    schema: z.object({
+      url: z.string().url(),
+      selector: z.string().min(1),
+      value: z.string(),
+      clear: z.boolean().optional(),
+    }),
+  }
+)
+
+export const browserFormFillBatchTool = tool(
+  async ({ url, fields }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      for (const field of fields) {
+        if (field.clear) {
+          await page.focus(field.selector)
+          await page.keyboard.down(os.platform() === "darwin" ? "Meta" : "Control")
+          await page.keyboard.press("A")
+          await page.keyboard.up(os.platform() === "darwin" ? "Meta" : "Control")
+          await page.keyboard.press("Backspace")
+        }
+        await page.type(field.selector, field.value, { delay: 10 })
+      }
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        filled: fields.map((f) => f.selector),
+        status: "success",
+        type: "browser_form_fill_batch",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_form_fill_batch",
+    description: "Fill multiple form fields on a page (best-effort).",
+    schema: z.object({
+      url: z.string().url(),
+      fields: z
+        .array(
+          z.object({
+            selector: z.string().min(1),
+            value: z.string(),
+            clear: z.boolean().optional(),
+          })
+        )
+        .min(1),
+    }),
+  }
+)
+
+export const browserWaitTool = tool(
+  async ({ url, duration, condition }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      if (typeof duration === "number") {
+        await new Promise((r) => setTimeout(r, duration * 1000))
+      }
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        condition: condition ?? null,
+        status: "success",
+        type: "browser_wait",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_wait",
+    description: "Wait for some time after loading a page (simple delay).",
+    schema: z.object({
+      url: z.string().url(),
+      duration: z.number().optional(),
+      condition: z.string().optional(),
+    }),
+  }
+)
+
+export const browserWaitForTool = tool(
+  async ({ url, selector, script, timeoutMs }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      try {
+        if (selector) {
+          await page.waitForSelector(selector, { timeout: timeoutMs ?? 15000 })
+        } else if (script) {
+          await page.waitForFunction(script, { timeout: timeoutMs ?? 15000 })
+        } else {
+          throw new Error("Provide `selector` or `script`")
+        }
+      } catch (err) {
+        const shot = await screenshotDataUrl(page, true)
+        return {
+          url: page.url(),
+          title: await page.title(),
+          screenshot: shot,
+          status: "timeout",
+          waitedFor: selector ?? "function",
+          error: err instanceof Error ? err.message : "Wait failed",
+          type: "browser_wait_for",
+          duration: Date.now() - started,
+        }
+      }
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        status: "success",
+        waitedFor: selector ?? "function",
+        type: "browser_wait_for",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_wait_for",
+    description: "Wait for a selector or page function to succeed, then capture a screenshot.",
+    schema: z
+      .object({
+        url: z.string().url(),
+        selector: z.string().optional(),
+        script: z.string().optional(),
+        timeoutMs: z.number().int().min(1000).max(60000).optional(),
+      })
+      .refine((v) => v.selector || v.script, { message: "Provide selector or script" }),
+  }
+)
+
+export const browserExtractTool = tool(
+  async ({ url, selector, attribute }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      const extractedData = await page.$eval(
+        selector,
+        (el, attr) => {
+          if (!attr) return (el as HTMLElement).innerText || (el as HTMLElement).textContent || ""
+          return (el as HTMLElement).getAttribute(attr) || ""
+        },
+        attribute ?? null
+      )
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        extractedData,
+        status: "success",
+        type: "browser_extract",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_extract",
+    description: "Extract text or an attribute from a CSS selector on a page.",
+    schema: z.object({
+      url: z.string().url(),
+      selector: z.string().min(1),
+      attribute: z.string().optional(),
+    }),
+  }
+)
+
+export const browserGetTextTool = tool(
+  async ({ url, selector }) => {
+    return await browserExtractTool.invoke({ url, selector: selector ?? "body" })
+  },
+  {
+    name: "browser_get_text",
+    description: "Extract readable text from the page (or a selector).",
+    schema: z.object({
+      url: z.string().url(),
+      selector: z.string().optional(),
+    }),
+  }
+)
+
+export const browserGetLinksTool = tool(
+  async ({ url }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      const extractedData = await page.$$eval("a[href]", (anchors) =>
+        anchors
+          .map((a) => ({
+            text: (a as HTMLAnchorElement).innerText?.trim() ?? "",
+            href: (a as HTMLAnchorElement).href,
+          }))
+          .filter((a) => a.href)
+          .slice(0, 200)
+      )
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        extractedData,
+        status: "success",
+        type: "browser_get_links",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_get_links",
+    description: "Extract links from a page.",
+    schema: z.object({ url: z.string().url() }),
+  }
+)
+
+export const browserGetClickableElementsTool = tool(
+  async ({ url }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      const extractedData = await page.$$eval(
+        "a[href],button,[role='button'],input[type='button'],input[type='submit']",
+        (els) =>
+          els
+            .map((el) => {
+              const tag = (el as HTMLElement).tagName.toLowerCase()
+              const text =
+                (el as HTMLElement).innerText?.trim() ||
+                (el as HTMLInputElement).value?.trim() ||
+                ""
+              const href = (el as HTMLAnchorElement).href || ""
+              const id = (el as HTMLElement).id ? `#${(el as HTMLElement).id}` : ""
+              const cls = (el as HTMLElement).className
+                ? `.${String((el as HTMLElement).className)
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .join(".")}`
+                : ""
+              const selector = id || cls || tag
+              return { tag, text, href, selector }
+            })
+            .filter((x) => x.text || x.href)
+            .slice(0, 200)
+      )
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        extractedData,
+        status: "success",
+        type: "browser_get_clickable_elements",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_get_clickable_elements",
+    description: "List clickable elements on a page (best-effort).",
+    schema: z.object({ url: z.string().url() }),
+  }
+)
+
+export const browserDragAndDropTool = tool(
+  async ({ url, sourceSelector, targetSelector }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      const src = await centerOfSelector(page, sourceSelector)
+      const tgt = await centerOfSelector(page, targetSelector)
+      if (src && tgt) {
+        await page.mouse.move(src.x, src.y)
+        await page.mouse.down()
+        await page.mouse.move(tgt.x, tgt.y, { steps: 15 })
+        await page.mouse.up()
+      }
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        sourceX: src?.x ?? null,
+        sourceY: src?.y ?? null,
+        targetX: tgt?.x ?? null,
+        targetY: tgt?.y ?? null,
+        status: "success",
+        type: "browser_drag_and_drop",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_drag_and_drop",
+    description: "Drag from a source selector to a target selector.",
+    schema: z.object({
+      url: z.string().url(),
+      sourceSelector: z.string().min(1),
+      targetSelector: z.string().min(1),
+    }),
+  }
+)
+
+export const browserDragTool = tool(
+  async ({ url, sourceSelector, targetSelector }) => {
+    return await browserDragAndDropTool.invoke({ url, sourceSelector, targetSelector })
+  },
+  {
+    name: "browser_drag",
+    description: "Drag from source to target (alias).",
+    schema: z.object({
+      url: z.string().url(),
+      sourceSelector: z.string().min(1),
+      targetSelector: z.string().min(1),
+    }),
+  }
+)
+
+export const browserKeyPressTool = tool(
+  async ({ url, key }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await page.keyboard.press(key as any)
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        action: `key_press:${key}`,
+        status: "success",
+        type: "browser_key_press",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_key_press",
+    description: "Press a key on the page.",
+    schema: z.object({ url: z.string().url(), key: z.string().min(1) }),
+  }
+)
+
+export const browserHotkeyTool = tool(
+  async ({ url, keys }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      for (const key of keys) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await page.keyboard.down(key as any)
+      }
+      for (const key of [...keys].reverse()) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await page.keyboard.up(key as any)
+      }
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        action: `hotkey:${keys.join("+")}`,
+        status: "success",
+        type: "browser_hotkey",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_hotkey",
+    description: "Trigger a keyboard shortcut (best-effort).",
+    schema: z.object({ url: z.string().url(), keys: z.array(z.string().min(1)).min(1).max(5) }),
+  }
+)
+
+export const browserEvaluateTool = tool(
+  async ({ url, script }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      const result = await page.evaluate(script)
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        result,
+        status: "success",
+        type: "browser_evaluate",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_evaluate",
+    description: "Run JavaScript in the browser page and return the result.",
+    schema: z.object({ url: z.string().url(), script: z.string().min(1) }),
+  }
+)
+
+export const fileSearchTool = tool(
+  async ({ query, path: searchPath, maxResults }) => {
+    await ensureWorkspaceDirs()
+    const escapedQuery = query.replace(/'/g, "'\"'\"'")
+    const targetPath = searchPath ? searchPath.replace(/'/g, "'\"'\"'") : "."
+    const limit = Math.min(Math.max(maxResults ?? 200, 1), 1000)
+    const cmd = `rg --line-number --no-heading --color=never -m ${limit} '${escapedQuery}' '${targetPath}'`
+    const res = await runCommand(cmd, undefined, 20000)
+    if (res.exitCode !== 0 && res.stdout.trim().length === 0) {
+      return {
+        type: "file_search",
+        query,
+        path: searchPath ?? ".",
+        matches: [],
+        exitCode: res.exitCode,
+        error:
+          res.stderr.trim() ||
+          "Search failed. Ensure ripgrep (rg) is installed and the path/pattern are valid.",
+      }
+    }
+    const matches = res.stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const firstColon = line.indexOf(":")
+        const secondColon = line.indexOf(":", firstColon + 1)
+        const file = line.slice(0, firstColon)
+        const lineNumber = Number(line.slice(firstColon + 1, secondColon))
+        const text = line.slice(secondColon + 1)
+        return { file, line: lineNumber, text }
+      })
+    return {
+      type: "file_search",
+      query,
+      path: searchPath ?? ".",
+      matches,
+      exitCode: res.exitCode,
+    }
+  },
+  {
+    name: "file_search",
+    description: "Search within workspace files using ripgrep (rg).",
+    schema: z.object({
+      query: z.string().min(1),
+      path: z.string().optional(),
+      maxResults: z.number().int().min(1).max(1000).optional(),
+    }),
+  }
+)
+
+export const httpRequestTool = tool(
+  async ({ url, method, headers, body, timeoutMs }) => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), Math.min(timeoutMs ?? 20000, 60000))
+    try {
+      const res = await fetch(url, {
+        method: method ?? "GET",
+        headers: headers ?? {},
+        body: body ?? undefined,
+        signal: controller.signal,
+      })
+      const rawText = await res.text().catch(() => "")
+      let json: unknown = null
+      try {
+        json = JSON.parse(rawText)
+      } catch {
+        json = null
+      }
+      return {
+        type: "http_request",
+        url,
+        method: method ?? "GET",
+        status: res.status,
+        ok: res.ok,
+        headers: Object.fromEntries(res.headers.entries()),
+        bodyText: truncateString(rawText, 6000),
+        json,
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Request failed"
+      return {
+        type: "http_request",
+        url,
+        method: method ?? "GET",
+        error: message,
+      }
+    } finally {
+      clearTimeout(timer)
+    }
+  },
+  {
+    name: "http_request",
+    description: "Make an HTTP request (for APIs or fetching raw content).",
+    schema: z.object({
+      url: z.string().url(),
+      method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]).optional(),
+      headers: z.record(z.string(), z.string()).optional(),
+      body: z.string().optional(),
+      timeoutMs: z.number().int().min(1000).max(60000).optional(),
+    }),
+  }
+)
+
+export const downloadFetchTool = tool(
+  async ({ url, headers, timeoutMs }) => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), Math.min(timeoutMs ?? 20000, 60000))
+    try {
+      const res = await fetch(url, { headers: headers ?? {}, signal: controller.signal })
+      const arrayBuffer = await res.arrayBuffer()
+      const buf = Buffer.from(arrayBuffer)
+      const sizeLimit = 5 * 1024 * 1024
+      if (buf.length > sizeLimit) {
+        return {
+          type: "download_fetch",
+          url,
+          status: res.status,
+          ok: res.ok,
+          size: buf.length,
+          contentType: res.headers.get("content-type") || "",
+          error: `File too large (${buf.length} bytes, limit ${sizeLimit})`,
+        }
+      }
+      return {
+        type: "download_fetch",
+        url,
+        status: res.status,
+        ok: res.ok,
+        size: buf.length,
+        contentType: res.headers.get("content-type") || "",
+        base64: buf.toString("base64"),
+      }
+    } catch (err) {
+      return {
+        type: "download_fetch",
+        url,
+        error: err instanceof Error ? err.message : "Download failed",
+      }
+    } finally {
+      clearTimeout(timer)
+    }
+  },
+  {
+    name: "download_fetch",
+    description: "Fetch a binary file and return base64 (max ~5MB).",
+    schema: z.object({
+      url: z.string().url(),
+      headers: z.record(z.string(), z.string()).optional(),
+      timeoutMs: z.number().int().min(1000).max(60000).optional(),
+    }),
+  }
+)
+
+export const browserControlTool = tool(
+  async ({ url, action, thought, x, y }) => {
+    return await withPage(async (page) => {
+      const started = Date.now()
+      await goto(page, url, "domcontentloaded")
+      const shot = await screenshotDataUrl(page, true)
+      return {
+        url: page.url(),
+        title: await page.title(),
+        screenshot: shot,
+        thought: thought ?? "",
+        step: action ?? "",
+        action: action ?? "",
+        x: x ?? null,
+        y: y ?? null,
+        status: "success",
+        type: "browser_control",
+        duration: Date.now() - started,
+      }
+    })
+  },
+  {
+    name: "browser_control",
+    description: "Report a browser control step (lightweight visual step for progress).",
+    schema: z.object({
+      url: z.string().url(),
+      action: z.string().optional(),
+      thought: z.string().optional(),
+      x: z.number().optional(),
+      y: z.number().optional(),
+    }),
+  }
+)
+
+export const browserVisionControlTool = tool(
+  async ({ url, thought, x, y }) => {
+    return await browserControlTool.invoke({ url, thought, x, y, action: "vision_control" })
+  },
+  {
+    name: "browser_vision_control",
+    description: "Provide a screenshot + cursor position for a visual browser step (compat).",
+    schema: z.object({
+      url: z.string().url(),
+      thought: z.string().optional(),
+      x: z.number().optional(),
+      y: z.number().optional(),
+    }),
+  }
+)
+
+export const browserActionTool = tool(
+  async ({ url, action, thought }) => {
+    return await browserControlTool.invoke({ url, action, thought })
+  },
+  {
+    name: "browser_action",
+    description: "Record a browser action step (compat).",
+    schema: z.object({
+      url: z.string().url(),
+      action: z.string().min(1),
+      thought: z.string().optional(),
+    }),
+  }
+)
+
+export const nodeExecuteTool = tool(
+  async ({ code }) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "Rekdin-node-"))
+    const filePath = path.join(dir, "script.js")
+    await writeFile(filePath, code, "utf-8")
+    const res = await runCommand(`node ${filePath}`)
+    return {
+      type: "node_execute",
+      script: code,
+      interpreter: "node",
+      stdout: res.stdout,
+      stderr: res.stderr,
+      exitCode: res.exitCode,
+      duration: res.duration,
+    }
+  },
+  {
+    name: "node_execute",
+    description: "Execute JavaScript using Node.js and return stdout/stderr.",
+    schema: z.object({ code: z.string().min(1) }),
+  }
+)
+
+export const pythonExecuteTool = tool(
+  async ({ code }) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "Rekdin-python-"))
+    const filePath = path.join(dir, "script.py")
+    await writeFile(filePath, code, "utf-8")
+    const res = await runCommand(`python3 ${filePath}`)
+    return {
+      type: "python_execute",
+      script: code,
+      interpreter: "python3",
+      stdout: res.stdout,
+      stderr: res.stderr,
+      exitCode: res.exitCode,
+      duration: res.duration,
+    }
+  },
+  {
+    name: "python_execute",
+    description: "Execute Python code using python3 and return stdout/stderr.",
+    schema: z.object({ code: z.string().min(1) }),
+  }
+)
+
+export const nodeCodeActTool = tool(
+  async ({ code, filename }) => {
+    const started = Date.now()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = (await nodeExecuteTool.invoke({ code })) as any
+    return {
+      type: "node_codeact",
+      success: (res?.exitCode ?? 0) === 0,
+      output: res?.stdout ?? "",
+      error: res?.stderr ?? "",
+      duration: Date.now() - started,
+      filename: filename ?? "code.js",
+    }
+  },
+  {
+    name: "node_codeact",
+    description: "Execute Node.js code (CodeAct-style).",
+    schema: z.object({ code: z.string().min(1), filename: z.string().optional() }),
+  }
+)
+
+export const pythonCodeActTool = tool(
+  async ({ code, filename }) => {
+    const started = Date.now()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = (await pythonExecuteTool.invoke({ code })) as any
+    return {
+      type: "python_codeact",
+      success: (res?.exitCode ?? 0) === 0,
+      output: res?.stdout ?? "",
+      error: res?.stderr ?? "",
+      duration: Date.now() - started,
+      filename: filename ?? "code.py",
+    }
+  },
+  {
+    name: "python_codeact",
+    description: "Execute Python code (CodeAct-style).",
+    schema: z.object({ code: z.string().min(1), filename: z.string().optional() }),
+  }
+)
+
+export const shellCodeActTool = tool(
+  async ({ code, filename }) => {
+    const started = Date.now()
+    const dir = await mkdtemp(path.join(os.tmpdir(), "Rekdin-shell-"))
+    const filePath = path.join(dir, filename ?? "code.sh")
+    await writeFile(filePath, code, "utf-8")
+    const res = await runCommand(`bash ${filePath}`)
+    return {
+      type: "shell_codeact",
+      success: res.exitCode === 0,
+      output: res.stdout,
+      error: res.stderr,
+      duration: Date.now() - started,
+      filename: filename ?? "code.sh",
+    }
+  },
+  {
+    name: "shell_codeact",
+    description: "Execute shell code (CodeAct-style).",
+    schema: z.object({ code: z.string().min(1), filename: z.string().optional() }),
+  }
+)
+
+export const shellExecuteTool = tool(
+  async ({ command, cwd, timeout }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = (await executeCommandTool.invoke({ command, cwd, timeout })) as any
+    return {
+      ...(typeof res === "object" && res ? res : {}),
+      type: "shell_execute",
+    }
+  },
+  {
+    name: "shell_execute",
+    description: "Alias for execute_command for compatibility with Rekdin renderers.",
+    schema: z.object({
+      command: z.string().min(1),
+      cwd: z.string().optional(),
+      timeout: z.number().optional(),
+    }),
+  }
+)
+
+export const fileReplaceTool = tool(
+  async ({ path: filePath, find, replace, regex, ignoreCase, maxReplacements }) => {
+    const content = await readWorkspaceText(filePath)
+    const flags = `${regex ? "g" : "g"}${ignoreCase ? "i" : ""}`
+    let matcher: RegExp
+    try {
+      matcher = regex
+        ? new RegExp(find, flags)
+        : new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), flags)
+    } catch (err) {
+      return {
+        type: "file_replace",
+        path: filePath,
+        error: err instanceof Error ? err.message : "Invalid pattern",
+      }
+    }
+    let replacements = 0
+    const updated = content.replace(matcher, (match) => {
+      if (maxReplacements && replacements >= maxReplacements) return match
+      replacements += 1
+      return replace
+    })
+    if (replacements === 0) {
+      return {
+        type: "file_replace",
+        path: filePath,
+        replacements: 0,
+        changed: false,
+        message: "No matches found",
+      }
+    }
+    await writeWorkspaceText(filePath, updated)
+    return {
+      type: "file_replace",
+      path: filePath,
+      replacements,
+      changed: true,
+      preview: truncateString(updated.slice(0, 1000)),
+    }
+  },
+  {
+    name: "file_replace",
+    description: "Find and replace text in a workspace file (ripgrep-style).",
+    schema: z.object({
+      path: z.string(),
+      find: z.string().min(1),
+      replace: z.string(),
+      regex: z.boolean().optional(),
+      ignoreCase: z.boolean().optional(),
+      maxReplacements: z.number().int().min(1).optional(),
+    }),
+  }
+)
+
+export const jsonPatchTool = tool(
+  async ({ path: filePath, operations }) => {
+    const raw = await readWorkspaceText(filePath)
+    const data = JSON.parse(raw)
+    const patched = applyJsonPatch(data, operations)
+    await writeWorkspaceText(filePath, JSON.stringify(patched, null, 2))
+    return {
+      type: "json_patch",
+      path: filePath,
+      operations,
+      changed: true,
+    }
+  },
+  {
+    name: "json_patch",
+    description: "Apply RFC-6902 style JSON Patch operations to a JSON file.",
+    schema: z.object({
+      path: z.string(),
+      operations: z.array(
+        z.object({
+          op: z.enum(["add", "remove", "replace"]),
+          path: z.string().min(1),
+          value: z.any().optional(),
+        })
+      ),
+    }),
+  }
+)
+
+export const yamlPatchTool = tool(
+  async ({ path: filePath, operations }) => {
+    const yamlMod = await loadYamlModule()
+    if (!yamlMod) {
+      return {
+        type: "yaml_patch",
+        path: filePath,
+        changed: false,
+        error: "YAML support requires the `yaml` package. Install with `npm install yaml`.",
+      }
+    }
+    const raw = await readWorkspaceText(filePath)
+    const parsed = yamlMod.parse(raw)
+    const patched = applyJsonPatch(parsed, operations)
+    const output = yamlMod.stringify(patched)
+    await writeWorkspaceText(filePath, output)
+    return { type: "yaml_patch", path: filePath, operations, changed: true }
+  },
+  {
+    name: "yaml_patch",
+    description: "Apply JSON Patch operations to a YAML file (requires `yaml` package).",
+    schema: z.object({
+      path: z.string(),
+      operations: z.array(
+        z.object({
+          op: z.enum(["add", "remove", "replace"]),
+          path: z.string().min(1),
+          value: z.any().optional(),
+        })
+      ),
+    }),
+  }
+)
+
+export const archiveCreateTool = tool(
+  async ({ paths, archiveName }) => {
+    await ensureWorkspaceDirs()
+    if (!Array.isArray(paths) || paths.length === 0) {
+      return { type: "archive_create", error: "No paths provided", success: false }
+    }
+    const files: Record<string, Uint8Array> = {}
+    let totalBytes = 0
+
+    const addFile = async (zipPath: string, absPath: string) => {
+      const buf = await readFile(absPath)
+      totalBytes += buf.length
+      if (totalBytes > 10 * 1024 * 1024) {
+        throw new Error("Archive too large (max 10MB)")
+      }
+      files[zipPath] = new Uint8Array(buf)
+    }
+
+    const addTree = async (absPath: string, zipPrefix: string) => {
+      const info = await stat(absPath)
+      if (info.isDirectory()) {
+        const entries = await readdir(absPath, { withFileTypes: true })
+        for (const entry of entries) {
+          const childAbs = path.join(absPath, entry.name)
+          const childZip = zipPrefix ? `${zipPrefix}/${entry.name}` : entry.name
+          if (entry.isDirectory()) {
+            await addTree(childAbs, childZip)
+          } else if (entry.isFile()) {
+            await addFile(childZip, childAbs)
+          }
+        }
+        return
+      }
+      if (info.isFile()) {
+        const name = zipPrefix || path.basename(absPath)
+        await addFile(name, absPath)
+      }
+    }
+
+    for (const p of paths) {
+      const safeRel = p.replace(/^(\.\.(\/|\\|$))+/, "").replace(/^[\\/]/, "")
+      const abs = resolveWorkspacePath(safeRel)
+      await addTree(abs, safeRel.replace(/\\/g, "/"))
+    }
+
+    if (Object.keys(files).length === 0) {
+      return { type: "archive_create", success: false, error: "No files found to archive" }
+    }
+
+    const buf = Buffer.from(zipSync(files, { level: 6 }))
+    const zipName = sanitizePdfBaseName(archiveName || "archive")
+    return {
+      type: "archive_create",
+      success: true,
+      archiveName: `${zipName}.zip`,
+      size: buf.length,
+      dataUrl: `data:application/zip;base64,${buf.toString("base64")}`,
+    }
+  },
+  {
+    name: "archive_create",
+    description: "Create a zip archive from workspace files/folders (returned as data URL).",
+    schema: z.object({
+      paths: z.array(z.string().min(1)).min(1),
+      archiveName: z.string().optional(),
+    }),
+  }
+)
+
+export const archiveExtractTool = tool(
+  async ({ data, outputDir }) => {
+    try {
+      const buf = decodeDataInput(data)
+      if (buf.length > 10 * 1024 * 1024) {
+        return { type: "archive_extract", success: false, error: "Archive too large (max 10MB)" }
+      }
+      const extracted = unzipSync(buf)
+      const written: string[] = []
+      let total = 0
+      const targetRoot = outputDir ?? "."
+      for (const [name, content] of Object.entries(extracted)) {
+        const safeName = name.replace(/^(\.\.(\/|\\|$))+/, "").replace(/^[\\/]/, "")
+        if (!safeName) continue
+        total += content.length
+        if (total > 10 * 1024 * 1024) {
+          return { type: "archive_extract", success: false, error: "Extracted data exceeds 10MB" }
+        }
+        const relPath = path.join(targetRoot, safeName)
+        const absPath = resolveWorkspacePath(relPath)
+        await mkdir(path.dirname(absPath), { recursive: true })
+        await writeFile(absPath, Buffer.from(content))
+        written.push(relPath.replace(/\\/g, "/"))
+      }
+      return { type: "archive_extract", success: true, outputDir: targetRoot, entries: written }
+    } catch (err) {
+      return {
+        type: "archive_extract",
+        success: false,
+        error: err instanceof Error ? err.message : "Failed to extract archive",
+      }
+    }
+  },
+  {
+    name: "archive_extract",
+    description: "Extract a zip archive (data/base64) into the workspace.",
+    schema: z.object({
+      data: z.string().min(1),
+      outputDir: z.string().optional(),
+    }),
+  }
+)
+
+export const base64EncodeTool = tool(
+  async ({ text }) => {
+    const encoded = Buffer.from(text, "utf-8").toString("base64")
+    return { type: "base64_encode", text, encoded }
+  },
+  {
+    name: "base64_encode",
+    description: "Base64-encode text.",
+    schema: z.object({ text: z.string().min(1) }),
+  }
+)
+
+export const base64DecodeTool = tool(
+  async ({ encoded }) => {
+    const decoded = Buffer.from(encoded, "base64").toString("utf-8")
+    return { type: "base64_decode", decoded }
+  },
+  {
+    name: "base64_decode",
+    description: "Decode base64-encoded text.",
+    schema: z.object({ encoded: z.string().min(1) }),
+  }
+)
+
+export const hashTool = tool(
+  async ({ input, algorithm, path: filePath }) => {
+    let data = input
+    if (!data && !filePath) {
+      return { type: "hash", error: "Provide `input` or `path`" }
+    }
+    if (filePath) {
+      data = await readWorkspaceText(filePath)
+    }
+    const hash = crypto
+      .createHash(algorithm)
+      .update(data ?? "")
+      .digest("hex")
+    return { type: "hash", algorithm, hash, source: filePath ?? "inline" }
+  },
+  {
+    name: "hash",
+    description: "Compute a hash (md5/sha1/sha256/sha512) for inline text or a workspace file.",
+    schema: z.object({
+      input: z.string().optional(),
+      path: z.string().optional(),
+      algorithm: z.enum(["md5", "sha1", "sha256", "sha512"]).default("sha256"),
+    }),
+  }
+)
+
+export const textSummarizeTool = tool(
+  async ({ text, path: filePath }) => {
+    if (!text && filePath) {
+      text = await readWorkspaceText(filePath)
+    }
+    const words = (text || "").split(/\s+/).filter(Boolean)
+    const summary = words.slice(0, 120).join(" ") + (words.length > 120 ? " ..." : "")
+    return { type: "text_summarize", length: words.length, summary }
+  },
+  {
+    name: "text_summarize",
+    description: "Lightweight extractive summarization (first ~120 words).",
+    schema: z.object({ text: z.string().optional(), path: z.string().optional() }),
+  }
+)
+
+export const textRewriteTool = tool(
+  async ({ text, path: filePath, style }) => {
+    if (!text && filePath) {
+      text = await readWorkspaceText(filePath)
+    }
+    const paragraphs = (text || "")
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+    const rewritten = paragraphs.map((p) => `- ${p}`).join("\n")
+    return { type: "text_rewrite", style: style ?? "bulletize", output: rewritten }
+  },
+  {
+    name: "text_rewrite",
+    description: "Simple rewrite to bullets (deterministic).",
+    schema: z.object({
+      text: z.string().optional(),
+      path: z.string().optional(),
+      style: z.string().optional(),
+    }),
+  }
+)
+
+export const extractTodosTool = tool(
+  async ({ text, path: filePath }) => {
+    if (!text && filePath) {
+      text = await readWorkspaceText(filePath)
+    }
+    const todos =
+      text
+        ?.split(/\r?\n/)
+        .filter((line) => /\bTODO\b|@todo|FIXME|todo:/i.test(line))
+        .map((line) => line.trim()) ?? []
+    return { type: "extract_todos", count: todos.length, todos }
+  },
+  {
+    name: "extract_todos",
+    description: "Extract TODO/FIXME-style lines from text or a workspace file.",
+    schema: z.object({ text: z.string().optional(), path: z.string().optional() }),
+  }
+)
+
+function createMarkdownToPdfTool(context?: { headers?: HeadersInit }) {
+  const cloudinaryConfig = parseCloudinaryConfig(context?.headers)
+  return tool(
+    async ({ markdown, filename }) => {
+      const body = markdownToLatex(markdown)
+      const tex = `\\\\documentclass{article}\n\\\\usepackage[margin=1in]{geometry}\n\\\\usepackage{hyperref}\n\\\\usepackage{graphicx}\n\\\\begin{document}\n${body}\n\\\\end{document}`
+      const result = await compileLatexToPdf(
+        tex,
+        filename ?? "document",
+        cloudinaryConfig ?? undefined
+      )
+      return { type: "markdown_to_pdf", ...result }
+    },
+    {
+      name: "markdown_to_pdf",
+      description: "Convert Markdown text to PDF (via LaTeX) and return URL/data.",
+      schema: z.object({ markdown: z.string().min(1), filename: z.string().optional() }),
+    }
+  )
+}
+
+export const imageInfoTool = tool(
+  async ({ source }) => {
+    const sharp = await loadSharp()
+    if (!sharp) {
+      return {
+        type: "image_info",
+        error: "Image tooling requires `sharp`. Install with `npm install sharp`.",
+      }
+    }
+    const buf = await fetchBuffer(source)
+    const meta = await sharp(buf).metadata()
+    return {
+      type: "image_info",
+      width: meta.width,
+      height: meta.height,
+      format: meta.format,
+      size: buf.length,
+    }
+  },
+  {
+    name: "image_info",
+    description: "Get basic image metadata (requires `sharp`).",
+    schema: z.object({ source: z.string().min(1) }),
+  }
+)
+
+export const imageConvertTool = tool(
+  async ({ source, format }) => {
+    const sharp = await loadSharp()
+    if (!sharp) {
+      return {
+        type: "image_convert",
+        error: "Image tooling requires `sharp`. Install with `npm install sharp`.",
+      }
+    }
+    const buf = await fetchBuffer(source)
+    const converted = await sharp(buf)[format as "png" | "jpeg" | "webp"]().toBuffer()
+    return {
+      type: "image_convert",
+      format,
+      size: converted.length,
+      dataUrl: `data:image/${format};base64,${converted.toString("base64")}`,
+    }
+  },
+  {
+    name: "image_convert",
+    description: "Convert an image to png/jpg/webp (requires `sharp`).",
+    schema: z.object({ source: z.string().min(1), format: z.enum(["png", "jpeg", "webp"]) }),
+  }
+)
+
+export const linkPreviewTool = tool(
+  async ({ url }) => {
+    const res = await fetch(url, { headers: { "User-Agent": "Rekdin/NextJS" } })
+    if (!res.ok) {
+      return { type: "link_preview", url, error: `Failed to fetch (${res.status})` }
+    }
+    const html = await res.text()
+    const dom = new JSDOM(html, { url })
+    const doc = dom.window.document
+    const title =
+      doc.querySelector("meta[property='og:title']")?.getAttribute("content") || doc.title
+    const description =
+      doc.querySelector("meta[property='og:description']")?.getAttribute("content") ||
+      doc.querySelector("meta[name='description']")?.getAttribute("content") ||
+      ""
+    const image =
+      doc.querySelector("meta[property='og:image']")?.getAttribute("content") ||
+      doc.querySelector("meta[name='twitter:image']")?.getAttribute("content") ||
+      ""
+    return { type: "link_preview", url, title, description, image }
+  },
+  {
+    name: "link_preview",
+    description: "Fetch lightweight metadata (title/description/image) for a URL.",
+    schema: z.object({ url: z.string().url() }),
+  }
+)
+
+export const npmPackageInfoTool = tool(
+  async ({ name }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = await fetchJson<any>(`https://registry.npmjs.org/${encodeURIComponent(name)}`)
+    const latest = data["dist-tags"]?.latest
+    const latestInfo = latest ? data.versions?.[latest] : null
+    const weekly =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await fetchJson<any>(
+        `https://api.npmjs.org/downloads/point/last-week/${encodeURIComponent(name)}`
+      )
+    return {
+      type: "npm_package_info",
+      name,
+      latest,
+      license: latestInfo?.license ?? latestInfo?.licenses ?? null,
+      description: latestInfo?.description ?? data.description ?? "",
+      homepage: latestInfo?.homepage ?? data.homepage ?? "",
+      downloadsLastWeek: weekly?.downloads ?? null,
+      repository: latestInfo?.repository ?? data.repository ?? null,
+    }
+  },
+  {
+    name: "npm_package_info",
+    description: "Fetch npm package metadata (version, license, downloads).",
+    schema: z.object({ name: z.string().min(1) }),
+  }
+)
+
+export const gitLogSummaryTool = tool(
+  async ({ limit }) => {
+    const count = Math.min(Math.max(limit ?? 10, 1), 50)
+    const res = await runCommandUnsafe(`git log -${count} --oneline`, process.cwd(), 10000)
+    return {
+      type: "git_log_summary",
+      limit: count,
+      output: res.stdout.trim(),
+      exitCode: res.exitCode,
+    }
+  },
+  {
+    name: "git_log_summary",
+    description: "Show recent git commits (oneline).",
+    schema: z.object({ limit: z.number().int().min(1).max(50).optional() }),
+  }
+)
+
+export const gitBranchesTool = tool(
+  async () => {
+    const res = await runCommandUnsafe("git branch --all", process.cwd(), 10000)
+    return { type: "git_branches", output: res.stdout.trim(), exitCode: res.exitCode }
+  },
+  {
+    name: "git_branches",
+    description: "List local and remote git branches.",
+    schema: z.object({}),
+  }
+)
+
+export const gitDiffSummaryTool = tool(
+  async () => {
+    const status = await runCommandUnsafe("git status --short", process.cwd(), 10000)
+    const diffStat = await runCommandUnsafe("git diff --stat", process.cwd(), 10000)
+    return {
+      type: "git_diff_summary",
+      status: status.stdout.trim(),
+      diff: diffStat.stdout.trim(),
+    }
+  },
+  {
+    name: "git_diff_summary",
+    description: "Summarize git status and diff (read-only).",
+    schema: z.object({}),
+  }
+)
+
+function createGenerateLatexPdfTool(context?: { headers?: HeadersInit }) {
+  const cloudinaryConfig = parseCloudinaryConfig(context?.headers)
+  return tool(
+    async ({ filename, texContent }) => {
+      const result = await compileLatexToPdf(
+        texContent,
+        filename ?? "document",
+        cloudinaryConfig ?? undefined
+      )
+      return { type: "generate_latex_pdf", ...result }
+    },
+    {
+      name: "generate_latex_pdf",
+      description: "Generate a PDF from LaTeX.",
+      schema: z.object({ filename: z.string().optional(), texContent: z.string().min(1) }),
+    }
+  )
+}
 
 export const readFileTool = tool(
   async ({ path: filePath }) => {
@@ -276,7 +2262,12 @@ export const writeFileTool = tool(
     await ensureWorkspaceDirs()
     const resolved = resolveWorkspacePath(filePath)
     await writeFile(resolved, content, "utf-8")
-    return { path: filePath, bytes: Buffer.byteLength(content), type: "write_file" }
+    return {
+      path: filePath,
+      bytes: Buffer.byteLength(content),
+      downloadUrl: `/api/workspace/file?path=${encodeURIComponent(filePath)}`,
+      type: "write_file",
+    }
   },
   {
     name: "write_file",
@@ -336,14 +2327,84 @@ export const executeCommandTool = tool(
   }
 )
 
-export const toolset = [
-  webSearchTool,
-  visitUrlTool,
-  browserNavigateTool,
-  browserGetMarkdownTool,
-  browserScreenshotTool,
-  readFileTool,
-  listFilesTool,
-  writeFileTool,
-  executeCommandTool,
-]
+export function createToolset(context?: { headers?: HeadersInit }) {
+  const generateLatexPdfTool = createGenerateLatexPdfTool(context)
+  const markdownToPdfTool = createMarkdownToPdfTool(context)
+  return [
+    // Content/API tools
+    webSearchTool,
+    visitUrlTool,
+    httpRequestTool,
+    downloadFetchTool,
+    linkPreviewTool,
+    npmPackageInfoTool,
+
+    // File system + search
+    fileSearchTool,
+    fileReplaceTool,
+    jsonPatchTool,
+    yamlPatchTool,
+    archiveCreateTool,
+    archiveExtractTool,
+    readFileTool,
+    listFilesTool,
+    writeFileTool,
+
+    // Browser
+    browserNavigateTool,
+    browserGetMarkdownTool,
+    browserScreenshotTool,
+    browserControlTool,
+    browserVisionControlTool,
+    browserActionTool,
+    browserClickTool,
+    browserDoubleClickTool,
+    browserRightClickTool,
+    browserHoverTool,
+    browserScrollTool,
+    browserTypeTool,
+    browserFormFillTool,
+    browserFormFillBatchTool,
+    browserWaitTool,
+    browserWaitForTool,
+    browserExtractTool,
+    browserGetTextTool,
+    browserGetLinksTool,
+    browserGetClickableElementsTool,
+    browserDragAndDropTool,
+    browserDragTool,
+    browserKeyPressTool,
+    browserHotkeyTool,
+    browserEvaluateTool,
+
+    // Execution
+    nodeExecuteTool,
+    pythonExecuteTool,
+    nodeCodeActTool,
+    pythonCodeActTool,
+    shellCodeActTool,
+    shellExecuteTool,
+    executeCommandTool,
+
+    // Document & conversions
+    generateLatexPdfTool,
+    markdownToPdfTool,
+
+    // Data transforms
+    base64EncodeTool,
+    base64DecodeTool,
+    hashTool,
+    textSummarizeTool,
+    textRewriteTool,
+    extractTodosTool,
+    imageInfoTool,
+    imageConvertTool,
+
+    // Repo info
+    gitLogSummaryTool,
+    gitBranchesTool,
+    gitDiffSummaryTool,
+  ]
+}
+
+export const toolset = createToolset()

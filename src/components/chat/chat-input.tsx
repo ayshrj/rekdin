@@ -1,11 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { Loader2, Paperclip, Send } from "lucide-react"
 
-import { Textarea } from "@/components/ui/textarea"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
+import { Loader, PaperAirplane as Send, PaperClip } from "@/lib/icons"
 
 interface ChatInputProps {
   onSend: (content: string, attachments: File[]) => Promise<void> | void
@@ -39,8 +39,8 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
   }
 
   return (
-    <div className="rounded-2xl border bg-card/80 p-4 shadow-inner">
-      <div className="flex items-center gap-2">
+    <div className="bg-card/80 rounded-2xl border p-4 shadow-inner">
+      <div className="flex items-end gap-2">
         <Button
           type="button"
           size="icon"
@@ -49,23 +49,25 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
           onClick={() => fileInputRef.current?.click()}
           disabled={disabled || isLoading}
         >
-          <Paperclip className="h-4 w-4" />
+          <PaperClip className="h-4 w-4" />
           <span className="sr-only">Attach files</span>
         </Button>
         <Textarea
           value={value}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask Terminator to research or run commands..."
+          placeholder="Ask Rekdin to research or run commands..."
           disabled={disabled || isLoading}
-          className="min-h-[80px] flex-1 resize-none border-none bg-transparent focus-visible:ring-0"
+          className="max-h-40 min-h-20 flex-1 resize-none bg-transparent focus-visible:ring-0"
         />
         <Button
           onClick={() => void handleSend()}
-          disabled={disabled || isLoading || (value.trim().length === 0 && attachments.length === 0)}
+          disabled={
+            disabled || isLoading || (value.trim().length === 0 && attachments.length === 0)
+          }
         >
           {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader className="h-4 w-4 animate-spin" />
           ) : (
             <>
               <span className="mr-2 hidden md:inline">Send</span>
@@ -81,7 +83,9 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
               key={file.name}
               variant="secondary"
               className="cursor-pointer"
-              onClick={() => setAttachments((prev) => prev.filter((item) => item.name !== file.name))}
+              onClick={() =>
+                setAttachments((prev) => prev.filter((item) => item.name !== file.name))
+              }
             >
               {file.name}
             </Badge>
@@ -99,7 +103,7 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
           event.target.value = ""
         }}
       />
-      <p className="mt-2 text-xs text-muted-foreground">Shift + Enter to add a new line.</p>
+      <p className="text-muted-foreground mt-2 text-xs">Shift + Enter to add a new line.</p>
     </div>
   )
 }

@@ -1,9 +1,19 @@
-import { mkdir, access } from "fs/promises"
+import crypto from "crypto"
+import { access, mkdir } from "fs/promises"
+import os from "os"
 import path from "path"
 
-const DATA_DIR = path.resolve(process.cwd(), "data")
+function getDefaultDataDir() {
+  const hash = crypto.createHash("sha1").update(process.cwd()).digest("hex").slice(0, 10)
+  return path.join(os.tmpdir(), `rekdin-data-${hash}`)
+}
+
+const DATA_DIR = process.env.REKDIN_DATA_DIR?.trim()
+  ? path.resolve(process.env.REKDIN_DATA_DIR.trim())
+  : getDefaultDataDir()
 const WORKSPACE_DIR = path.join(DATA_DIR, "workspace")
 const UPLOADS_DIR = path.join(WORKSPACE_DIR, "uploads")
+const PDFS_DIR = path.join(WORKSPACE_DIR, "pdfs")
 const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json")
 
 async function ensureDir(dir: string) {
@@ -18,6 +28,7 @@ export async function ensureWorkspaceDirs() {
   await ensureDir(DATA_DIR)
   await ensureDir(WORKSPACE_DIR)
   await ensureDir(UPLOADS_DIR)
+  await ensureDir(PDFS_DIR)
 }
 
 export function getWorkspaceRoot() {
@@ -26,6 +37,10 @@ export function getWorkspaceRoot() {
 
 export function getUploadsDir() {
   return UPLOADS_DIR
+}
+
+export function getPdfsDir() {
+  return PDFS_DIR
 }
 
 export function getSessionsFilePath() {

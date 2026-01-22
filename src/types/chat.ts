@@ -15,6 +15,15 @@ export interface ToolCall {
   status: ToolStatus
 }
 
+export interface ToolResultEntry {
+  id: string
+  toolName: string
+  status: string
+  arguments: Record<string, unknown>
+  result?: Record<string, unknown> | string
+  timestamp: string
+}
+
 export interface ChatMessage {
   id: string
   sessionId: string
@@ -47,7 +56,13 @@ export interface ChatSession {
 export interface ReplayEvent {
   id: string
   sessionId: string
-  type: "user_message" | "assistant_message" | "tool_call" | "tool_result" | "message_chunk" | "assistant_thinking"
+  type:
+    | "user_message"
+    | "assistant_message"
+    | "tool_call"
+    | "tool_result"
+    | "message_chunk"
+    | "assistant_thinking"
   timestamp: number
   data: Record<string, unknown>
 }

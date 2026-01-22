@@ -1,9 +1,9 @@
 "use client"
 
-import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { XIcon } from "lucide-react"
+import * as React from "react"
 
+import { XMarkIcon } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
@@ -63,7 +63,7 @@ function DialogContent({
             data-slot="dialog-close"
             className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
-            <XIcon />
+            <XMarkIcon />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}
@@ -115,6 +115,82 @@ function DialogDescription({
   )
 }
 
+// Responsive dialog shell with sticky header/footer and a single scrollable body.
+// Works across iOS/Android/desktop, dark mode, and small screens.
+type DialogShellProps = React.ComponentProps<typeof DialogContent> & {
+  title?: React.ReactNode
+  description?: React.ReactNode
+  footer?: React.ReactNode
+  bodyClassName?: string
+  headerClassName?: string
+  contentClassName?: string
+  descriptionClassName?: string
+  footerClassName?: string
+  withSeparator?: boolean
+}
+
+function DialogShell({
+  title,
+  description,
+  footer,
+  children,
+  className,
+  bodyClassName,
+  headerClassName,
+  contentClassName,
+  descriptionClassName,
+  footerClassName,
+  withSeparator = true,
+  ...props
+}: DialogShellProps) {
+  const showDividers = withSeparator !== false
+
+  return (
+    <DialogContent
+      {...props}
+      className={cn("w-[96vw] overflow-hidden p-0 sm:w-auto sm:max-w-2xl", className)}
+    >
+      <div
+        className={cn(
+          "from-background via-background to-background/95 flex max-h-[min(92dvh,720px)] flex-col bg-linear-to-b",
+          contentClassName
+        )}
+      >
+        <DialogHeader
+          className={cn(
+            "bg-background/90 supports-backdrop-filter:bg-background/75 sticky top-0 z-20 px-6 py-4 text-left backdrop-blur",
+            showDividers ? "border-border/60 border-b shadow-[0_1px_0_rgba(15,23,42,0.08)]" : null,
+            headerClassName
+          )}
+        >
+          {title ? <DialogTitle>{title}</DialogTitle> : null}
+          {description ? (
+            <DialogDescription className={cn("mt-1", descriptionClassName)}>
+              {description}
+            </DialogDescription>
+          ) : null}
+        </DialogHeader>
+
+        <div className={cn("flex-1 overflow-y-auto", bodyClassName)}>{children}</div>
+
+        {(footer ?? null) && (
+          <DialogFooter
+            className={cn(
+              "bg-muted/40! supports-backdrop-filter:bg-background/75 sticky bottom-0 z-20 px-6 py-4 backdrop-blur",
+              showDividers
+                ? "border-border/60 border-t shadow-[0_-1px_0_rgba(15,23,42,0.08)]"
+                : null,
+              footerClassName
+            )}
+          >
+            {footer}
+          </DialogFooter>
+        )}
+      </div>
+    </DialogContent>
+  )
+}
+
 export {
   Dialog,
   DialogClose,
@@ -124,6 +200,7 @@ export {
   DialogHeader,
   DialogOverlay,
   DialogPortal,
+  DialogShell,
   DialogTitle,
   DialogTrigger,
 }

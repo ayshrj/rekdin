@@ -1,180 +1,37 @@
 "use client"
 
+import { motion } from "framer-motion"
 import * as React from "react"
-import { Globe } from "lucide-react"
 
-import { useToolResults, ToolResultEntry } from "@/contexts/chat-context"
+import {
+  ToolResultContentPart,
+  ToolResultRenderer,
+} from "@/components/tools/renderers/tool-result-renderer"
+import { toolLabels } from "@/components/tools/tool-labels"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { ToolResultEntry, useToolResults } from "@/contexts/chat-context"
+import { ChevronLeft, ChevronRight, GalleryVerticalEnd, Globe } from "@/lib/icons"
 import { cn } from "@/lib/utils"
-import { Markdown } from "./markdown"
 
-type WebSearchPayload = {
-  results?: Array<{ title?: string; url?: string; snippet?: string }>
-}
+import { Button } from "./ui/button"
 
-type VisitLinkPayload = {
-  markdown?: string
-  url?: string
-}
-
-type CommandPayload = {
-  command?: string
-  stdout?: string
-  stderr?: string
-}
-
-type BrowserNavigatePayload = {
-  url?: string
-  title?: string
-  status?: number | null
-  duration?: number
-  steps?: Array<Record<string, unknown>>
-}
-
-type BrowserMarkdownPayload = {
-  url?: string
-  title?: string
-  markdown?: string
-  steps?: Array<Record<string, unknown>>
-}
-
-type BrowserScreenshotPayload = {
-  url?: string
-  title?: string
-  screenshot?: string
-  steps?: Array<Record<string, unknown>>
-}
-
-function renderResult(entry: ToolResultEntry) {
-  const result = entry.result ?? {}
-  const webResult = result as WebSearchPayload
-  if (entry.toolName === "web_search" && Array.isArray(webResult.results)) {
-    const items = webResult.results
-    return (
-      <div className="space-y-3">
-        {items.map((item, index) => (
-          <div key={`${item.url}-${index}`} className="rounded-xl border bg-muted/30 p-3 text-sm">
-            <p className="font-semibold">{item.title ?? item.url}</p>
-            <p className="text-muted-foreground">{item.snippet}</p>
-            {item.url ? (
-              <a
-                className="text-primary underline"
-                href={String(item.url)}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {item.url}
-              </a>
-            ) : null}
-          </div>
-        ))}
-      </div>
-    )
+function toContentPart(entry: ToolResultEntry): ToolResultContentPart {
+  return {
+    type: entry.toolName || "generic",
+    toolName: entry.toolName,
+    toolInput: entry.arguments ?? {},
+    toolResult: entry.result ?? {},
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    status: entry.status as any,
+    timestamp: entry.timestamp,
   }
-
-  const visitResult = result as VisitLinkPayload
-  if (entry.toolName === "visit_link" && typeof visitResult.markdown === "string") {
-    return (
-      <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">{visitResult.url}</p>
-        <Markdown>{visitResult.markdown}</Markdown>
-      </div>
-    )
-  }
-
-  const commandResult = result as CommandPayload
-  if (entry.toolName === "execute_command") {
-    return (
-      <div className="text-sm">
-        <p className="font-mono text-xs text-muted-foreground">{commandResult.command ?? ""}</p>
-        <pre className="mt-2 max-h-60 overflow-auto rounded-lg bg-muted p-3 text-xs">
-          {commandResult.stdout ? commandResult.stdout : "(no output)"}
-        </pre>
-        {commandResult.stderr ? (
-          <pre className="mt-2 max-h-60 overflow-auto rounded-lg bg-destructive/10 p-3 text-xs text-destructive">
-            {commandResult.stderr}
-          </pre>
-        ) : null}
-      </div>
-    )
-  }
-
-  const navResult = result as BrowserNavigatePayload
-  if (entry.toolName === "browser_navigate") {
-    return (
-      <div className="space-y-2 text-sm">
-        <p className="font-semibold">{navResult.title ?? navResult.url}</p>
-        <p className="text-muted-foreground">{navResult.url}</p>
-        <div className="flex gap-3 text-xs text-muted-foreground">
-          {navResult.status ? <span>Status: {navResult.status}</span> : null}
-          {navResult.duration ? <span>Load: {navResult.duration}ms</span> : null}
-        </div>
-        {Array.isArray(navResult.steps) && navResult.steps.length ? (
-          <div className="mt-2 space-y-1 rounded-lg border bg-muted/30 p-2 text-xs text-muted-foreground">
-            {navResult.steps.map((step, idx) => (
-              <div key={idx} className="flex items-center justify-between">
-                <span className="font-medium text-foreground">{String(step.label ?? "Step")}</span>
-                <span>{String(step.detail ?? "")}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    )
-  }
-
-  const mdResult = result as BrowserMarkdownPayload
-  if (entry.toolName === "browser_get_markdown" && typeof mdResult.markdown === "string") {
-    return (
-      <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">{mdResult.url}</p>
-        {Array.isArray(mdResult.steps) && mdResult.steps.length ? (
-          <div className="rounded-lg border bg-muted/30 p-2 text-xs text-muted-foreground">
-            {mdResult.steps.map((step, idx) => (
-              <div key={idx} className="flex items-center justify-between">
-                <span className="font-medium text-foreground">{String(step.label ?? "Step")}</span>
-                <span>{String(step.detail ?? "")}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        <Markdown>{mdResult.markdown}</Markdown>
-      </div>
-    )
-  }
-
-  const shotResult = result as BrowserScreenshotPayload
-  if (entry.toolName === "browser_screenshot" && typeof shotResult.screenshot === "string") {
-    return (
-      <div className="space-y-2">
-        <p className="text-sm font-semibold">{shotResult.title ?? "Screenshot"}</p>
-        <p className="text-xs text-muted-foreground">{shotResult.url}</p>
-        {Array.isArray(shotResult.steps) && shotResult.steps.length ? (
-          <div className="rounded-lg border bg-muted/30 p-2 text-xs text-muted-foreground">
-            {shotResult.steps.map((step, idx) => (
-              <div key={idx} className="flex items-center justify-between">
-                <span className="font-medium text-foreground">{String(step.label ?? "Step")}</span>
-                <span>{String(step.detail ?? "")}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        <div className="overflow-hidden rounded-xl border bg-muted/30">
-          <img src={shotResult.screenshot} alt="Page screenshot" className="w-full" />
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <pre className="max-h-72 overflow-auto rounded-lg bg-muted p-3 text-xs">
-      {JSON.stringify(result, null, 2)}
-    </pre>
-  )
 }
 
 export function WorkspacePanel() {
   const { toolResults } = useToolResults()
   const [selectedIndex, setSelectedIndex] = React.useState(0)
+  const [showTimeline, setShowTimeline] = React.useState(false)
+  const [navigationMode, setNavigationMode] = React.useState<"scroll" | "buttons">("buttons")
 
   React.useEffect(() => {
     if (toolResults.length > 0) {
@@ -182,63 +39,217 @@ export function WorkspacePanel() {
     }
   }, [toolResults])
 
-  if (toolResults.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center rounded-2xl border bg-card text-center text-muted-foreground shadow-sm">
-        <Globe className="mb-3 h-6 w-6" />
-        Tool calls will appear here as the agent researches or executes commands.
-      </div>
-    )
-  }
+  const activeEntry = toolResults[selectedIndex]
+  const isScrollMode = navigationMode === "scroll"
+  const stepLabel =
+    toolResults.length > 0 ? `Step ${selectedIndex + 1} of ${toolResults.length}` : "No steps yet"
 
-  const entry = toolResults[selectedIndex]
+  const handleStepChange = React.useCallback(
+    (index: number) => {
+      if (index < 0 || index >= toolResults.length) return
+      setSelectedIndex(index)
+      if (!isScrollMode) return
+      const target = document.getElementById(`tool-result-${toolResults[index]?.id}`)
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" })
+      }
+    },
+    [isScrollMode, toolResults]
+  )
+
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Avoid interfering with text inputs
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement)?.isContentEditable
+      ) {
+        return
+      }
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault()
+        handleStepChange(selectedIndex - 1)
+      }
+
+      if (e.key === "ArrowRight") {
+        e.preventDefault()
+        handleStepChange(selectedIndex + 1)
+      }
+    }
+
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [handleStepChange, selectedIndex])
 
   return (
-    <div className="flex h-full gap-3 rounded-2xl border bg-card shadow-sm">
-      <div className="w-1/3 border-r p-4">
-        <p className="text-xs uppercase text-muted-foreground">Tool timeline</p>
-        <div className="mt-3 space-y-2">
-          {toolResults.map((result, index) => (
-            <button
-              key={result.id}
-              type="button"
-              className={cn(
-                "w-full rounded-xl border px-3 py-2 text-left text-sm transition",
-                index === selectedIndex
-                  ? "border-primary/40 bg-primary/5"
-                  : "border-transparent hover:border-border hover:bg-muted/50"
-              )}
-              onClick={() => setSelectedIndex(index)}
+    <div className="bg-card flex h-full min-w-0 gap-3 rounded-2xl border shadow-sm">
+      <motion.div
+        className="shrink-0 overflow-y-auto border-r p-4"
+        initial={false}
+        animate={{
+          width: showTimeline ? 280 : 64,
+          minWidth: showTimeline ? 240 : 64,
+        }}
+        transition={{ duration: 0.3, ease: "easeInOut" }}
+      >
+        <div className="mb-1 flex w-full items-center justify-between">
+          {showTimeline && (
+            <motion.p
+              className="text-muted-foreground text-xs uppercase"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
             >
-              <div className="flex items-center justify-between">
-                <span className="font-medium">{result.toolName}</span>
-                <span className="text-xs text-muted-foreground">{result.status}</span>
+              Tool timeline
+            </motion.p>
+          )}
+          <Button
+            onClick={() => setShowTimeline(!showTimeline)}
+            size="icon-sm"
+            className={cn(!showTimeline && "ml-auto", "cursor-pointer")}
+          >
+            <GalleryVerticalEnd className="size-4" />
+          </Button>
+        </div>
+        <div className="mt-3 space-y-2">
+          {toolResults.map((result, index) => {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const resultId = `tool-result-${result.id}`
+            return (
+              <button
+                key={result.id}
+                type="button"
+                className={cn(
+                  "w-full rounded-xl border px-3 py-2 text-left text-sm transition",
+                  index === selectedIndex
+                    ? "border-primary/40 bg-primary/5"
+                    : "hover:border-border hover:bg-muted/50 border-transparent"
+                )}
+                onClick={() => {
+                  handleStepChange(index)
+                }}
+              >
+                {showTimeline ? (
+                  <>
+                    <div className="flex flex-wrap items-center justify-between">
+                      <span className="font-medium">
+                        {toolLabels[result.toolName] ?? result.toolName}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {toolLabels[result.status] ?? result.status}
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground text-xs">
+                      {new Date(result.timestamp).toLocaleTimeString()}
+                    </p>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center">
+                    <span className="text-muted-foreground text-xs font-medium">{index + 1}</span>
+                  </div>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </motion.div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="bg-card flex items-center justify-between border-b px-4 pt-4 pb-3">
+          <div>
+            <p className="text-muted-foreground text-xs uppercase">Tool steps</p>
+            <h3 className="text-lg font-semibold">
+              {toolResults.length > 0 ? `${toolResults.length} steps` : "No steps yet"}
+            </h3>
+          </div>
+          {activeEntry ? (
+            <div className="rounded-full border px-3 py-1 text-xs">
+              Active: {toolLabels[activeEntry.toolName] ?? activeEntry.toolName}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex-1 overflow-auto px-4 pb-4">
+          {toolResults.length === 0 ? (
+            <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
+              <div className="flex flex-col items-center gap-2 text-center">
+                <Globe className="h-6 w-6" />
+                <span>Tool calls will appear here as the agent works.</span>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {new Date(result.timestamp).toLocaleTimeString()}
-              </p>
-            </button>
-          ))}
+            </div>
+          ) : isScrollMode ? (
+            <div className="mt-8 space-y-6">
+              {toolResults.map((result, index) => {
+                const resultId = `tool-result-${result.id}`
+                const contentPart = toContentPart(result)
+                return (
+                  <div
+                    key={result.id}
+                    id={resultId}
+                    className={cn(
+                      "scroll-mt-20 rounded-2xl border p-3 transition-colors",
+                      index === selectedIndex
+                        ? "border-primary/40 bg-primary/5"
+                        : "border-border/60"
+                    )}
+                  >
+                    <div className="text-muted-foreground mb-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span>Step {index + 1}</span>
+                      <span>{toolLabels[result.toolName] ?? result.toolName}</span>
+                      <span>{new Date(result.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <ToolResultRenderer content={[contentPart]} />
+                  </div>
+                )
+              })}
+            </div>
+          ) : activeEntry ? (
+            <div className="mt-8 rounded-2xl border p-3">
+              <div className="text-muted-foreground mb-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span>{stepLabel}</span>
+                <span>{toolLabels[activeEntry.toolName] ?? activeEntry.toolName}</span>
+                <span>{new Date(activeEntry.timestamp).toLocaleTimeString()}</span>
+              </div>
+              <ToolResultRenderer content={[toContentPart(activeEntry)]} />
+            </div>
+          ) : null}
         </div>
-      </div>
-      <div className="flex-1 p-4">
-        <div className="flex items-center justify-between border-b pb-3">
-          <div>
-            <p className="text-xs uppercase text-muted-foreground">Active tool</p>
-            <h3 className="text-lg font-semibold">{entry.toolName}</h3>
-          </div>
-          <div className="rounded-full border px-3 py-1 text-xs">{entry.status}</div>
-        </div>
-        <div className="mt-4 space-y-4">
-          <div>
-            <p className="text-xs uppercase text-muted-foreground">Arguments</p>
-            <pre className="mt-1 rounded-lg bg-muted p-3 text-xs">
-              {JSON.stringify(entry.arguments, null, 2)}
-            </pre>
-          </div>
-          <div>
-            <p className="text-xs uppercase text-muted-foreground">Result</p>
-            {renderResult(entry)}
+        <div className="bg-card flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+          <ToggleGroup
+            type="single"
+            value={navigationMode}
+            onValueChange={(value) => {
+              if (!value) return
+              setNavigationMode(value as "scroll" | "buttons")
+            }}
+            variant="outline"
+            size="sm"
+          >
+            <ToggleGroupItem value="scroll">Scroll</ToggleGroupItem>
+            <ToggleGroupItem value="buttons">Buttons</ToggleGroupItem>
+          </ToggleGroup>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-xs">{stepLabel}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              disabled={selectedIndex <= 0 || toolResults.length === 0}
+              onClick={() => handleStepChange(selectedIndex - 1)}
+              aria-label="Previous step"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              disabled={selectedIndex >= toolResults.length - 1}
+              onClick={() => handleStepChange(selectedIndex + 1)}
+              aria-label="Next step"
+            >
+              <ChevronRight className="size-4" />
+            </Button>
           </div>
         </div>
       </div>

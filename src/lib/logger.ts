@@ -5,7 +5,7 @@ type LogLevel = "info" | "warn" | "error" | "debug"
 function emit(level: LogLevel, message: string, ...meta: unknown[]) {
   if (!SHOW_LOGS) return
   const prefix = `[${level.toUpperCase()}]`
-  // eslint-disable-next-line no-console
+
   console[level === "debug" ? "log" : level](prefix, message, ...meta)
 }
 

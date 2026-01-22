@@ -14,7 +14,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ sessionId: str
   return new NextResponse(html, {
     headers: {
       "Content-Type": "text/html",
-      "Content-Disposition": `attachment; filename="terminator-session-${sessionId}.html"`,
+      "Content-Disposition": `attachment; filename="rekdin-session-${sessionId}.html"`,
     },
   })
 }

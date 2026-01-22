@@ -23,7 +23,9 @@ class ReplayStore {
     if (!events || events.length === 0) return null
     const start = events[0]!.timestamp
     const end = events[events.length - 1]!.timestamp
-    const totalMessages = events.filter((e) => e.type === "user_message" || e.type === "assistant_message").length
+    const totalMessages = events.filter(
+      (e) => e.type === "user_message" || e.type === "assistant_message"
+    ).length
     const totalToolCalls = events.filter((e) => e.type === "tool_call").length
     return {
       sessionId,
@@ -75,7 +77,7 @@ export function renderReplayHtml(data: SessionReplayData) {
   <body>
     <div class="container">
       <header class="header">
-        <h1>Terminator Session Replay</h1>
+        <h1>Rekdin Session Replay</h1>
         <p>Session ID: ${data.sessionId}</p>
         <p>Events: ${data.events.length} · Messages: ${data.metadata.totalMessages} · Tool calls: ${data.metadata.totalToolCalls}</p>
       </header>
