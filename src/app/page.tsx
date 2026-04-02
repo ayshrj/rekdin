@@ -120,9 +120,9 @@ function ThinkingBadge() {
 }
 
 function useIsPhone() {
-  const [isPhone, setIsPhone] = React.useState(false)
+  const [isPhone, setIsPhone] = React.useState<boolean | null>(null)
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const mediaQuery = window.matchMedia(PHONE_MEDIA_QUERY)
     const update = () => setIsPhone(mediaQuery.matches)
     update()
@@ -168,19 +168,21 @@ function MobileNavButton({
 function HomePageContent() {
   const { connected, llmProvider, isThinking, sessions, currentSessionId } = useChat()
   const isPhone = useIsPhone()
+  const viewportReady = isPhone !== null
+  const isPhoneLayout = isPhone === true
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
   const [tourOpen, setTourOpen] = React.useState(false)
   const [mobilePanel, setMobilePanel] = React.useState<"chat" | "workspace">("chat")
 
   React.useEffect(() => {
-    if (!isPhone && !localStorage.getItem(TOUR_SEEN_KEY)) {
+    if (viewportReady && !isPhoneLayout && !localStorage.getItem(TOUR_SEEN_KEY)) {
       setTourOpen(true)
     }
-  }, [isPhone])
+  }, [isPhoneLayout, viewportReady])
 
   React.useEffect(() => {
-    if (isPhone) setTourOpen(false)
-  }, [isPhone])
+    if (isPhoneLayout) setTourOpen(false)
+  }, [isPhoneLayout])
 
   const markTourSeen = React.useCallback(() => {
     localStorage.setItem(TOUR_SEEN_KEY, "1")
@@ -256,7 +258,11 @@ function HomePageContent() {
         </div>
       </header>
 
-      {!isPhone ? (
+      {!viewportReady ? (
+        <main className="min-h-0 flex-1 px-3 pt-3">
+          <div className="bg-card h-full animate-pulse rounded-xl border shadow-(--shadow-panel)" />
+        </main>
+      ) : !isPhoneLayout ? (
         <main className="min-h-0 flex-1 overflow-hidden p-3">
           <ResizablePanelGroup
             id="main-workspace"
@@ -326,14 +332,14 @@ function HomePageContent() {
         </>
       )}
 
-      {!isPhone && sidebarOpen && (
+      {viewportReady && !isPhoneLayout && sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {!isPhone ? (
+      {viewportReady && !isPhoneLayout ? (
         <aside
           className={cn(
             "bg-sidebar fixed inset-y-0 left-0 z-50 flex w-64 flex-col overflow-hidden transition-transform duration-300 ease-in-out lg:w-72",
@@ -356,7 +362,7 @@ function HomePageContent() {
         </aside>
       ) : null}
 
-      <Sheet open={isPhone && sidebarOpen} onOpenChange={setSidebarOpen}>
+      <Sheet open={isPhoneLayout && sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent
           side="bottom"
           className="max-h-[75vh] rounded-t-3xl border-t p-0 [&>button]:top-3 [&>button]:right-3"
