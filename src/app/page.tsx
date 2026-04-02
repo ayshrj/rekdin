@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { WorkspacePanel } from "@/components/workspace-panel"
 import { useChat } from "@/contexts/chat-context"
-import { PanelLeft, Rekdin } from "@/lib/icons"
+import { GitHub, PanelLeft, Rekdin } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 const MAIN_LAYOUT = { chat: 38, workspace: 62 }
@@ -168,6 +168,16 @@ function HomePageContent() {
           <div id="tour-settings">
             <OpenRouterSettings onRestartTour={restartTour} />
           </div>
+          <a
+            href="https://github.com/ayshrj"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="GitHub profile"
+          >
+            <Button variant="outline" size="icon" className="rounded-full">
+              <GitHub className="h-4 w-4" />
+            </Button>
+          </a>
           <ThemeToggle />
         </div>
       </header>
