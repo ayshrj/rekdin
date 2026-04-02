@@ -2,7 +2,9 @@
 
 import React, { useMemo, useState } from "react"
 
+import { JsonTreeViewer, JsonValue } from "@/components/json-tree-viewer"
 import { Check, ClipboardDocumentList as Copy, CodeBracket } from "@/lib/icons"
+import { cn } from "@/lib/utils"
 
 import { ToolResultContentPart } from "./tool-result-renderer"
 
@@ -37,6 +39,7 @@ const highlightJson = (jsonString: string) => {
 
 export const JsonResultRenderer: React.FC<JsonResultRendererProps> = ({ part }) => {
   const [copied, setCopied] = useState(false)
+  const [viewMode, setViewMode] = useState<"raw" | "tree">("tree")
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let jsonData: any
@@ -68,6 +71,7 @@ export const JsonResultRenderer: React.FC<JsonResultRendererProps> = ({ part }) 
   }
 
   const highlightedJson = highlightJson(jsonString)
+  const canRenderTree = Boolean(jsonData) && typeof jsonData === "object"
   const downloadUrl = useMemo(() => {
     if (!jsonData || typeof jsonData !== "object") return null
     const record = jsonData as Record<string, unknown>
@@ -103,6 +107,26 @@ export const JsonResultRenderer: React.FC<JsonResultRendererProps> = ({ part }) 
             {jsonString.split("\n").length} lines • {jsonString.length} chars
           </div>
 
+          {canRenderTree ? (
+            <div className="bg-background flex items-center rounded-md border p-0.5">
+              {(["tree", "raw"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setViewMode(mode)}
+                  className={cn(
+                    "rounded px-2 py-1 text-xs font-medium transition-colors",
+                    viewMode === mode
+                      ? "bg-tool-json/10 text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {mode === "tree" ? "Tree" : "Raw"}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           {downloadUrl ? (
             <a
               href={downloadUrl}
@@ -125,22 +149,26 @@ export const JsonResultRenderer: React.FC<JsonResultRendererProps> = ({ part }) 
       </div>
 
       <div className="bg-card text-foreground max-h-[60vh] overflow-auto">
-        <div className="flex min-w-0">
-          <div className="border-border bg-muted/70 text-muted-foreground min-w-12 border-r px-3 py-4 text-right font-mono text-xs select-none">
-            {jsonString.split("\n").map((_, index) => (
-              <div key={index} className="leading-6">
-                {index + 1}
-              </div>
-            ))}
-          </div>
+        {canRenderTree && viewMode === "tree" ? (
+          <JsonTreeViewer json={jsonData as JsonValue} />
+        ) : (
+          <div className="flex min-w-0">
+            <div className="border-border bg-muted/70 text-muted-foreground min-w-12 border-r px-3 py-4 text-right font-mono text-xs select-none">
+              {jsonString.split("\n").map((_, index) => (
+                <div key={index} className="leading-6">
+                  {index + 1}
+                </div>
+              ))}
+            </div>
 
-          <div className="min-w-0 flex-1 p-4">
-            <pre
-              className="overflow-x-auto font-mono text-sm leading-6 wrap-anywhere"
-              dangerouslySetInnerHTML={{ __html: highlightedJson }}
-            />
+            <div className="min-w-0 flex-1 p-4">
+              <pre
+                className="overflow-x-auto font-mono text-sm leading-6 wrap-anywhere"
+                dangerouslySetInnerHTML={{ __html: highlightedJson }}
+              />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="border-border bg-muted/40 rounded-b-lg border-t px-3 py-1">
@@ -162,7 +190,7 @@ export const JsonResultRenderer: React.FC<JsonResultRendererProps> = ({ part }) 
           </div>
           <div className="flex items-center space-x-2">
             <span>UTF-8</span>
-            <span>Valid JSON</span>
+            <span>{canRenderTree ? "Tree + Raw" : "Raw only"}</span>
           </div>
         </div>
       </div>

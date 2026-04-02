@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import React, { useState } from "react"
 
+import { Markdown } from "@/components/markdown"
 import { Image } from "@/components/ui/image"
 import {
   ArrowTopRightOnSquare as ExternalLink,
@@ -10,6 +11,7 @@ import {
   ClipboardDocumentList,
   Globe,
 } from "@/lib/icons"
+import { cn } from "@/lib/utils"
 
 import { BrowserShell } from "./browser-shell"
 import { SimpleCodeEditor } from "./simple-code-editor"
@@ -24,6 +26,7 @@ interface BrowserResultRendererProps {
 export const BrowserResultRenderer: React.FC<BrowserResultRendererProps> = ({ part }) => {
   const { toolResult, toolInput } = part
   const [copied, setCopied] = useState(false)
+  const [contentMode, setContentMode] = useState<"preview" | "raw">("preview")
 
   const url = toolResult?.url || toolInput?.url || ""
   const content =
@@ -119,15 +122,44 @@ export const BrowserResultRenderer: React.FC<BrowserResultRendererProps> = ({ pa
             {typeof extractedContent === "string" && extractedContent ? (
               shouldUseMarkdownEditor ? (
                 <div className="py-4">
-                  <SimpleCodeEditor
-                    code={extractedContent}
-                    language="markdown"
-                    fileName="content.md"
-                    showLineNumbers
-                    maxHeight="500px"
-                    readOnly
-                    fontSize={13}
-                  />
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-muted-foreground text-xs">Markdown content</div>
+                      <div className="bg-background flex items-center rounded-md border p-0.5">
+                        {(["preview", "raw"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setContentMode(mode)}
+                            className={cn(
+                              "rounded px-2 py-1 text-xs font-medium transition-colors",
+                              contentMode === mode
+                                ? "bg-tool-browser/10 text-foreground"
+                                : "text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            {mode === "preview" ? "Preview" : "Raw"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {contentMode === "preview" ? (
+                      <div className="border-border bg-background rounded-lg border p-4">
+                        <Markdown className="max-w-none break-words">{extractedContent}</Markdown>
+                      </div>
+                    ) : (
+                      <SimpleCodeEditor
+                        code={extractedContent}
+                        language="markdown"
+                        fileName="content.md"
+                        showLineNumbers
+                        maxHeight="500px"
+                        readOnly
+                        fontSize={13}
+                      />
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="prose prose-sm dark:prose-invert max-w-none py-4 whitespace-pre-wrap">

@@ -7,6 +7,7 @@ import { runChatTurn } from "@/lib/server/runtime/agent-runtime"
 import { createEventStream } from "@/lib/server/runtime/events"
 import { getSessionStore } from "@/lib/server/session-store"
 import { getProviderSettings, getSettingsStore } from "@/lib/server/settings-store"
+import { getTraceStore } from "@/lib/server/trace-store"
 import { ChatMessage, ToolCall } from "@/types/chat"
 
 export const runtime = "nodejs"
@@ -28,6 +29,7 @@ const requestSchema = z.object({
   agentType: z.string().optional(),
   agentMode: z.string().optional(),
   toolPolicy: z.string().optional(),
+  workflowId: z.string().optional(),
   responseSchema: z.record(z.string(), z.unknown()).nullable().optional(),
   attachments: z.array(z.string()).optional(),
   history: z.array(messageSchema).optional(),
@@ -53,6 +55,7 @@ export async function POST(req: Request) {
     agentType,
     agentMode,
     toolPolicy,
+    workflowId,
     history = [],
   } = parsed.data
   const replayStore = getReplayStore()
@@ -61,12 +64,13 @@ export async function POST(req: Request) {
   const providerSettings = await getProviderSettings()
   const resolvedMode = agentMode ?? agentType
 
+  const lastHistoryMessage = history[history.length - 1]
   const userMessage: ChatMessage =
-    history[history.length - 1] && history[history.length - 1].role === "user"
-      ? ({
-          ...history[history.length - 1],
+    lastHistoryMessage && lastHistoryMessage.role === "user"
+      ? {
+          ...(lastHistoryMessage as ChatMessage),
           sessionId,
-        } as ChatMessage)
+        }
       : {
           id: crypto.randomUUID(),
           role: "user",
@@ -74,12 +78,15 @@ export async function POST(req: Request) {
           attachments,
           sessionId,
           timestamp: new Date().toISOString(),
+          metadata: workflowId ? { workflowId } : undefined,
         }
 
   await sessionStore.saveMessage(sessionId, userMessage)
   await replayStore.record(sessionId, "user_message", { message: userMessage })
 
   const streamingMessageId = crypto.randomUUID()
+  const turnStartedAt = new Date().toISOString()
+  const warnings: string[] = []
   const stream = createEventStream(async (send) => {
     send({ version: 2, type: "ack", message: userMessage })
     send({ version: 2, type: "status", phase: "received" })
@@ -89,6 +96,7 @@ export async function POST(req: Request) {
     try {
       const contextMessages = history.length > 0 ? (history as ChatMessage[]) : [userMessage]
       const agentResult = await runChatTurn({
+        sessionId,
         contextMessages,
         providerSettings,
         cloudinaryCloudName: settings.cloudinaryCloudName,
@@ -97,8 +105,10 @@ export async function POST(req: Request) {
         origin: req.headers.get("origin") ?? undefined,
         requestedMode: resolvedMode,
         requestedToolPolicy: toolPolicy,
+        workflowId,
         responseSchema: parsed.data.responseSchema ?? null,
         onWarning: async (warning) => {
+          warnings.push(warning)
           await replayStore.record(sessionId, "assistant_message", { warning })
           send({ version: 2, type: "warning", warning })
         },
@@ -139,6 +149,7 @@ export async function POST(req: Request) {
           tokens: agentResult.usageTokens,
           agentType: agentResult.mode,
           model: agentResult.model,
+          workflowId: workflowId ?? undefined,
         },
         sessionId,
         timestamp: new Date().toISOString(),
@@ -146,6 +157,24 @@ export async function POST(req: Request) {
 
       await sessionStore.saveMessage(sessionId, assistantMessage)
       await replayStore.record(sessionId, "assistant_message", { message: assistantMessage })
+      await getTraceStore().append(sessionId, {
+        startedAt: turnStartedAt,
+        completedAt: new Date().toISOString(),
+        mode: agentResult.mode,
+        toolPolicy: agentResult.toolPolicy,
+        provider: providerSettings.provider,
+        model: agentResult.model,
+        warnings,
+        toolCount: agentResult.toolCalls.length,
+        totalToolDurationMs: agentResult.toolCalls.reduce(
+          (total, toolCall) => total + (toolCall.duration ?? 0),
+          0
+        ),
+        responseSchemaApplied: Boolean(parsed.data.responseSchema),
+        retryCount: agentResult.retryCount,
+        success: true,
+        workflowId: workflowId ?? undefined,
+      })
       send({
         version: 2,
         type: "assistant_final",
@@ -156,6 +185,34 @@ export async function POST(req: Request) {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to generate response"
       await replayStore.record(sessionId, "assistant_message", { error: message })
+      await getTraceStore().append(sessionId, {
+        startedAt: turnStartedAt,
+        completedAt: new Date().toISOString(),
+        mode:
+          resolvedMode === "research" ||
+          resolvedMode === "browser" ||
+          resolvedMode === "workspace" ||
+          resolvedMode === "document"
+            ? resolvedMode
+            : "general",
+        toolPolicy:
+          toolPolicy === "read_only" || toolPolicy === "full_auto" ? toolPolicy : "balanced",
+        provider: providerSettings.provider,
+        model:
+          providerSettings.provider === "openrouter"
+            ? providerSettings.openRouterModel
+            : providerSettings.provider === "openai"
+              ? providerSettings.openAIModel
+              : providerSettings.azureOpenAIDeployment,
+        warnings,
+        toolCount: 0,
+        totalToolDurationMs: 0,
+        responseSchemaApplied: Boolean(parsed.data.responseSchema),
+        retryCount: 0,
+        success: false,
+        workflowId: workflowId ?? undefined,
+        error: message,
+      })
       send({ version: 2, type: "error", error: message })
     } finally {
       await replayStore.record(sessionId, "assistant_thinking", { value: false })

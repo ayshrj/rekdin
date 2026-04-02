@@ -13,8 +13,14 @@ import puppeteer from "puppeteer-extra"
 import RecaptchaPlugin from "puppeteer-extra-plugin-recaptcha"
 import StealthPlugin from "puppeteer-extra-plugin-stealth"
 import TurndownService from "turndown"
+import { pathToFileURL } from "url"
 import { z } from "zod"
 
+import { ArtifactRef } from "@/types/runtime"
+
+import { storeArtifact } from "./artifact-store"
+import { getBrowserSessionManager } from "./browser-session-manager"
+import { getToolExecutionContext } from "./tool-execution-context"
 import { ensureWorkspaceDirs, getWorkspaceRoot, resolveWorkspacePath } from "./workspace"
 
 const turndown = new TurndownService({ headingStyle: "atx" })
@@ -23,6 +29,7 @@ let browserPromise: Promise<Browser> | null = null
 let stealthInitialized = false
 let recaptchaInitialized = false
 let adblockerPromise: Promise<PuppeteerBlocker | null> | null = null
+let latexJsStylesPromise: Promise<string> | null = null
 
 function ensureStealthPlugin() {
   if (stealthInitialized) return
@@ -81,16 +88,31 @@ async function getBrowser() {
 
 async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
   const browser = await getBrowser()
-  const page = await browser.newPage()
-  try {
-    const adblocker = await getAdblocker()
-    if (adblocker) {
-      await adblocker.enableBlockingInPage(page)
+  const sessionId = getToolExecutionContext()?.sessionId
+  if (!sessionId) {
+    const page = await browser.newPage()
+    try {
+      const adblocker = await getAdblocker()
+      if (adblocker) {
+        await adblocker.enableBlockingInPage(page)
+      }
+      return await fn(page)
+    } finally {
+      await page.close()
     }
-    return await fn(page)
-  } finally {
-    await page.close()
   }
+
+  const manager = getBrowserSessionManager()
+  return manager.withPage(sessionId, getBrowser, async (page) => {
+    if (!(page as Page & { __rekdinAdblockEnabled?: boolean }).__rekdinAdblockEnabled) {
+      const adblocker = await getAdblocker()
+      if (adblocker) {
+        await adblocker.enableBlockingInPage(page)
+      }
+      ;(page as Page & { __rekdinAdblockEnabled?: boolean }).__rekdinAdblockEnabled = true
+    }
+    return fn(page)
+  })
 }
 
 async function goto(
@@ -98,13 +120,29 @@ async function goto(
   url: string,
   waitUntil: "domcontentloaded" | "networkidle0" = "domcontentloaded"
 ) {
+  if (page.url() === url && !url.startsWith("about:blank")) {
+    return { status: null, url: page.url() }
+  }
   const response = await page.goto(url, { waitUntil, timeout: 30000 })
   return { status: response?.status() ?? null, url: page.url() }
 }
 
+async function screenshotArtifact(
+  page: Page,
+  fullPage = true,
+  filename = "browser-screenshot.png"
+) {
+  const shot = (await page.screenshot({ fullPage, encoding: "binary" })) as Buffer
+  return storeArtifact({
+    filename,
+    bytes: shot,
+    mimeType: "image/png",
+  })
+}
+
 async function screenshotDataUrl(page: Page, fullPage = true) {
-  const shot = await page.screenshot({ fullPage, encoding: "base64" })
-  return `data:image/png;base64,${shot}`
+  const artifact = await screenshotArtifact(page, fullPage)
+  return artifact.url
 }
 
 async function centerOfSelector(page: Page, selector: string) {
@@ -368,24 +406,345 @@ async function loadSharp() {
   }
 }
 
-function markdownToLatex(markdown: string) {
-  const lines = markdown.split(/\r?\n/)
-  const latexLines: string[] = []
-  for (const line of lines) {
-    if (/^#{1,6}\s+/.test(line)) {
-      const level = line.match(/^#+/)?.[0].length ?? 1
-      const text = line.replace(/^#{1,6}\s+/, "").trim()
-      const cmd = level === 1 ? "\\section" : level === 2 ? "\\subsection" : "\\subsubsection"
-      latexLines.push(`${cmd}{${text}}`)
-      continue
-    }
-    const transformed = line
-      .replace(/\*\*(.+?)\*\*/g, "\\textbf{$1}")
-      .replace(/\*(.+?)\*/g, "\\textit{$1}")
-      .replace(/`([^`]+)`/g, "\\texttt{$1}")
-    latexLines.push(transformed)
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+function buildPrintableHtmlDocument(
+  title: string,
+  bodyMarkup: string,
+  note?: string,
+  extraStyles = ""
+) {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 40px 48px;
+        color: #171717;
+        background: #ffffff;
+        line-height: 1.6;
+        font-size: 14px;
+      }
+      .page {
+        max-width: 760px;
+        margin: 0 auto;
+      }
+      .note {
+        margin-bottom: 20px;
+        padding: 12px 14px;
+        border: 1px solid rgba(99, 102, 241, 0.18);
+        background: rgba(99, 102, 241, 0.06);
+        border-radius: 12px;
+        color: #312e81;
+        font-size: 12px;
+      }
+      h1, h2, h3, h4, h5, h6 {
+        line-height: 1.25;
+        margin: 1.2em 0 0.5em;
+      }
+      h1 { font-size: 28px; }
+      h2 { font-size: 22px; }
+      h3 { font-size: 18px; }
+      p, ul, ol, pre, blockquote, table {
+        margin: 0.75em 0;
+      }
+      ul, ol {
+        padding-left: 1.4em;
+      }
+      a {
+        color: #2563eb;
+        text-decoration: underline;
+      }
+      img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 10px;
+      }
+      pre, code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+      pre {
+        background: #f5f5f5;
+        border: 1px solid #e5e5e5;
+        border-radius: 12px;
+        padding: 14px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      blockquote {
+        border-left: 3px solid #d4d4d8;
+        padding-left: 12px;
+        color: #52525b;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        border: 1px solid #e5e7eb;
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+      ${extraStyles}
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      ${note ? `<div class="note">${escapeHtml(note)}</div>` : ""}
+      ${bodyMarkup}
+    </main>
+  </body>
+</html>`
+}
+
+function renderInlineMarkdown(markdown: string) {
+  return escapeHtml(markdown)
+    .replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]+)")?\)/g, (_, alt, src, title) => {
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : ""
+      return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}"${titleAttr} />`
+    })
+    .replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]+)")?\)/g, (_, text, href, title) => {
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : ""
+      return `<a href="${escapeHtml(href)}"${titleAttr}>${escapeHtml(text)}</a>`
+    })
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+}
+
+function renderMarkdownHtml(markdown: string) {
+  const normalized = markdown.replace(/\r\n/g, "\n").trim()
+  if (!normalized) {
+    return "<p></p>"
   }
-  return latexLines.join("\n\n")
+
+  const blocks = normalized.split(/\n{2,}/)
+  const htmlBlocks = blocks.map((block) => {
+    const trimmed = block.trim()
+    if (!trimmed) return ""
+
+    if (/^```/.test(trimmed)) {
+      const code = trimmed.replace(/^```[^\n]*\n?/, "").replace(/\n?```$/, "")
+      return `<pre><code>${escapeHtml(code)}</code></pre>`
+    }
+
+    const lines = trimmed.split("\n")
+
+    if (lines.every((line) => /^\s*[-*]\s+/.test(line))) {
+      return `<ul>${lines
+        .map((line) => `<li>${renderInlineMarkdown(line.replace(/^\s*[-*]\s+/, ""))}</li>`)
+        .join("")}</ul>`
+    }
+
+    if (lines.every((line) => /^\s*\d+\.\s+/.test(line))) {
+      return `<ol>${lines
+        .map((line) => `<li>${renderInlineMarkdown(line.replace(/^\s*\d+\.\s+/, ""))}</li>`)
+        .join("")}</ol>`
+    }
+
+    if (lines.every((line) => /^\s*>/.test(line))) {
+      return `<blockquote>${lines
+        .map((line) => renderInlineMarkdown(line.replace(/^\s*>\s?/, "")))
+        .join("<br />")}</blockquote>`
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/)
+    if (headingMatch) {
+      const level = headingMatch[1].length
+      return `<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`
+    }
+
+    if (
+      /^\|.+\|$/.test(lines[0] ?? "") &&
+      lines.length >= 2 &&
+      /^\|?(\s*:?-+:?\s*\|)+\s*$/.test(lines[1] ?? "")
+    ) {
+      const parseRow = (row: string) =>
+        row
+          .trim()
+          .replace(/^\|/, "")
+          .replace(/\|$/, "")
+          .split("|")
+          .map((cell) => cell.trim())
+      const header = parseRow(lines[0]!)
+      const body = lines.slice(2).map(parseRow)
+      return `<table><thead><tr>${header
+        .map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`)
+        .join("")}</tr></thead><tbody>${body
+        .map(
+          (row) =>
+            `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`).join("")}</tr>`
+        )
+        .join("")}</tbody></table>`
+    }
+
+    return `<p>${lines.map((line) => renderInlineMarkdown(line)).join("<br />")}</p>`
+  })
+
+  return htmlBlocks.filter(Boolean).join("\n")
+}
+
+async function getLatexJsStyles() {
+  if (!latexJsStylesPromise) {
+    latexJsStylesPromise = (async () => {
+      const latexEntryPath = require.resolve("latex.js")
+      const latexDistDir = path.dirname(latexEntryPath)
+      const cssDir = path.join(latexDistDir, "css")
+      const baseUrl = `${pathToFileURL(latexDistDir).href.replace(/\/$/, "")}/`
+      const styleFiles = ["katex.css", "base.css", "article.css"]
+      const styles = await Promise.all(
+        styleFiles.map(async (filename) => {
+          const css = await readFile(path.join(cssDir, filename), "utf-8")
+          return css.replace(
+            /url\((['"]?)(?!data:|https?:|file:)([^)'"]+)\1\)/g,
+            (_, quote, assetPath) => {
+              const absoluteUrl = new URL(assetPath, baseUrl).href
+              const q = quote || '"'
+              return `url(${q}${absoluteUrl}${q})`
+            }
+          )
+        })
+      )
+      return styles.join("\n\n")
+    })()
+  }
+  return latexJsStylesPromise
+}
+
+async function renderLatexJsHtml(texContent: string) {
+  const previousWindow = global.window
+  const previousDocument = global.document
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createHTMLWindow } = require("svgdom")
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { HtmlGenerator, parse } = require("latex.js")
+
+    global.window = createHTMLWindow()
+    global.document = global.window.document
+
+    const generator = parse(texContent, {
+      generator: new HtmlGenerator({ hyphenate: false }),
+    })
+    const container = global.document.createElement("div")
+    container.appendChild(generator.domFragment().cloneNode(true))
+
+    return {
+      bodyMarkup: `<section class="latex-fallback">${container.innerHTML}</section>`,
+      extraStyles: await getLatexJsStyles(),
+    }
+  } finally {
+    global.window = previousWindow
+    global.document = previousDocument
+  }
+}
+
+async function buildLatexFallbackHtml(
+  safeBase: string,
+  texContent: string,
+  note: string,
+  compilerOutput?: string
+) {
+  try {
+    const rendered = await renderLatexJsHtml(texContent)
+    const bodyMarkup = [
+      `<h1>${escapeHtml(safeBase)}</h1>`,
+      `<p>Rekdin rendered this preview from the LaTeX source because a full TeX compilation path was unavailable.</p>`,
+      rendered.bodyMarkup,
+      compilerOutput ? `<h2>Compiler output</h2><pre>${escapeHtml(compilerOutput)}</pre>` : "",
+    ]
+      .filter(Boolean)
+      .join("")
+
+    return buildPrintableHtmlDocument(safeBase, bodyMarkup, note, rendered.extraStyles)
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? escapeHtml(error.message) : "Unknown latex.js fallback error"
+    return buildPrintableHtmlDocument(
+      safeBase,
+      `<h1>${escapeHtml(safeBase)}</h1><p>Rekdin could not render this document with a full TeX engine, and the LaTeX preview renderer also failed. Showing the source instead.</p><pre>${escapeHtml(texContent)}</pre>${compilerOutput ? `<h2>Compiler output</h2><pre>${escapeHtml(compilerOutput)}</pre>` : ""}<h2>Fallback renderer error</h2><pre>${errorMessage}</pre>`,
+      note
+    )
+  }
+}
+
+async function persistPdfBuffer(
+  pdfBuffer: Buffer,
+  safeBase: string,
+  cloudinaryConfig?: CloudinaryConfig
+) {
+  let uploadedUrl: string | null = null
+  let artifact: ArtifactRef | null = null
+
+  if (cloudinaryConfig) {
+    const publicId = `latex/${safeBase}-${Date.now()}`
+    uploadedUrl = await uploadPdfToCloudinary(pdfBuffer, publicId, cloudinaryConfig)
+  } else {
+    artifact = await storeArtifact({
+      filename: `${safeBase}.pdf`,
+      bytes: pdfBuffer,
+      mimeType: "application/pdf",
+    })
+  }
+
+  return {
+    uploadedUrl,
+    artifact,
+    artifactUrl: artifact?.url,
+  }
+}
+
+async function renderHtmlToPdf(
+  html: string,
+  baseName: string,
+  cloudinaryConfig?: CloudinaryConfig
+) {
+  const started = Date.now()
+  const safeBase = sanitizePdfBaseName(baseName)
+  const browser = await getBrowser()
+  const page = await browser.newPage()
+  try {
+    await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 })
+    const pdfBuffer = Buffer.from(
+      await page.pdf({
+        format: "A4",
+        margin: { top: "18mm", right: "14mm", bottom: "18mm", left: "14mm" },
+        printBackground: true,
+      })
+    )
+    const persisted = await persistPdfBuffer(pdfBuffer, safeBase, cloudinaryConfig)
+    return {
+      success: true,
+      pdfGenerated: true,
+      degraded: false,
+      filename: safeBase,
+      engine: "puppeteer-html",
+      duration: Date.now() - started,
+      cloudinaryUrl: persisted.uploadedUrl ?? undefined,
+      artifact: persisted.artifact,
+      artifactUrl: persisted.artifactUrl,
+      output: "Rendered PDF using the built-in browser renderer.",
+    }
+  } finally {
+    await page.close()
+  }
 }
 
 async function uploadPdfToCloudinary(
@@ -442,19 +801,25 @@ async function compileLatexToPdf(
 
   let engine: string | null = null
   let uploadedUrl: string | null = null
-  let dataUrl: string | null = null
+  let artifact: ArtifactRef | null = null
 
   try {
     await writeFile(texPath, texContent, "utf-8")
     engine = await findLatexEngine()
     if (!engine) {
+      const fallbackHtml = await buildLatexFallbackHtml(
+        `${safeBase}.pdf`,
+        texContent,
+        "Fallback preview: generated from LaTeX source because no TeX engine was available on this deployment."
+      )
+      const fallback = await renderHtmlToPdf(fallbackHtml, safeBase, cloudinaryConfig)
       return {
-        success: false,
-        pdfGenerated: false,
+        ...fallback,
+        degraded: true,
         filename: safeBase,
         texContent,
         error:
-          "No LaTeX engine found (tried tectonic, pdflatex, xelatex, lualatex). Install one locally, e.g. `brew install tectonic`.",
+          "No LaTeX engine was available, so Rekdin generated a readable source-preview PDF instead of a fully typeset LaTeX PDF.",
       }
     }
 
@@ -468,39 +833,45 @@ async function compileLatexToPdf(
     const duration = Date.now() - started
 
     if (!pdfExists || res.exitCode !== 0) {
+      const output = truncateString(
+        [res.stdout, res.stderr].filter(Boolean).join("\n\n").trim() || "No output captured",
+        4000
+      )
+      const fallbackHtml = await buildLatexFallbackHtml(
+        `${safeBase}.pdf`,
+        texContent,
+        "Fallback preview: generated from LaTeX source because the TeX compilation step failed.",
+        output
+      )
+      const fallback = await renderHtmlToPdf(fallbackHtml, safeBase, cloudinaryConfig)
       return {
-        success: false,
-        pdfGenerated: false,
+        ...fallback,
+        degraded: true,
         filename: safeBase,
         texContent,
         engine,
         duration,
-        error: `LaTeX compilation failed using ${engine} (exit code ${res.exitCode}).`,
-        output: truncateString(
-          [res.stdout, res.stderr].filter(Boolean).join("\n\n").trim() || "No output captured",
-          4000
-        ),
+        error: `LaTeX compilation failed using ${engine} (exit code ${res.exitCode}). Generated a source-preview PDF instead.`,
+        output,
       }
     }
 
     const pdfBuffer = await readFile(pdfTempPath)
-
-    if (cloudinaryConfig) {
-      const publicId = `latex/${safeBase}-${Date.now()}`
-      uploadedUrl = await uploadPdfToCloudinary(pdfBuffer, publicId, cloudinaryConfig)
-    } else {
-      dataUrl = `data:application/pdf;base64,${pdfBuffer.toString("base64")}`
-    }
+    const persisted = await persistPdfBuffer(pdfBuffer, safeBase, cloudinaryConfig)
+    uploadedUrl = persisted.uploadedUrl
+    artifact = persisted.artifact
 
     return {
       success: true,
       pdfGenerated: true,
+      degraded: false,
       filename: safeBase,
       texContent,
       engine,
       duration,
       cloudinaryUrl: uploadedUrl ?? undefined,
-      dataUrl: dataUrl ?? undefined,
+      artifact,
+      artifactUrl: artifact?.url,
       output: truncateString(
         res.stdout.trim() || res.stderr.trim() || "LaTeX compilation succeeded.",
         4000
@@ -517,7 +888,8 @@ async function compileLatexToPdf(
       engine,
       duration,
       cloudinaryUrl: uploadedUrl ?? undefined,
-      dataUrl: dataUrl ?? undefined,
+      artifact,
+      artifactUrl: artifact?.url,
       error: message,
     }
   } finally {
@@ -1840,12 +2212,18 @@ export const archiveCreateTool = tool(
 
     const buf = Buffer.from(zipSync(files, { level: 6 }))
     const zipName = sanitizePdfBaseName(archiveName || "archive")
+    const artifact = await storeArtifact({
+      filename: `${zipName}.zip`,
+      bytes: buf,
+      mimeType: "application/zip",
+    })
     return {
       type: "archive_create",
       success: true,
       archiveName: `${zipName}.zip`,
       size: buf.length,
-      dataUrl: `data:application/zip;base64,${buf.toString("base64")}`,
+      artifact,
+      artifactUrl: artifact.url,
     }
   },
   {
@@ -2013,10 +2391,10 @@ function createMarkdownToPdfTool(context?: { headers?: HeadersInit }) {
   const cloudinaryConfig = parseCloudinaryConfig(context?.headers)
   return tool(
     async ({ markdown, filename }) => {
-      const body = markdownToLatex(markdown)
-      const tex = `\\\\documentclass{article}\n\\\\usepackage[margin=1in]{geometry}\n\\\\usepackage{hyperref}\n\\\\usepackage{graphicx}\n\\\\begin{document}\n${body}\n\\\\end{document}`
-      const result = await compileLatexToPdf(
-        tex,
+      const bodyMarkup = renderMarkdownHtml(markdown)
+      const html = buildPrintableHtmlDocument(filename ?? "document", bodyMarkup)
+      const result = await renderHtmlToPdf(
+        html,
         filename ?? "document",
         cloudinaryConfig ?? undefined
       )
@@ -2067,11 +2445,18 @@ export const imageConvertTool = tool(
     }
     const buf = await fetchBuffer(source)
     const converted = await sharp(buf)[format as "png" | "jpeg" | "webp"]().toBuffer()
+    const extension = format === "jpeg" ? "jpg" : format
+    const artifact = await storeArtifact({
+      filename: `image-convert-${Date.now()}.${extension}`,
+      bytes: converted,
+      mimeType: `image/${format}`,
+    })
     return {
       type: "image_convert",
       format,
       size: converted.length,
-      dataUrl: `data:image/${format};base64,${converted.toString("base64")}`,
+      artifact,
+      artifactUrl: artifact.url,
     }
   },
   {

@@ -56,7 +56,11 @@ type ChatContextValue = {
   sendMessage: (
     content: string,
     attachments?: File[],
-    metadata?: { agentType?: string }
+    metadata?: {
+      agentType?: string
+      responseSchema?: Record<string, unknown> | null
+      workflowId?: string
+    }
   ) => Promise<void>
   refreshSessions: () => Promise<void>
 }
@@ -754,7 +758,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [hydrateFromIdb])
 
   const sendMessage = React.useCallback(
-    async (content: string, files: File[] = [], metadata?: { agentType?: string }) => {
+    async (
+      content: string,
+      files: File[] = [],
+      metadata?: {
+        agentType?: string
+        responseSchema?: Record<string, unknown> | null
+        workflowId?: string
+      }
+    ) => {
       if (!content.trim()) return
       if (isLoading) return
       const hasLlmConfig =
@@ -823,6 +835,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         content: trimmed,
         attachments: uploadedPaths,
         timestamp: new Date().toISOString(),
+        metadata: metadata?.workflowId ? { workflowId: metadata.workflowId } : undefined,
       }
 
       const existingMessages = messagesBySession[targetSession] ?? []
@@ -879,6 +892,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             attachments: uploadedPaths,
             agentType: metadata?.agentType,
             agentMode: metadata?.agentType,
+            workflowId: metadata?.workflowId,
+            responseSchema: metadata?.responseSchema ?? null,
             history,
           }),
         })

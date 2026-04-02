@@ -3,7 +3,9 @@ import { AgentMode, ProviderSettings, ToolPolicyProfile } from "@/types/runtime"
 
 import { type AgentRunResult, runAgent } from "../chat-agent"
 import { buildSystemPrompt } from "./prompt-builder"
+import { validateStructuredOutput } from "./structured-output"
 import { resolveAllowedToolNames } from "./tool-policy"
+import { verifyToolCalls } from "./verification"
 
 const MAX_CONTEXT_CHARS = 32_000
 const MAX_CONTEXT_MESSAGES = 60
@@ -75,6 +77,7 @@ function createToolHeaders(settings: {
 }
 
 type RunChatTurnOptions = {
+  sessionId: string
   contextMessages: ChatMessage[]
   providerSettings: ProviderSettings
   cloudinaryCloudName: string
@@ -83,6 +86,7 @@ type RunChatTurnOptions = {
   origin?: string
   requestedMode?: string | null
   requestedToolPolicy?: string | null
+  workflowId?: string | null
   responseSchema?: Record<string, unknown> | null
   onToolStart?: Parameters<typeof runAgent>[0]["onToolStart"]
   onToolResult?: Parameters<typeof runAgent>[0]["onToolResult"]
@@ -93,9 +97,11 @@ type RunChatTurnOptions = {
 export interface ChatTurnResult extends AgentRunResult {
   mode: AgentMode
   toolPolicy: ToolPolicyProfile
+  workflowId?: string
 }
 
 export async function runChatTurn({
+  sessionId,
   contextMessages,
   providerSettings,
   cloudinaryCloudName,
@@ -104,6 +110,7 @@ export async function runChatTurn({
   origin,
   requestedMode,
   requestedToolPolicy,
+  workflowId,
   responseSchema,
   onToolStart,
   onToolResult,
@@ -112,35 +119,65 @@ export async function runChatTurn({
 }: RunChatTurnOptions): Promise<ChatTurnResult> {
   const mode = normalizeAgentMode(requestedMode)
   const toolPolicy = normalizeToolPolicy(requestedToolPolicy)
-  const systemPrompt = await buildSystemPrompt({
+  const baseSystemPrompt = await buildSystemPrompt({
     mode,
     toolPolicy,
     responseSchema,
   })
   const preparedMessages = trimHistory(contextMessages)
   const allowedToolNames = resolveAllowedToolNames(mode, toolPolicy)
+  let retryPrompt = baseSystemPrompt
+  let agentResult: AgentRunResult | null = null
+  for (let attempt = 0; attempt < (responseSchema ? 2 : 1); attempt += 1) {
+    agentResult = await runAgent({
+      sessionId,
+      contextMessages: preparedMessages,
+      systemPrompt: retryPrompt,
+      providerSettings,
+      origin,
+      toolHeaders: createToolHeaders({
+        cloudinaryCloudName,
+        cloudinaryApiKey,
+        cloudinaryApiSecret,
+      }),
+      allowedToolNames,
+      onToolStart,
+      onToolResult,
+      onChunk,
+      onWarning,
+    })
 
-  const agentResult = await runAgent({
-    contextMessages: preparedMessages,
-    systemPrompt,
-    providerSettings,
-    origin,
-    toolHeaders: createToolHeaders({
-      cloudinaryCloudName,
-      cloudinaryApiKey,
-      cloudinaryApiSecret,
-    }),
-    allowedToolNames,
-    onToolStart,
-    onToolResult,
-    onChunk,
-    onWarning,
-  })
+    const validation = validateStructuredOutput(agentResult.reply, responseSchema)
+    if (!responseSchema || validation.valid) break
+    await onWarning?.(
+      `Structured output validation failed (${validation.errors.join("; ")}). Retrying with stricter instructions.`
+    )
+    retryPrompt = `${baseSystemPrompt}\n\n## Retry Correction\nYour previous reply did not satisfy the JSON schema. Return valid JSON only and ensure required fields are present.`
+  }
+
+  if (!agentResult) {
+    throw new Error("Chat turn failed before producing a response")
+  }
+
+  const finalValidation = validateStructuredOutput(agentResult.reply, responseSchema)
+  if (responseSchema && !finalValidation.valid) {
+    throw new Error(`Structured output validation failed: ${finalValidation.errors.join("; ")}`)
+  }
+
+  const verification = await verifyToolCalls(agentResult.toolCalls)
+  if (!verification.ok) {
+    await onWarning?.(`Verification notes: ${verification.notes.join("; ")}`)
+    agentResult = {
+      ...agentResult,
+      reply: `${agentResult.reply}\n\nVerification notes:\n- ${verification.notes.join("\n- ")}`,
+    }
+  }
 
   return {
     ...agentResult,
     mode,
     toolPolicy,
+    workflowId: workflowId ?? undefined,
   }
 }
 

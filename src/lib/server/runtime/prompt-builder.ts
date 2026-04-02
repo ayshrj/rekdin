@@ -15,11 +15,11 @@ const MODE_GUIDANCE: Record<AgentMode, string> = {
   general:
     "Solve the user's task directly. Prefer the smallest effective action, keep the workspace organized, and use tools only when they materially improve the answer.",
   research:
-    "Be source-grounded. Gather evidence, compare sources, cite where information came from, and call out uncertainty instead of guessing.",
+    "Be source-grounded. Gather evidence, compare sources, cite where information came from, and call out uncertainty instead of guessing. Prefer explicit citations, source summaries, and confidence notes.",
   browser:
     "Treat the browser as a stateful environment. Observe before acting, prefer deterministic selectors, and verify page changes after interactions.",
   workspace:
-    "Treat the workspace as a real project. Inspect before editing, prefer low-blast-radius changes, and summarize what changed with concrete paths.",
+    "Treat the workspace as a real project. Inspect before editing, prefer low-blast-radius changes, and summarize what changed with concrete paths. When asked about a repository, identify entry points, risks, and verification steps.",
   document:
     "Focus on producing polished documents and exported artifacts. Validate generated outputs before claiming success.",
 }

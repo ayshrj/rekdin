@@ -14,9 +14,12 @@ const DATA_DIR = process.env.REKDIN_DATA_DIR?.trim()
 const WORKSPACE_DIR = path.join(DATA_DIR, "workspace")
 const UPLOADS_DIR = path.join(WORKSPACE_DIR, "uploads")
 const PDFS_DIR = path.join(WORKSPACE_DIR, "pdfs")
+const ARTIFACTS_DIR = path.join(DATA_DIR, "artifacts")
 const REPLAYS_DIR = path.join(DATA_DIR, "replays")
+const TRACES_DIR = path.join(DATA_DIR, "traces")
 const SETTINGS_FILE = path.join(DATA_DIR, "settings.json")
 const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json")
+const BACKGROUND_JOBS_FILE = path.join(DATA_DIR, "background-jobs.json")
 
 async function ensureDir(dir: string) {
   try {
@@ -31,7 +34,9 @@ export async function ensureWorkspaceDirs() {
   await ensureDir(WORKSPACE_DIR)
   await ensureDir(UPLOADS_DIR)
   await ensureDir(PDFS_DIR)
+  await ensureDir(ARTIFACTS_DIR)
   await ensureDir(REPLAYS_DIR)
+  await ensureDir(TRACES_DIR)
 }
 
 export function getWorkspaceRoot() {
@@ -46,8 +51,16 @@ export function getPdfsDir() {
   return PDFS_DIR
 }
 
+export function getArtifactsDir() {
+  return ARTIFACTS_DIR
+}
+
 export function getReplaysDir() {
   return REPLAYS_DIR
+}
+
+export function getTracesDir() {
+  return TRACES_DIR
 }
 
 export function getSessionsFilePath() {
@@ -56,6 +69,10 @@ export function getSessionsFilePath() {
 
 export function getSettingsFilePath() {
   return SETTINGS_FILE
+}
+
+export function getBackgroundJobsFilePath() {
+  return BACKGROUND_JOBS_FILE
 }
 
 export function getReplayFilePath(sessionId: string) {

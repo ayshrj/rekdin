@@ -39,9 +39,13 @@ export function SessionSidebar() {
     setHydrated(true)
   }, [])
 
-  const filtered = sessions.filter((session) =>
-    session.title.toLowerCase().includes(query.toLowerCase())
-  )
+  const normalizedQuery = query.toLowerCase()
+  const filtered = sessions.filter((session) => {
+    if (session.title.toLowerCase().includes(normalizedQuery)) return true
+    return session.messages?.some((message) =>
+      message.content.toLowerCase().includes(normalizedQuery)
+    )
+  })
 
   const handleDelete = React.useCallback(
     async (sessionId: string) => {
