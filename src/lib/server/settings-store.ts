@@ -59,25 +59,6 @@ function normalizeSettings(raw?: Partial<ServerSettings> | null): ServerSettings
   }
 }
 
-function getEnvOpenRouterApiKey() {
-  return process.env.OPENROUTER_API_KEY?.trim() ?? ""
-}
-
-export function resolveOpenRouterApiKey(
-  settings?: Pick<ServerSettings, "openRouterApiKey"> | null
-) {
-  return settings?.openRouterApiKey?.trim() || getEnvOpenRouterApiKey()
-}
-
-export function sanitizeSettingsForClient(settings: ServerSettings): ServerSettings {
-  const storedOpenRouterApiKey = settings.openRouterApiKey.trim()
-  return {
-    ...settings,
-    openRouterApiKey: storedOpenRouterApiKey,
-    hasOpenRouterApiKeyFromEnv: !storedOpenRouterApiKey && Boolean(getEnvOpenRouterApiKey()),
-  }
-}
-
 class SettingsStore {
   private cache: ServerSettings | null = null
 
@@ -119,7 +100,7 @@ export async function getProviderSettings(): Promise<ProviderSettings> {
   return {
     provider: settings.llmProvider,
     openRouterModel: settings.openRouterModel,
-    openRouterApiKey: resolveOpenRouterApiKey(settings),
+    openRouterApiKey: settings.openRouterApiKey,
     openAIModel: settings.openAIModel,
     openAIApiKey: settings.openAIApiKey,
     azureOpenAIApiKey: settings.azureOpenAIApiKey,
@@ -131,7 +112,7 @@ export async function getProviderSettings(): Promise<ProviderSettings> {
 
 export function hasProviderCredentials(settings: ServerSettings) {
   if (settings.llmProvider === "openrouter") {
-    return Boolean(resolveOpenRouterApiKey(settings) && settings.openRouterModel)
+    return Boolean(settings.openRouterApiKey && settings.openRouterModel)
   }
   if (settings.llmProvider === "openai") {
     return Boolean(settings.openAIApiKey && settings.openAIModel)

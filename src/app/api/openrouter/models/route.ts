@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { getSettingsStore, resolveOpenRouterApiKey } from "@/lib/server/settings-store"
+import { getSettingsStore } from "@/lib/server/settings-store"
 
 export const runtime = "nodejs"
 
@@ -17,8 +17,7 @@ type OpenRouterModelsResponse = {
 
 export async function GET(req: Request) {
   const settings = await getSettingsStore().load()
-  const apiKey =
-    req.headers.get("x-openrouter-api-key")?.trim() || resolveOpenRouterApiKey(settings)
+  const apiKey = req.headers.get("x-openrouter-api-key")?.trim() || settings.openRouterApiKey
   if (!apiKey) {
     return NextResponse.json({ error: "Missing OpenRouter API key" }, { status: 400 })
   }

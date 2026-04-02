@@ -9,7 +9,6 @@ export interface ServerSettings {
   llmProvider: LlmProvider
   openRouterModel: string
   openRouterApiKey: string
-  hasOpenRouterApiKeyFromEnv?: boolean
   openAIModel: string
   openAIApiKey: string
   azureOpenAIApiKey: string

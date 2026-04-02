@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
-import { getSettingsStore, resolveOpenRouterApiKey } from "@/lib/server/settings-store"
+import { getSettingsStore } from "@/lib/server/settings-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
   }
 
   const settings = await getSettingsStore().load()
-  const apiKey = resolveOpenRouterApiKey(settings)
+  const apiKey = settings.openRouterApiKey.trim()
   const model = settings.openRouterModel.trim() || "openai/gpt-4o-mini"
 
   if (!apiKey) {
