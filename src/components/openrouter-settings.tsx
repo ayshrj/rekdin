@@ -31,6 +31,7 @@ import {
   Cog8Tooth as Settings,
   Eye,
   EyeSlash,
+  PlayCircle,
 } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
@@ -64,7 +65,7 @@ type SettingsExport = {
   cloudinaryApiSecret: string
 }
 
-export function OpenRouterSettings() {
+export function OpenRouterSettings({ onRestartTour }: { onRestartTour?: () => void } = {}) {
   const {
     llmProvider,
     openRouterApiKey,
@@ -339,6 +340,20 @@ export function OpenRouterSettings() {
       <DialogShell
         footer={
           <>
+            {onRestartTour ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="gap-1.5"
+                onClick={() => {
+                  setOpen(false)
+                  onRestartTour()
+                }}
+              >
+                <PlayCircle className="h-4 w-4" />
+                Tour
+              </Button>
+            ) : null}
             <Button type="button" variant="ghost" onClick={clear}>
               Reset
             </Button>

@@ -6,6 +6,7 @@ import { ChatPanel } from "@/components/chat/chat-panel"
 import { OpenRouterSettings } from "@/components/openrouter-settings"
 import { SessionSidebar } from "@/components/session-sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { TourAlertDialog, TourProvider, type TourStep, useTour } from "@/components/tour"
 import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { WorkspacePanel } from "@/components/workspace-panel"
@@ -14,6 +15,74 @@ import { PanelLeft, Rekdin } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 const MAIN_LAYOUT = { chat: 38, workspace: 62 }
+const TOUR_SEEN_KEY = "rekdin-tour-seen"
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    selectorId: "tour-sidebar-btn",
+    position: "bottom",
+    content: (
+      <div>
+        <p className="text-foreground mb-1 text-sm font-semibold">Session history</p>
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          Open your past conversations here. Create new sessions or jump back into any previous one.
+        </p>
+      </div>
+    ),
+  },
+  {
+    selectorId: "tour-chat-panel",
+    position: "right",
+    content: (
+      <div>
+        <p className="text-foreground mb-1 text-sm font-semibold">Chat</p>
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          Describe a research task or command. Rekdin uses tools like web search, browser
+          automation, and file editing to complete your request step by step.
+        </p>
+      </div>
+    ),
+  },
+  {
+    selectorId: "tour-chat-input",
+    position: "top",
+    content: (
+      <div>
+        <p className="text-foreground mb-1 text-sm font-semibold">Message input</p>
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          Press Enter to send or Shift+Enter for a new line. Attach files with the paperclip icon.
+          You can also select workflow presets above to run pre-built tasks instantly.
+        </p>
+      </div>
+    ),
+  },
+  {
+    selectorId: "tour-workspace-panel",
+    position: "left",
+    content: (
+      <div>
+        <p className="text-foreground mb-1 text-sm font-semibold">Workspace</p>
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          Every tool call appears in the Timeline as it runs. Download artifacts, inspect results,
+          and review the activity log — all updating live.
+        </p>
+      </div>
+    ),
+  },
+  {
+    selectorId: "tour-settings",
+    position: "bottom",
+    content: (
+      <div>
+        <p className="text-foreground mb-1 text-sm font-semibold">Settings</p>
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          Add your API key to connect to OpenRouter, OpenAI, or Azure OpenAI. You can also change
+          models and configure agent behavior here.
+        </p>
+      </div>
+    ),
+  },
+]
 
 function ConnectionBadge({ connected, label }: { connected: boolean; label: string }) {
   return (
@@ -42,9 +111,22 @@ function ThinkingBadge() {
   )
 }
 
-export default function HomePage() {
+function HomePageContent() {
   const { connected, llmProvider, isThinking, sessions, currentSessionId } = useChat()
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
+  const [tourOpen, setTourOpen] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!localStorage.getItem(TOUR_SEEN_KEY)) {
+      setTourOpen(true)
+    }
+  }, [])
+
+  const markTourSeen = React.useCallback(() => {
+    localStorage.setItem(TOUR_SEEN_KEY, "1")
+  }, [])
+
+  const { restartTour } = useTour()
 
   const providerLabel =
     llmProvider === "openai"
@@ -62,6 +144,7 @@ export default function HomePage() {
       <header className="bg-background/95 flex h-14 shrink-0 items-center justify-between border-b px-4 backdrop-blur">
         <div className="flex items-center gap-3">
           <Button
+            id="tour-sidebar-btn"
             variant="ghost"
             size="icon"
             className="text-muted-foreground hover:text-foreground h-8 w-8 rounded-lg"
@@ -82,7 +165,9 @@ export default function HomePage() {
         </div>
         <div className="flex items-center gap-2">
           <ConnectionBadge connected={connected} label={`${providerLabel} connected`} />
-          <OpenRouterSettings />
+          <div id="tour-settings">
+            <OpenRouterSettings onRestartTour={restartTour} />
+          </div>
           <ThemeToggle />
         </div>
       </header>
@@ -96,11 +181,15 @@ export default function HomePage() {
           className="h-full"
         >
           <ResizablePanel id="chat" minSize={24} className="min-h-0 min-w-0">
-            <ChatPanel />
+            <div id="tour-chat-panel" className="h-full">
+              <ChatPanel />
+            </div>
           </ResizablePanel>
           <ResizableHandle withHandle className="bg-border mx-1 w-px" />
           <ResizablePanel id="workspace" minSize={28} className="min-h-0 min-w-0">
-            <WorkspacePanel />
+            <div id="tour-workspace-panel" className="h-full">
+              <WorkspacePanel />
+            </div>
           </ResizablePanel>
         </ResizablePanelGroup>
       </main>
@@ -136,6 +225,21 @@ export default function HomePage() {
           <SessionSidebar onSessionOpen={() => setSidebarOpen(false)} />
         </div>
       </aside>
+
+      <TourAlertDialog
+        isOpen={tourOpen}
+        setIsOpen={setTourOpen}
+        onStart={markTourSeen}
+        onSkip={markTourSeen}
+      />
     </div>
+  )
+}
+
+export default function HomePage() {
+  return (
+    <TourProvider steps={TOUR_STEPS} onComplete={() => {}} onSkip={() => {}}>
+      <HomePageContent />
+    </TourProvider>
   )
 }

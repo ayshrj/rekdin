@@ -39,7 +39,10 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
   }
 
   return (
-    <div className="bg-background ring-border/50 focus-within:ring-primary/30 rounded-xl border shadow-(--shadow-float) ring-1 transition-shadow">
+    <div
+      id="tour-chat-input"
+      className="bg-background ring-border/50 focus-within:ring-primary/30 rounded-xl border shadow-(--shadow-float) ring-1 transition-shadow"
+    >
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-3 pt-2">
           {attachments.map((file) => (
@@ -74,7 +77,7 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
           onKeyDown={handleKeyDown}
           placeholder="Ask Rekdin to research or run commands..."
           disabled={disabled || isLoading}
-          className="placeholder:text-muted-foreground/60 max-h-36 min-h-[4.5rem] flex-1 resize-none border-0 bg-transparent p-1.5 text-sm focus-visible:ring-0 focus-visible:outline-none"
+          className="placeholder:text-muted-foreground/60 max-h-36 min-h-18 flex-1 resize-none border-0 bg-transparent p-1.5 text-sm focus-visible:ring-0 focus-visible:outline-none"
         />
         <Button
           onClick={() => void handleSend()}
