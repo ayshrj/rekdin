@@ -38,6 +38,9 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
+  creator: siteConfig.name,
+  publisher: siteConfig.name,
+  referrer: "origin-when-cross-origin",
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },
@@ -54,10 +57,10 @@ export const metadata: Metadata = {
     locale: "en_US",
     images: [
       {
-        url: "/opengraph-image",
+        url: `${siteUrl.origin}/opengraph-image`,
         width: 1200,
         height: 630,
-        alt: `${siteConfig.name} preview`,
+        alt: `${siteConfig.name} social preview`,
       },
     ],
   },
@@ -65,7 +68,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: siteConfig.title,
     description: siteConfig.description,
-    images: ["/twitter-image"],
+    images: [`${siteUrl.origin}/twitter-image`],
   },
   robots: {
     index: true,
@@ -86,11 +89,39 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const structuredData = [
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: siteConfig.name,
+      url: siteUrl.toString(),
+      description: siteConfig.description,
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: siteConfig.name,
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      description: siteConfig.description,
+      url: siteUrl.toString(),
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD",
+      },
+    },
+  ]
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${manrope.variable} ${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <ChatProvider>
             {children}
