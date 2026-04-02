@@ -201,7 +201,7 @@ function HomePageContent() {
   const sessionTitle = currentSession?.title ?? "New conversation"
 
   return (
-    <div className="bg-background flex h-screen w-screen flex-col overflow-hidden">
+    <div className="bg-background flex h-dvh w-dvh flex-col overflow-hidden">
       <header className="bg-background/95 flex h-12 shrink-0 items-center justify-between border-b px-3 backdrop-blur sm:h-14 sm:px-4">
         <div className="flex items-center gap-3">
           <Button

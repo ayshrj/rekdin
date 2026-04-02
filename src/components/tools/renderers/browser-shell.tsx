@@ -80,7 +80,7 @@ export const BrowserShell: React.FC<BrowserShellProps> = ({
         </div>
       </div>
 
-      <div className="max-h-screen min-w-0 overflow-auto">{children}</div>
+      <div className="max-h-dvh min-w-0 overflow-auto">{children}</div>
     </div>
   )
 }
