@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 
+import { getSettingsStore } from "@/lib/server/settings-store"
+
 export const runtime = "nodejs"
 
 type OpenRouterModelsResponse = {
@@ -14,14 +16,15 @@ type OpenRouterModelsResponse = {
 }
 
 export async function GET(req: Request) {
-  const headerKey = req.headers.get("x-openrouter-api-key")?.trim() ?? ""
-  if (!headerKey) {
+  const settings = await getSettingsStore().load()
+  const apiKey = req.headers.get("x-openrouter-api-key")?.trim() || settings.openRouterApiKey
+  if (!apiKey) {
     return NextResponse.json({ error: "Missing OpenRouter API key" }, { status: 400 })
   }
 
   const res = await fetch("https://openrouter.ai/api/v1/models", {
     headers: {
-      Authorization: `Bearer ${headerKey}`,
+      Authorization: `Bearer ${apiKey}`,
       "HTTP-Referer": req.headers.get("origin") ?? "http://localhost:3000",
       "X-Title": "Rekdin Next",
     },

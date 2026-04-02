@@ -1,0 +1,25 @@
+import { describe, expect, it } from "vitest"
+
+import { buildSystemPrompt } from "./prompt-builder"
+
+describe("buildSystemPrompt", () => {
+  it("builds a sectioned prompt with mode and schema guidance", async () => {
+    const prompt = await buildSystemPrompt({
+      mode: "research",
+      toolPolicy: "balanced",
+      responseSchema: {
+        type: "object",
+        properties: {
+          answer: { type: "string" },
+        },
+      },
+    })
+
+    expect(prompt).toContain("## Identity")
+    expect(prompt).toContain("## Tool Policy")
+    expect(prompt).toContain("## Workflow Rules")
+    expect(prompt).toContain("source-grounded")
+    expect(prompt).toContain("JSON schema exactly")
+    expect(prompt).toContain("Do not claim the task is complete")
+  })
+})

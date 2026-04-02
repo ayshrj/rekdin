@@ -1,32 +1,49 @@
 import { ReplayEvent, SessionReplayData } from "@/types/chat"
 
+import { readJsonFile, withFileWriteLock, writeJsonFileAtomic } from "./json-store"
+import { ensureWorkspaceDirs, getReplayFilePath } from "./workspace"
+
 type EventType = ReplayEvent["type"]
 
 class ReplayStore {
-  private events = new Map<string, ReplayEvent[]>()
+  private cache = new Map<string, ReplayEvent[]>()
 
-  record(sessionId: string, type: EventType, data: Record<string, unknown>) {
-    const event: ReplayEvent = {
-      id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
-      sessionId,
-      type,
-      data,
-      timestamp: Date.now(),
-    }
-    const existing = this.events.get(sessionId) ?? []
-    existing.push(event)
-    this.events.set(sessionId, existing)
+  private async loadSessionEvents(sessionId: string) {
+    const cached = this.cache.get(sessionId)
+    if (cached) return cached
+    await ensureWorkspaceDirs()
+    const events = await readJsonFile<ReplayEvent[]>(getReplayFilePath(sessionId), [])
+    this.cache.set(sessionId, events)
+    return events
   }
 
-  getReplay(sessionId: string): SessionReplayData | null {
-    const events = this.events.get(sessionId)
-    if (!events || events.length === 0) return null
+  async record(sessionId: string, type: EventType, data: Record<string, unknown>) {
+    const filePath = getReplayFilePath(sessionId)
+    return withFileWriteLock(filePath, async () => {
+      const existing = [...(await this.loadSessionEvents(sessionId))]
+      const event: ReplayEvent = {
+        id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+        sessionId,
+        type,
+        data,
+        timestamp: Date.now(),
+      }
+      const next = [...existing, event]
+      await writeJsonFileAtomic(filePath, next)
+      this.cache.set(sessionId, next)
+      return event
+    })
+  }
+
+  async getReplay(sessionId: string): Promise<SessionReplayData | null> {
+    const events = await this.loadSessionEvents(sessionId)
+    if (events.length === 0) return null
     const start = events[0]!.timestamp
     const end = events[events.length - 1]!.timestamp
     const totalMessages = events.filter(
-      (e) => e.type === "user_message" || e.type === "assistant_message"
+      (event) => event.type === "user_message" || event.type === "assistant_message"
     ).length
-    const totalToolCalls = events.filter((e) => e.type === "tool_call").length
+    const totalToolCalls = events.filter((event) => event.type === "tool_call").length
     return {
       sessionId,
       startTime: start,
@@ -37,6 +54,11 @@ class ReplayStore {
         totalToolCalls,
       },
     }
+  }
+
+  async deleteReplay(sessionId: string) {
+    this.cache.delete(sessionId)
+    await writeJsonFileAtomic(getReplayFilePath(sessionId), [])
   }
 }
 

@@ -12,12 +12,15 @@ import { AzureChatOpenAI, ChatOpenAI } from "@langchain/openai"
 
 import { OPENROUTER_API_KEY, OPENROUTER_FALLBACK_MODEL, OPENROUTER_MODEL } from "@/configs"
 import { ChatMessage, ToolCall } from "@/types/chat"
+import { LlmProvider, ProviderSettings } from "@/types/runtime"
 
 import { createToolset } from "./tools"
 
 type AgentEventHandlers = {
-  onToolResult?: (tool: ToolCall) => void
-  onChunk?: (chunk: string) => void
+  onToolStart?: (tool: Partial<ToolCall> & { id: string }) => void | Promise<void>
+  onToolResult?: (tool: ToolCall) => void | Promise<void>
+  onChunk?: (chunk: string) => void | Promise<void>
+  onWarning?: (warning: string) => void | Promise<void>
 }
 
 const MAX_TOOL_RESULT_CHARS = 12_000
@@ -102,8 +105,6 @@ function toolMessageContent(result: unknown) {
   return content
 }
 
-type LlmProvider = "openrouter" | "openai" | "azure_openai"
-
 function normalizeProvider(value: string | undefined | null): LlmProvider {
   const normalized = (value ?? "").trim().toLowerCase()
   if (normalized === "openai") return "openai"
@@ -115,7 +116,7 @@ function normalizeProvider(value: string | undefined | null): LlmProvider {
 
 function createModel({
   provider,
-  headers,
+  origin,
   modelId,
   openRouterApiKey,
   openAIApiKey,
@@ -125,7 +126,7 @@ function createModel({
   azureOpenAIDeployment,
 }: {
   provider: LlmProvider
-  headers?: HeadersInit
+  origin?: string
   modelId: string
   openRouterApiKey?: string
   openAIApiKey?: string
@@ -134,7 +135,6 @@ function createModel({
   azureOpenAIApiVersion?: string
   azureOpenAIDeployment?: string
 }) {
-  const origin = headers instanceof Headers ? (headers.get("origin") ?? undefined) : undefined
   const referer = typeof origin === "string" ? origin : "http://localhost:3000"
 
   if (provider === "openrouter") {
@@ -217,23 +217,30 @@ function formatUserContent(content: string, attachments?: string[]) {
 }
 
 export interface AgentRunOptions extends AgentEventHandlers {
-  headers?: Headers
   contextMessages: ChatMessage[]
-  provider?: string
-  openRouterApiKey?: string
-  openRouterModel?: string
-  openAIApiKey?: string
-  openAIModel?: string
-  azureOpenAIApiKey?: string
-  azureOpenAIEndpoint?: string
-  azureOpenAIApiVersion?: string
-  azureOpenAIDeployment?: string
+  systemPrompt?: string
+  providerSettings: ProviderSettings
+  origin?: string
+  toolHeaders?: HeadersInit
+  allowedToolNames?: string[]
 }
 
 export interface AgentRunResult {
   reply: string
   toolCalls: ToolCall[]
   usageTokens: number
+  model: string
+}
+
+function isRetryableModelError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : ""
+  return (
+    message.includes("timeout") ||
+    message.includes("econnreset") ||
+    message.includes("temporar") ||
+    message.includes("network") ||
+    message.includes("rate limit")
+  )
 }
 
 async function streamModelMessage(
@@ -288,7 +295,7 @@ async function streamModelMessage(
     const now = Date.now()
     if (now - lastEmit < MIN_MS_BETWEEN_EMITS) continue
     lastEmit = now
-    onChunk(emittedText)
+    await onChunk(emittedText)
   }
 
   if (!aggregated) {
@@ -299,49 +306,52 @@ async function streamModelMessage(
     typeof aggregated.content === "string" ? aggregated.content : JSON.stringify(aggregated.content)
 
   if (onChunk && !sawToolCall && finalText.length > 0) {
-    onChunk(finalText)
+    await onChunk(finalText)
   }
 
   return aggregated
 }
 
 export async function runAgent({
-  headers,
   contextMessages,
+  systemPrompt,
+  providerSettings,
+  origin,
+  toolHeaders,
+  allowedToolNames,
+  onToolStart,
   onToolResult,
   onChunk,
-  provider,
-  openRouterApiKey,
-  openRouterModel,
-  openAIApiKey,
-  openAIModel,
-  azureOpenAIApiKey,
-  azureOpenAIEndpoint,
-  azureOpenAIApiVersion,
-  azureOpenAIDeployment,
+  onWarning,
 }: AgentRunOptions): Promise<AgentRunResult> {
-  const tools: StructuredToolInterface[] = createToolset({ headers })
-  const providerId = normalizeProvider(provider)
+  const tools: StructuredToolInterface[] = createToolset({
+    headers: toolHeaders,
+    allowedToolNames,
+  })
+  const providerId = normalizeProvider(providerSettings.provider)
   let modelId =
     providerId === "openrouter"
-      ? (openRouterModel ?? OPENROUTER_MODEL)
+      ? (providerSettings.openRouterModel ?? OPENROUTER_MODEL)
       : providerId === "openai"
-        ? (openAIModel ?? "")
-        : (azureOpenAIDeployment ?? "")
+        ? (providerSettings.openAIModel ?? "")
+        : (providerSettings.azureOpenAIDeployment ?? "")
 
   let llm = createModel({
     provider: providerId,
-    headers,
+    origin,
     modelId,
-    openRouterApiKey,
-    openAIApiKey,
-    azureOpenAIApiKey,
-    azureOpenAIEndpoint,
-    azureOpenAIApiVersion,
-    azureOpenAIDeployment,
+    openRouterApiKey: providerSettings.openRouterApiKey,
+    openAIApiKey: providerSettings.openAIApiKey,
+    azureOpenAIApiKey: providerSettings.azureOpenAIApiKey,
+    azureOpenAIEndpoint: providerSettings.azureOpenAIEndpoint,
+    azureOpenAIApiVersion: providerSettings.azureOpenAIApiVersion,
+    azureOpenAIDeployment: providerSettings.azureOpenAIDeployment,
   })
   let llmWithTools = llm.bindTools(tools)
-  const history: BaseMessage[] = contextMessages.map(toLangChainMessage)
+  const history: BaseMessage[] = [
+    ...(systemPrompt ? [new SystemMessage(systemPrompt)] : []),
+    ...contextMessages.map(toLangChainMessage),
+  ]
 
   const executedTools: ToolCall[] = []
   let iterations = 0
@@ -365,19 +375,24 @@ export async function runAgent({
       )
       if (shouldFallback) {
         modelId = OPENROUTER_FALLBACK_MODEL
+        await onWarning?.(`Primary model could not use tools; falling back to ${modelId}.`)
         llm = createModel({
           provider: providerId,
-          headers,
+          origin,
           modelId,
-          openRouterApiKey,
-          openAIApiKey,
-          azureOpenAIApiKey,
-          azureOpenAIEndpoint,
-          azureOpenAIApiVersion,
-          azureOpenAIDeployment,
+          openRouterApiKey: providerSettings.openRouterApiKey,
+          openAIApiKey: providerSettings.openAIApiKey,
+          azureOpenAIApiKey: providerSettings.azureOpenAIApiKey,
+          azureOpenAIEndpoint: providerSettings.azureOpenAIEndpoint,
+          azureOpenAIApiVersion: providerSettings.azureOpenAIApiVersion,
+          azureOpenAIDeployment: providerSettings.azureOpenAIDeployment,
         })
         llmWithTools = llm.bindTools(tools)
         iterations -= 1
+        continue
+      }
+      if (isRetryableModelError(err) && iterations < 8) {
+        await onWarning?.("Transient model error encountered; retrying the request.")
         continue
       }
       throw err
@@ -388,6 +403,14 @@ export async function runAgent({
         const tool = tools.find((t) => t.name === call.name)
         if (!tool) continue
         const started = Date.now()
+        const toolCallId = call.id ?? `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        await onToolStart?.({
+          id: toolCallId,
+          name: call.name,
+          arguments: call.args,
+          timestamp: new Date().toISOString(),
+          status: "running",
+        })
         let status: ToolCall["status"] = "success"
         let result: unknown
         let error: string | undefined
@@ -399,7 +422,7 @@ export async function runAgent({
           result = { error }
         }
         const record: ToolCall = {
-          id: call.id ?? `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          id: toolCallId,
           name: call.name,
           arguments: call.args,
           result:
@@ -410,7 +433,7 @@ export async function runAgent({
           duration: Date.now() - started,
         }
         executedTools.push(record)
-        onToolResult?.(record)
+        await onToolResult?.(record)
         history.push(
           new ToolMessage({
             tool_call_id: record.id,
@@ -437,5 +460,6 @@ export async function runAgent({
     reply: text,
     toolCalls: executedTools,
     usageTokens: finalMessage.usage_metadata?.total_tokens ?? 0,
+    model: modelId,
   }
 }

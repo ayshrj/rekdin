@@ -2,6 +2,8 @@ import crypto from "crypto"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
+import { getSettingsStore } from "@/lib/server/settings-store"
+
 export const runtime = "nodejs"
 
 const requestSchema = z.object({
@@ -14,10 +16,14 @@ type CloudinaryConfig = {
   apiSecret: string
 }
 
-function getCloudinaryConfig(req: Request): CloudinaryConfig | null {
-  const cloudName = req.headers.get("x-cloudinary-cloud-name")?.trim() ?? ""
-  const apiKey = req.headers.get("x-cloudinary-api-key")?.trim() ?? ""
-  const apiSecret = req.headers.get("x-cloudinary-api-secret")?.trim() ?? ""
+function getCloudinaryConfig(settings: {
+  cloudinaryCloudName: string
+  cloudinaryApiKey: string
+  cloudinaryApiSecret: string
+}): CloudinaryConfig | null {
+  const cloudName = settings.cloudinaryCloudName?.trim() ?? ""
+  const apiKey = settings.cloudinaryApiKey?.trim() ?? ""
+  const apiSecret = settings.cloudinaryApiSecret?.trim() ?? ""
   if (!cloudName || !apiKey || !apiSecret) return null
   return { cloudName, apiKey, apiSecret }
 }
@@ -82,7 +88,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
   }
 
-  const config = getCloudinaryConfig(req)
+  const settings = await getSettingsStore().load()
+  const config = getCloudinaryConfig(settings)
   if (!config) {
     return NextResponse.json({ error: "Missing Cloudinary credentials" }, { status: 400 })
   }

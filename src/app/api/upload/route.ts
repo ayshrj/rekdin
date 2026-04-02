@@ -1,5 +1,10 @@
 import crypto from "crypto"
+import { writeFile } from "fs/promises"
 import { NextResponse } from "next/server"
+import path from "path"
+
+import { getSettingsStore } from "@/lib/server/settings-store"
+import { ensureWorkspaceDirs, getUploadsDir } from "@/lib/server/workspace"
 
 export const runtime = "nodejs"
 
@@ -9,10 +14,14 @@ type CloudinaryConfig = {
   apiSecret: string
 }
 
-function getCloudinaryConfig(req: Request): CloudinaryConfig | null {
-  const cloudName = req.headers.get("x-cloudinary-cloud-name")?.trim() ?? ""
-  const apiKey = req.headers.get("x-cloudinary-api-key")?.trim() ?? ""
-  const apiSecret = req.headers.get("x-cloudinary-api-secret")?.trim() ?? ""
+function getCloudinaryConfig(settings: {
+  cloudinaryCloudName: string
+  cloudinaryApiKey: string
+  cloudinaryApiSecret: string
+}): CloudinaryConfig | null {
+  const cloudName = settings.cloudinaryCloudName?.trim() ?? ""
+  const apiKey = settings.cloudinaryApiKey?.trim() ?? ""
+  const apiSecret = settings.cloudinaryApiSecret?.trim() ?? ""
   if (!cloudName || !apiKey || !apiSecret) return null
   return { cloudName, apiKey, apiSecret }
 }
@@ -46,20 +55,29 @@ async function uploadToCloudinary(entry: File, config: CloudinaryConfig) {
   return url
 }
 
+async function storeLocally(entry: File) {
+  await ensureWorkspaceDirs()
+  const originalName = entry.name?.trim() || "upload"
+  const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, "_")
+  const filename = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}-${safeName}`
+  const destination = path.join(getUploadsDir(), filename)
+  const bytes = Buffer.from(await entry.arrayBuffer())
+  await writeFile(destination, bytes)
+  return `/api/uploads/${filename}`
+}
+
 export async function POST(req: Request) {
   const formData = await req.formData().catch(() => null)
   if (!formData) {
     return NextResponse.json({ error: "Expected multipart form data" }, { status: 400 })
   }
 
-  const cloudinary = getCloudinaryConfig(req)
-  if (!cloudinary) {
-    return NextResponse.json({ error: "Missing Cloudinary credentials" }, { status: 400 })
-  }
+  const settings = await getSettingsStore().load()
+  const cloudinary = getCloudinaryConfig(settings)
   const uploads: string[] = []
   for (const entry of formData.getAll("files")) {
     if (!(entry instanceof File)) continue
-    const url = await uploadToCloudinary(entry, cloudinary)
+    const url = cloudinary ? await uploadToCloudinary(entry, cloudinary) : await storeLocally(entry)
     uploads.push(url)
   }
 

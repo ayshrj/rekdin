@@ -14,6 +14,8 @@ const DATA_DIR = process.env.REKDIN_DATA_DIR?.trim()
 const WORKSPACE_DIR = path.join(DATA_DIR, "workspace")
 const UPLOADS_DIR = path.join(WORKSPACE_DIR, "uploads")
 const PDFS_DIR = path.join(WORKSPACE_DIR, "pdfs")
+const REPLAYS_DIR = path.join(DATA_DIR, "replays")
+const SETTINGS_FILE = path.join(DATA_DIR, "settings.json")
 const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json")
 
 async function ensureDir(dir: string) {
@@ -29,6 +31,7 @@ export async function ensureWorkspaceDirs() {
   await ensureDir(WORKSPACE_DIR)
   await ensureDir(UPLOADS_DIR)
   await ensureDir(PDFS_DIR)
+  await ensureDir(REPLAYS_DIR)
 }
 
 export function getWorkspaceRoot() {
@@ -43,8 +46,21 @@ export function getPdfsDir() {
   return PDFS_DIR
 }
 
+export function getReplaysDir() {
+  return REPLAYS_DIR
+}
+
 export function getSessionsFilePath() {
   return SESSIONS_FILE
+}
+
+export function getSettingsFilePath() {
+  return SETTINGS_FILE
+}
+
+export function getReplayFilePath(sessionId: string) {
+  const safeId = path.basename(sessionId).replace(/[^a-zA-Z0-9._-]/g, "_")
+  return path.join(REPLAYS_DIR, `${safeId}.json`)
 }
 
 export function resolveWorkspacePath(requestedPath: string) {

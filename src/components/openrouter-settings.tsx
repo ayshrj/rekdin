@@ -357,7 +357,7 @@ export function OpenRouterSettings() {
         }
         title={"Settings"}
         description={
-          "Configure LLM + Cloudinary settings for this browser. Saved in localStorage; sent only to `/api/chat`, `/api/upload`, and `/api/cloudinary/delete`."
+          "Configure model and upload settings for this local Rekdin server. Settings are persisted on the server and used by chat, uploads, and cleanup routes."
         }
       >
         <input
@@ -385,7 +385,7 @@ export function OpenRouterSettings() {
               </SelectContent>
             </Select>
             <p className="text-muted-foreground text-xs">
-              Keys are stored in this browser (localStorage) and sent to `/api/chat` only.
+              Keys are stored by the local server and reused across chat turns.
             </p>
           </div>
 
@@ -601,7 +601,7 @@ export function OpenRouterSettings() {
           <div className="space-y-2 border-t pt-4">
             <div className="text-sm font-semibold">Cloudinary uploads</div>
             <p className="text-muted-foreground text-xs">
-              Used to store media in Cloudinary. Leave empty to store uploads locally.
+              Optional. When empty, Rekdin stores uploads locally under its data directory.
             </p>
           </div>
 

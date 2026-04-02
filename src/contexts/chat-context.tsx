@@ -10,17 +10,18 @@ import {
   deleteToolResults,
   loadSession,
   loadSessions,
-  loadSettings,
+  loadSettings as loadLocalSettings,
   loadToolResults,
   replaceMessage,
   replaceToolResult,
   saveSession,
-  saveSettings,
+  saveSettings as saveLocalSettings,
   saveToolResults,
   updateSessionTitle,
 } from "@/lib/client/idb"
 import { logger } from "@/lib/logger"
 import { ChatMessage, ChatSession, ToolResultEntry } from "@/types/chat"
+import { LlmProvider, ServerEventV2, ServerSettings } from "@/types/runtime"
 
 type ChatContextValue = {
   sessions: ChatSession[]
@@ -60,7 +61,7 @@ type ChatContextValue = {
   refreshSessions: () => Promise<void>
 }
 
-type ServerEvent =
+type LegacyServerEvent =
   | { type: "ack"; message: ChatMessage }
   | { type: "assistant_thinking"; value: boolean }
   | { type: "message_chunk"; messageId: string; content: string }
@@ -69,8 +70,6 @@ type ServerEvent =
   | { type: "error"; error: string }
 
 const ChatContext = React.createContext<ChatContextValue | undefined>(undefined)
-
-type LlmProvider = "openrouter" | "openai" | "azure_openai"
 
 type LlmSettings = {
   provider: LlmProvider
@@ -94,40 +93,29 @@ function normalizeProvider(value: string | null | undefined): LlmProvider {
   return "openrouter"
 }
 
-const STORAGE_KEYS = {
-  llmProvider: "rekdin_llm_provider",
-  openRouterModel: "rekdin_openrouter_model",
-  openRouterApiKey: "rekdin_openrouter_api_key",
-  openAIModel: "rekdin_openai_model",
-  openAIApiKey: "rekdin_openai_api_key",
-  azureOpenAIApiKey: "rekdin_azure_openai_api_key",
-  azureOpenAIEndpoint: "rekdin_azure_openai_endpoint",
-  azureOpenAIApiVersion: "rekdin_azure_openai_api_version",
-  azureOpenAIDeployment: "rekdin_azure_openai_deployment",
-  liveModeEnabled: "rekdin_live_mode_enabled",
-  cloudinaryCloudName: "rekdin_cloudinary_cloud_name",
-  cloudinaryApiKey: "rekdin_cloudinary_api_key",
-  cloudinaryApiSecret: "rekdin_cloudinary_api_secret",
+async function fetchServerSettings(): Promise<ServerSettings> {
+  const response = await fetch("/api/settings", { cache: "no-store" })
+  const data = (await response.json().catch(() => null)) as { settings?: ServerSettings } | null
+  if (!response.ok || !data?.settings) {
+    throw new Error("Unable to load server settings")
+  }
+  return data.settings
 }
 
-function readLocalStorage(key: string) {
-  if (typeof window === "undefined") return ""
-  return localStorage.getItem(key) ?? ""
-}
-
-function writeLocalStorage(key: string, value: string) {
-  if (typeof window === "undefined") return
-  if (value) localStorage.setItem(key, value)
-  else localStorage.removeItem(key)
-}
-
-function readBooleanStorage(key: string, fallback: boolean) {
-  const raw = readLocalStorage(key)
-  if (!raw) return fallback
-  const normalized = raw.trim().toLowerCase()
-  if (normalized === "1" || normalized === "true" || normalized === "yes") return true
-  if (normalized === "0" || normalized === "false" || normalized === "no") return false
-  return fallback
+async function saveServerSettings(next: Partial<ServerSettings>) {
+  const response = await fetch("/api/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(next),
+  })
+  const data = (await response.json().catch(() => null)) as {
+    settings?: ServerSettings
+    error?: string
+  } | null
+  if (!response.ok || !data?.settings) {
+    throw new Error(data?.error ?? "Unable to save server settings")
+  }
+  return data.settings
 }
 
 function isCloudinaryUrl(value: string) {
@@ -249,20 +237,11 @@ function trimHistory(messages: ChatMessage[], maxChars = 20000, maxMessages = 50
   return trimmed
 }
 
-async function uploadFiles(
-  files: File[],
-  cloudinary?: { cloudName: string; apiKey: string; apiSecret: string }
-) {
+async function uploadFiles(files: File[]) {
   if (!files || files.length === 0) return []
   const formData = new FormData()
   files.forEach((file) => formData.append("files", file))
-  const headers: HeadersInit = {}
-  if (cloudinary?.cloudName && cloudinary?.apiKey && cloudinary?.apiSecret) {
-    headers["X-Cloudinary-Cloud-Name"] = cloudinary.cloudName
-    headers["X-Cloudinary-Api-Key"] = cloudinary.apiKey
-    headers["X-Cloudinary-Api-Secret"] = cloudinary.apiSecret
-  }
-  const res = await fetch("/api/upload", { method: "POST", headers, body: formData })
+  const res = await fetch("/api/upload", { method: "POST", body: formData })
   if (!res.ok) throw new Error("File upload failed")
   const data = (await res.json()) as { files: string[] }
   return data.files
@@ -271,45 +250,19 @@ async function uploadFiles(
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [sessions, setSessions] = React.useState<ChatSession[]>([])
   const [currentSessionId, setCurrentSessionId] = React.useState<string | null>(null)
-  const [llmProvider, setLlmProvider] = React.useState<LlmProvider>(() =>
-    normalizeProvider(readLocalStorage(STORAGE_KEYS.llmProvider))
-  )
-  const [openRouterModel, setOpenRouterModel] = React.useState(() => {
-    return readLocalStorage(STORAGE_KEYS.openRouterModel) || "openai/gpt-4o-mini"
-  })
-  const [openRouterApiKey, setOpenRouterApiKey] = React.useState(() =>
-    readLocalStorage(STORAGE_KEYS.openRouterApiKey)
-  )
-  const [openAIModel, setOpenAIModel] = React.useState(() => {
-    return readLocalStorage(STORAGE_KEYS.openAIModel) || "gpt-4o-mini"
-  })
-  const [openAIApiKey, setOpenAIApiKey] = React.useState(() =>
-    readLocalStorage(STORAGE_KEYS.openAIApiKey)
-  )
-  const [azureOpenAIApiKey, setAzureOpenAIApiKey] = React.useState(() =>
-    readLocalStorage(STORAGE_KEYS.azureOpenAIApiKey)
-  )
-  const [azureOpenAIEndpoint, setAzureOpenAIEndpoint] = React.useState(() =>
-    readLocalStorage(STORAGE_KEYS.azureOpenAIEndpoint)
-  )
-  const [azureOpenAIApiVersion, setAzureOpenAIApiVersion] = React.useState(() => {
-    return readLocalStorage(STORAGE_KEYS.azureOpenAIApiVersion) || "2024-02-15-preview"
-  })
-  const [azureOpenAIDeployment, setAzureOpenAIDeployment] = React.useState(() =>
-    readLocalStorage(STORAGE_KEYS.azureOpenAIDeployment)
-  )
-  const [liveModeEnabled, setLiveModeEnabled] = React.useState(() =>
-    readBooleanStorage(STORAGE_KEYS.liveModeEnabled, true)
-  )
-  const [cloudinaryCloudName, setCloudinaryCloudName] = React.useState(() =>
-    readLocalStorage(STORAGE_KEYS.cloudinaryCloudName)
-  )
-  const [cloudinaryApiKey, setCloudinaryApiKey] = React.useState(() =>
-    readLocalStorage(STORAGE_KEYS.cloudinaryApiKey)
-  )
-  const [cloudinaryApiSecret, setCloudinaryApiSecret] = React.useState(() =>
-    readLocalStorage(STORAGE_KEYS.cloudinaryApiSecret)
-  )
+  const [llmProvider, setLlmProvider] = React.useState<LlmProvider>("openrouter")
+  const [openRouterModel, setOpenRouterModel] = React.useState("openai/gpt-4o-mini")
+  const [openRouterApiKey, setOpenRouterApiKey] = React.useState("")
+  const [openAIModel, setOpenAIModel] = React.useState("gpt-4o-mini")
+  const [openAIApiKey, setOpenAIApiKey] = React.useState("")
+  const [azureOpenAIApiKey, setAzureOpenAIApiKey] = React.useState("")
+  const [azureOpenAIEndpoint, setAzureOpenAIEndpoint] = React.useState("")
+  const [azureOpenAIApiVersion, setAzureOpenAIApiVersion] = React.useState("2024-02-15-preview")
+  const [azureOpenAIDeployment, setAzureOpenAIDeployment] = React.useState("")
+  const [liveModeEnabled, setLiveModeEnabled] = React.useState(true)
+  const [cloudinaryCloudName, setCloudinaryCloudName] = React.useState("")
+  const [cloudinaryApiKey, setCloudinaryApiKey] = React.useState("")
+  const [cloudinaryApiSecret, setCloudinaryApiSecret] = React.useState("")
   const [messagesBySession, setMessagesBySession] = React.useState<Record<string, ChatMessage[]>>(
     {}
   )
@@ -319,7 +272,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [connected, setConnected] = React.useState(false)
   const bootstrappedRef = React.useRef(false)
   const settingsHydratedRef = React.useRef(false)
-  const warnedMissingCloudinaryRef = React.useRef(false)
   const uploadedDataUrlsRef = React.useRef(new Map<string, string>())
   const pendingUploadsRef = React.useRef(new Map<string, Promise<string>>())
   const draftPersistRef = React.useRef(new Map<string, number>())
@@ -359,20 +311,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       const pending = pendingUploadsRef.current.get(dataUrl)
       if (pending) return await pending
       if (!cloudinaryCloudName || !cloudinaryApiKey || !cloudinaryApiSecret) {
-        if (!warnedMissingCloudinaryRef.current) {
-          warnedMissingCloudinaryRef.current = true
-          toast.error("Set your Cloudinary credentials to store screenshots")
-        }
         return dataUrl
       }
       const uploadPromise = (async () => {
         try {
           const file = await dataUrlToFile(dataUrl, label)
-          const [url] = await uploadFiles([file], {
-            cloudName: cloudinaryCloudName,
-            apiKey: cloudinaryApiKey,
-            apiSecret: cloudinaryApiSecret,
-          })
+          const [url] = await uploadFiles([file])
           if (!url) return dataUrl
           uploadedDataUrlsRef.current.set(dataUrl, url)
           return url
@@ -549,38 +493,33 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     void (async () => {
       let preferredSessionId: string | null = null
       try {
-        if (typeof window !== "undefined") {
-          const storedProvider = readLocalStorage(STORAGE_KEYS.llmProvider)
-          if (storedProvider) setLlmProvider(normalizeProvider(storedProvider))
-          const storedModel = readLocalStorage(STORAGE_KEYS.openRouterModel)
-          if (storedModel) setOpenRouterModel(storedModel)
-          const storedKey = readLocalStorage(STORAGE_KEYS.openRouterApiKey)
-          if (storedKey) setOpenRouterApiKey(storedKey)
-          const storedOpenAIModel = readLocalStorage(STORAGE_KEYS.openAIModel)
-          if (storedOpenAIModel) setOpenAIModel(storedOpenAIModel)
-          const storedOpenAIKey = readLocalStorage(STORAGE_KEYS.openAIApiKey)
-          if (storedOpenAIKey) setOpenAIApiKey(storedOpenAIKey)
-          const storedAzureKey = readLocalStorage(STORAGE_KEYS.azureOpenAIApiKey)
-          if (storedAzureKey) setAzureOpenAIApiKey(storedAzureKey)
-          const storedAzureEndpoint = readLocalStorage(STORAGE_KEYS.azureOpenAIEndpoint)
-          if (storedAzureEndpoint) setAzureOpenAIEndpoint(storedAzureEndpoint)
-          const storedAzureVersion = readLocalStorage(STORAGE_KEYS.azureOpenAIApiVersion)
-          if (storedAzureVersion) setAzureOpenAIApiVersion(storedAzureVersion)
-          const storedAzureDeployment = readLocalStorage(STORAGE_KEYS.azureOpenAIDeployment)
-          if (storedAzureDeployment) setAzureOpenAIDeployment(storedAzureDeployment)
-          const storedCloudName = readLocalStorage(STORAGE_KEYS.cloudinaryCloudName)
-          if (storedCloudName) setCloudinaryCloudName(storedCloudName)
-          const storedCloudKey = readLocalStorage(STORAGE_KEYS.cloudinaryApiKey)
-          if (storedCloudKey) setCloudinaryApiKey(storedCloudKey)
-          const storedCloudSecret = readLocalStorage(STORAGE_KEYS.cloudinaryApiSecret)
-          if (storedCloudSecret) setCloudinaryApiSecret(storedCloudSecret)
-        }
-        const settings = await loadSettings()
-        if (typeof settings.currentSessionId === "string") {
-          preferredSessionId = settings.currentSessionId
+        const serverSettings = await fetchServerSettings()
+        setLlmProvider(normalizeProvider(serverSettings.llmProvider))
+        setOpenRouterModel(serverSettings.openRouterModel || "openai/gpt-4o-mini")
+        setOpenRouterApiKey(serverSettings.openRouterApiKey || "")
+        setOpenAIModel(serverSettings.openAIModel || "gpt-4o-mini")
+        setOpenAIApiKey(serverSettings.openAIApiKey || "")
+        setAzureOpenAIApiKey(serverSettings.azureOpenAIApiKey || "")
+        setAzureOpenAIEndpoint(serverSettings.azureOpenAIEndpoint || "")
+        setAzureOpenAIApiVersion(serverSettings.azureOpenAIApiVersion || "2024-02-15-preview")
+        setAzureOpenAIDeployment(serverSettings.azureOpenAIDeployment || "")
+        setLiveModeEnabled(
+          typeof serverSettings.liveModeEnabled === "boolean"
+            ? serverSettings.liveModeEnabled
+            : true
+        )
+        setCloudinaryCloudName(serverSettings.cloudinaryCloudName || "")
+        setCloudinaryApiKey(serverSettings.cloudinaryApiKey || "")
+        setCloudinaryApiSecret(serverSettings.cloudinaryApiSecret || "")
+
+        const localSettings = await loadLocalSettings()
+        if (typeof localSettings.currentSessionId === "string") {
+          preferredSessionId = localSettings.currentSessionId
+        } else if (typeof serverSettings.currentSessionId === "string") {
+          preferredSessionId = serverSettings.currentSessionId
         }
       } catch (err) {
-        logger.error("Failed to load settings from IndexedDB", err)
+        logger.error("Failed to load startup settings", err)
       } finally {
         settingsHydratedRef.current = true
       }
@@ -600,59 +539,85 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     if (!settingsHydratedRef.current) return
-    void saveSettings({ currentSessionId })
+    void saveLocalSettings({ currentSessionId })
+    void saveServerSettings({ currentSessionId }).catch((err) => {
+      logger.warn("Failed to persist current session to server settings", err)
+    })
   }, [currentSessionId])
 
   const updateLlmSettings = React.useCallback((next: Partial<LlmSettings>) => {
     if (typeof next.provider === "string") {
       const value = normalizeProvider(next.provider)
       setLlmProvider(value)
-      writeLocalStorage(STORAGE_KEYS.llmProvider, value)
     }
     if (typeof next.openRouterModel === "string") {
       const value = next.openRouterModel.trim()
       setOpenRouterModel(value || "openai/gpt-4o-mini")
-      writeLocalStorage(STORAGE_KEYS.openRouterModel, value)
     }
     if (typeof next.openRouterApiKey === "string") {
       const value = next.openRouterApiKey.trim()
       setOpenRouterApiKey(value)
-      writeLocalStorage(STORAGE_KEYS.openRouterApiKey, value)
     }
     if (typeof next.openAIModel === "string") {
       const value = next.openAIModel.trim()
       setOpenAIModel(value || "gpt-4o-mini")
-      writeLocalStorage(STORAGE_KEYS.openAIModel, value)
     }
     if (typeof next.openAIApiKey === "string") {
       const value = next.openAIApiKey.trim()
       setOpenAIApiKey(value)
-      writeLocalStorage(STORAGE_KEYS.openAIApiKey, value)
     }
     if (typeof next.azureOpenAIApiKey === "string") {
       const value = next.azureOpenAIApiKey.trim()
       setAzureOpenAIApiKey(value)
-      writeLocalStorage(STORAGE_KEYS.azureOpenAIApiKey, value)
     }
     if (typeof next.azureOpenAIEndpoint === "string") {
       const value = next.azureOpenAIEndpoint.trim()
       setAzureOpenAIEndpoint(value)
-      writeLocalStorage(STORAGE_KEYS.azureOpenAIEndpoint, value)
     }
     if (typeof next.azureOpenAIApiVersion === "string") {
       const value = next.azureOpenAIApiVersion.trim()
       setAzureOpenAIApiVersion(value || "2024-02-15-preview")
-      writeLocalStorage(STORAGE_KEYS.azureOpenAIApiVersion, value)
     }
     if (typeof next.azureOpenAIDeployment === "string") {
       const value = next.azureOpenAIDeployment.trim()
       setAzureOpenAIDeployment(value)
-      writeLocalStorage(STORAGE_KEYS.azureOpenAIDeployment, value)
     }
     if (typeof next.liveModeEnabled === "boolean") {
       setLiveModeEnabled(next.liveModeEnabled)
-      writeLocalStorage(STORAGE_KEYS.liveModeEnabled, next.liveModeEnabled ? "1" : "0")
     }
+    void saveServerSettings({
+      ...(typeof next.provider === "string"
+        ? { llmProvider: normalizeProvider(next.provider) }
+        : {}),
+      ...(typeof next.openRouterModel === "string"
+        ? { openRouterModel: next.openRouterModel.trim() || "openai/gpt-4o-mini" }
+        : {}),
+      ...(typeof next.openRouterApiKey === "string"
+        ? { openRouterApiKey: next.openRouterApiKey.trim() }
+        : {}),
+      ...(typeof next.openAIModel === "string"
+        ? { openAIModel: next.openAIModel.trim() || "gpt-4o-mini" }
+        : {}),
+      ...(typeof next.openAIApiKey === "string" ? { openAIApiKey: next.openAIApiKey.trim() } : {}),
+      ...(typeof next.azureOpenAIApiKey === "string"
+        ? { azureOpenAIApiKey: next.azureOpenAIApiKey.trim() }
+        : {}),
+      ...(typeof next.azureOpenAIEndpoint === "string"
+        ? { azureOpenAIEndpoint: next.azureOpenAIEndpoint.trim() }
+        : {}),
+      ...(typeof next.azureOpenAIApiVersion === "string"
+        ? { azureOpenAIApiVersion: next.azureOpenAIApiVersion.trim() || "2024-02-15-preview" }
+        : {}),
+      ...(typeof next.azureOpenAIDeployment === "string"
+        ? { azureOpenAIDeployment: next.azureOpenAIDeployment.trim() }
+        : {}),
+      ...(typeof next.liveModeEnabled === "boolean"
+        ? { liveModeEnabled: next.liveModeEnabled }
+        : {}),
+    }).catch((err) => {
+      logger.error("Failed to save LLM settings to server", err)
+      toast.error("Unable to save model settings")
+    })
   }, [])
 
   const updateCloudinarySettings = React.useCallback(
@@ -660,18 +625,27 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       if (typeof next.cloudName === "string") {
         const value = next.cloudName.trim()
         setCloudinaryCloudName(value)
-        writeLocalStorage(STORAGE_KEYS.cloudinaryCloudName, value)
       }
       if (typeof next.apiKey === "string") {
         const value = next.apiKey.trim()
         setCloudinaryApiKey(value)
-        writeLocalStorage(STORAGE_KEYS.cloudinaryApiKey, value)
       }
       if (typeof next.apiSecret === "string") {
         const value = next.apiSecret.trim()
         setCloudinaryApiSecret(value)
-        writeLocalStorage(STORAGE_KEYS.cloudinaryApiSecret, value)
       }
+      void saveServerSettings({
+        ...(typeof next.cloudName === "string"
+          ? { cloudinaryCloudName: next.cloudName.trim() }
+          : {}),
+        ...(typeof next.apiKey === "string" ? { cloudinaryApiKey: next.apiKey.trim() } : {}),
+        ...(typeof next.apiSecret === "string"
+          ? { cloudinaryApiSecret: next.apiSecret.trim() }
+          : {}),
+      }).catch((err) => {
+        logger.error("Failed to save Cloudinary settings to server", err)
+        toast.error("Unable to save upload settings")
+      })
     },
     []
   )
@@ -722,27 +696,24 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         const storedToolResults = await loadToolResults(sessionId)
         const cloudinaryUrls = collectCloudinaryUrls(sessionMessages, storedToolResults)
         if (cloudinaryUrls.length > 0) {
-          if (!cloudinaryCloudName || !cloudinaryApiKey || !cloudinaryApiSecret) {
-            toast.error("Set your Cloudinary credentials to delete uploaded media first")
-            return
-          }
           const res = await fetch("/api/cloudinary/delete", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Cloudinary-Cloud-Name": cloudinaryCloudName,
-              "X-Cloudinary-Api-Key": cloudinaryApiKey,
-              "X-Cloudinary-Api-Secret": cloudinaryApiSecret,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ urls: cloudinaryUrls }),
           })
           if (!res.ok) {
             const data = (await res.json().catch(() => ({}))) as { error?: string }
-            throw new Error(data.error ?? `Cloudinary delete failed (${res.status})`)
+            logger.warn(
+              "Cloudinary cleanup failed while deleting session",
+              data.error ?? res.status
+            )
           }
         }
         await deleteSessionFromDb(sessionId)
         await deleteToolResults(sessionId)
+        await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" }).catch((error) => {
+          logger.warn("Failed to delete server session", error)
+        })
         setSessions((prev) => prev.filter((s) => s.id !== sessionId))
         setMessagesBySession((prev) => {
           const next = { ...prev }
@@ -775,14 +746,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         logger.error("Error deleting session", err)
       }
     },
-    [
-      cloudinaryApiKey,
-      cloudinaryApiSecret,
-      cloudinaryCloudName,
-      currentSessionId,
-      messagesBySession,
-      sessions,
-    ]
+    [currentSessionId, messagesBySession, sessions]
   )
 
   const refreshSessions = React.useCallback(async () => {
@@ -809,10 +773,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         }
         return
       }
-      if (files.length > 0 && (!cloudinaryCloudName || !cloudinaryApiKey || !cloudinaryApiSecret)) {
-        toast.error("Set your Cloudinary credentials in Settings to upload files")
-        return
-      }
 
       const trimmed = content.trim()
       const tempUserId = crypto.randomUUID()
@@ -820,11 +780,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       try {
         setIsLoading(true)
         if (files.length > 0) {
-          uploadedPaths = await uploadFiles(files, {
-            cloudName: cloudinaryCloudName,
-            apiKey: cloudinaryApiKey,
-            apiSecret: cloudinaryApiSecret,
-          })
+          uploadedPaths = await uploadFiles(files)
         }
       } catch (err) {
         setIsLoading(false)
@@ -882,11 +838,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           try {
             const res = await fetch("/api/title", {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                ...(openRouterApiKey ? { "X-OpenRouter-Api-Key": openRouterApiKey } : {}),
-                ...(openRouterModel ? { "X-OpenRouter-Model": openRouterModel } : {}),
-              },
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ prompt: trimmed }),
             })
             const data = (await res.json().catch(() => null)) as { title?: string } | null
@@ -903,6 +855,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                 .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
             )
             await updateSessionTitle(targetSession, nextTitle)
+            await fetch(`/api/sessions/${targetSession}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title: nextTitle }),
+            }).catch((error) => {
+              logger.warn("Failed to update server session title", error)
+            })
           } catch (err) {
             logger.warn("Failed to auto-title session", err)
           }
@@ -911,49 +870,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const history = trimHistory((messagesBySession[targetSession] ?? []).concat(optimisticUser))
-        const llmHeaders: HeadersInit = {
-          "X-LLM-Provider": llmProvider,
-          ...(llmProvider === "openrouter"
-            ? {
-                "X-OpenRouter-Api-Key": openRouterApiKey,
-                "X-OpenRouter-Model": openRouterModel,
-              }
-            : {}),
-          ...(llmProvider === "openai"
-            ? {
-                "X-OpenAI-Api-Key": openAIApiKey,
-                "X-OpenAI-Model": openAIModel,
-              }
-            : {}),
-          ...(llmProvider === "azure_openai"
-            ? {
-                "X-Azure-OpenAI-Api-Key": azureOpenAIApiKey,
-                "X-Azure-OpenAI-Endpoint": azureOpenAIEndpoint,
-                "X-Azure-OpenAI-Deployment": azureOpenAIDeployment,
-                ...(azureOpenAIApiVersion
-                  ? { "X-Azure-OpenAI-Api-Version": azureOpenAIApiVersion }
-                  : {}),
-              }
-            : {}),
-        }
         const response = await fetch("/api/chat", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...llmHeaders,
-            ...(cloudinaryCloudName && cloudinaryApiKey && cloudinaryApiSecret
-              ? {
-                  "X-Cloudinary-Cloud-Name": cloudinaryCloudName,
-                  "X-Cloudinary-Api-Key": cloudinaryApiKey,
-                  "X-Cloudinary-Api-Secret": cloudinaryApiSecret,
-                }
-              : {}),
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             sessionId: targetSession,
             message: trimmed,
             attachments: uploadedPaths,
             agentType: metadata?.agentType,
+            agentMode: metadata?.agentType,
             history,
           }),
         })
@@ -970,9 +895,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
               void replaceMessage(targetSession, event.message)
               break
             }
+            case "status":
+              setIsThinking(
+                event.phase === "received" ||
+                  event.phase === "thinking" ||
+                  event.phase === "running_tools"
+              )
+              break
             case "assistant_thinking":
               setIsThinking(event.value)
               break
+            case "assistant_delta":
             case "message_chunk":
               if (!liveModeEnabled) break
               updateMessages(targetSession, (prev) => {
@@ -1007,6 +940,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                 })
               })().catch((err) => logger.warn("Failed to persist assistant draft message", err))
               break
+            case "assistant_final":
             case "message_complete":
               {
                 const incomingMessage = event.message
@@ -1064,6 +998,25 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                 })()
               }
               break
+            case "tool_started": {
+              const entry = {
+                id: event.toolCall.id,
+                toolName: typeof event.toolCall.name === "string" ? event.toolCall.name : "tool",
+                status: "running",
+                arguments:
+                  (event.toolCall.arguments as Record<string, unknown>) ??
+                  (event.toolCall.arguments ? { value: event.toolCall.arguments } : {}),
+                result: undefined,
+                timestamp:
+                  typeof event.toolCall.timestamp === "string"
+                    ? event.toolCall.timestamp
+                    : new Date().toISOString(),
+              } satisfies ToolResultEntry
+              setToolResults((prev) => mergeToolResults(prev, [entry]))
+              void replaceToolResult(targetSession, entry)
+              break
+            }
+            case "tool_finished":
             case "tool_result":
               {
                 const rawToolCall = event.toolCall as Record<string, unknown>
@@ -1085,6 +1038,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                 })()
                 logger.debug("Tool result received", entry)
               }
+              break
+            case "warning":
+              logger.warn("Chat runtime warning", event.warning)
+              break
+            case "heartbeat":
+              break
+            case "done":
+              setIsThinking(false)
               break
             case "error":
               toast.error(event.error)
@@ -1207,7 +1168,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
 async function readEventStream(
   response: Response,
-  onEvent: (data: ServerEvent) => void | Promise<void>
+  onEvent: (data: ServerEventV2 | LegacyServerEvent) => void | Promise<void>
 ) {
   if (!response.body) return
   const reader = response.body.getReader()
@@ -1223,7 +1184,9 @@ async function readEventStream(
       buffer = buffer.slice(boundary + 2)
       if (!raw.startsWith("data:")) continue
       try {
-        const payload = JSON.parse(raw.replace(/^data:\s*/, "")) as ServerEvent
+        const payload = JSON.parse(raw.replace(/^data:\s*/, "")) as
+          | ServerEventV2
+          | LegacyServerEvent
         await onEvent(payload)
       } catch (error) {
         console.error("Failed to parse SSE payload", error)
@@ -1232,7 +1195,9 @@ async function readEventStream(
   }
   if (buffer.trim()) {
     try {
-      const payload = JSON.parse(buffer.replace(/^data:\s*/, "")) as ServerEvent
+      const payload = JSON.parse(buffer.replace(/^data:\s*/, "")) as
+        | ServerEventV2
+        | LegacyServerEvent
       await onEvent(payload)
     } catch {
       // ignore trailing junk

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
+import { getSettingsStore } from "@/lib/server/settings-store"
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -37,8 +39,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
   }
 
-  const apiKey = req.headers.get("x-openrouter-api-key")?.trim() ?? ""
-  const model = req.headers.get("x-openrouter-model")?.trim() || "openai/gpt-4o-mini"
+  const settings = await getSettingsStore().load()
+  const apiKey = settings.openRouterApiKey.trim()
+  const model = settings.openRouterModel.trim() || "openai/gpt-4o-mini"
 
   if (!apiKey) {
     return NextResponse.json({ title: fallbackTitle(parsed.data.prompt), source: "fallback" })

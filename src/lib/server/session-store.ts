@@ -2,20 +2,69 @@ import crypto from "crypto"
 
 import { ChatMessage, ChatSession } from "@/types/chat"
 
-type NewMessage = Omit<ChatMessage, "id" | "timestamp" | "sessionId">
+import { readJsonFile, withFileWriteLock, writeJsonFileAtomic } from "./json-store"
+import { ensureWorkspaceDirs, getSessionsFilePath } from "./workspace"
+
+function cloneSession(session: ChatSession): ChatSession {
+  return {
+    ...session,
+    messages: [...(session.messages ?? [])],
+    metadata: session.metadata ? { ...session.metadata } : undefined,
+  }
+}
+
+function sortSessions(sessions: ChatSession[]) {
+  return [...sessions].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  )
+}
+
+function recomputeMetadata(session: ChatSession): ChatSession {
+  const messages = session.messages ?? []
+  return {
+    ...session,
+    metadata: {
+      ...(session.metadata ?? {}),
+      messageCount: messages.length,
+      totalTokens: messages.reduce((total, message) => total + (message.metadata?.tokens ?? 0), 0),
+      model:
+        [...messages].reverse().find((message) => typeof message.metadata?.model === "string")
+          ?.metadata?.model ?? session.metadata?.model,
+    },
+  }
+}
 
 class SessionStore {
-  private sessions = new Map<string, ChatSession>()
+  private cache: ChatSession[] | null = null
 
-  async listSessions(): Promise<ChatSession[]> {
-    return Array.from(this.sessions.values()).sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    )
+  private async loadSessionsFromDisk() {
+    if (this.cache) return this.cache
+    await ensureWorkspaceDirs()
+    const stored = await readJsonFile<ChatSession[]>(getSessionsFilePath(), [])
+    this.cache = sortSessions(stored.map(cloneSession))
+    return this.cache
   }
 
-  async createSession(title = "New Conversation"): Promise<ChatSession> {
+  private async saveSessions(next: ChatSession[]) {
+    const filePath = getSessionsFilePath()
+    return withFileWriteLock(filePath, async () => {
+      const normalized = sortSessions(
+        next.map((session) => recomputeMetadata(cloneSession(session)))
+      )
+      await writeJsonFileAtomic(filePath, normalized)
+      this.cache = normalized
+      return normalized
+    })
+  }
+
+  async listSessions(): Promise<ChatSession[]> {
+    const sessions = await this.loadSessionsFromDisk()
+    return sessions.map(cloneSession)
+  }
+
+  async createSession(title = "New Conversation", id = crypto.randomUUID()): Promise<ChatSession> {
     const session: ChatSession = {
-      id: crypto.randomUUID(),
+      id,
       title,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -25,43 +74,77 @@ class SessionStore {
         messageCount: 0,
       },
     }
-    this.sessions.set(session.id, session)
-    return { ...session }
+    const sessions = await this.loadSessionsFromDisk()
+    const next = [...sessions.filter((item) => item.id !== session.id), session]
+    await this.saveSessions(next)
+    return cloneSession(session)
   }
 
   async getSession(sessionId: string): Promise<ChatSession | null> {
-    const session = this.sessions.get(sessionId)
-    return session ? { ...session, messages: [...session.messages] } : null
+    const sessions = await this.loadSessionsFromDisk()
+    const session = sessions.find((item) => item.id === sessionId)
+    return session ? cloneSession(session) : null
+  }
+
+  async upsertSession(session: ChatSession): Promise<ChatSession> {
+    const sessions = await this.loadSessionsFromDisk()
+    const normalized = recomputeMetadata(cloneSession(session))
+    const next = [...sessions.filter((item) => item.id !== session.id), normalized]
+    await this.saveSessions(next)
+    return cloneSession(normalized)
+  }
+
+  async saveMessage(sessionId: string, message: ChatMessage, title = "New Conversation") {
+    const sessions = await this.loadSessionsFromDisk()
+    const existing = sessions.find((item) => item.id === sessionId)
+    const session =
+      existing ??
+      ({
+        id: sessionId,
+        title,
+        createdAt: message.timestamp,
+        updatedAt: message.timestamp,
+        messages: [],
+        metadata: {
+          totalTokens: 0,
+          messageCount: 0,
+        },
+      } satisfies ChatSession)
+
+    const filtered = (session.messages ?? []).filter((item) => item.id !== message.id)
+    const nextSession: ChatSession = recomputeMetadata({
+      ...session,
+      updatedAt: message.timestamp,
+      messages: [...filtered, message].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      ),
+    })
+
+    const next = [...sessions.filter((item) => item.id !== sessionId), nextSession]
+    await this.saveSessions(next)
+    return cloneSession(nextSession)
+  }
+
+  async updateTitle(sessionId: string, title: string) {
+    const sessions = await this.loadSessionsFromDisk()
+    const session = sessions.find((item) => item.id === sessionId)
+    if (!session) return null
+    const nextSession: ChatSession = {
+      ...session,
+      title: title.trim() || session.title,
+      updatedAt: new Date().toISOString(),
+    }
+    const next = [...sessions.filter((item) => item.id !== sessionId), nextSession]
+    await this.saveSessions(next)
+    return cloneSession(nextSession)
   }
 
   async deleteSession(sessionId: string): Promise<boolean> {
-    return this.sessions.delete(sessionId)
-  }
-
-  async addMessage(sessionId: string, message: NewMessage): Promise<ChatMessage> {
-    const session = this.sessions.get(sessionId)
-    if (!session) throw new Error("Session not found")
-    const newMessage: ChatMessage = {
-      ...message,
-      id: crypto.randomUUID(),
-      sessionId,
-      timestamp: new Date().toISOString(),
-    }
-    session.messages.push(newMessage)
-    session.updatedAt = newMessage.timestamp
-    const meta = session.metadata ?? {}
-    session.metadata = {
-      ...meta,
-      messageCount: (meta.messageCount ?? 0) + 1,
-      totalTokens: (meta.totalTokens ?? 0) + (newMessage.metadata?.tokens ?? 0),
-    }
-    return { ...newMessage }
-  }
-
-  async getMessages(sessionId: string): Promise<ChatMessage[]> {
-    const session = this.sessions.get(sessionId)
-    if (!session) return []
-    return session.messages.map((msg) => ({ ...msg }))
+    const sessions = await this.loadSessionsFromDisk()
+    const next = sessions.filter((item) => item.id !== sessionId)
+    if (next.length === sessions.length) return false
+    await this.saveSessions(next)
+    return true
   }
 }
 

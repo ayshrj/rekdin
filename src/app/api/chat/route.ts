@@ -2,9 +2,12 @@ import crypto from "crypto"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
-import { runAgent } from "@/lib/server/chat-agent"
 import { getReplayStore } from "@/lib/server/replay-store"
-import { ChatMessage } from "@/types/chat"
+import { runChatTurn } from "@/lib/server/runtime/agent-runtime"
+import { createEventStream } from "@/lib/server/runtime/events"
+import { getSessionStore } from "@/lib/server/session-store"
+import { getProviderSettings, getSettingsStore } from "@/lib/server/settings-store"
+import { ChatMessage, ToolCall } from "@/types/chat"
 
 export const runtime = "nodejs"
 
@@ -23,36 +26,12 @@ const requestSchema = z.object({
   sessionId: z.string().min(1),
   message: z.string().min(1).max(10_000),
   agentType: z.string().optional(),
+  agentMode: z.string().optional(),
+  toolPolicy: z.string().optional(),
+  responseSchema: z.record(z.string(), z.unknown()).nullable().optional(),
   attachments: z.array(z.string()).optional(),
   history: z.array(messageSchema).optional(),
 })
-
-type EventPayload =
-  | { type: "ack"; message: ChatMessage }
-  | { type: "assistant_thinking"; value: boolean }
-  | { type: "message_chunk"; messageId: string; content: string }
-  | { type: "message_complete"; message: ChatMessage; tempId?: string }
-  | { type: "tool_result"; toolCall: Record<string, unknown> }
-  | { type: "error"; error: string }
-
-function createEventStream(responder: (send: (payload: EventPayload) => void) => Promise<void>) {
-  const encoder = new TextEncoder()
-  return new ReadableStream({
-    async start(controller) {
-      const send = (payload: EventPayload) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`))
-      }
-      try {
-        await responder(send)
-      } catch (err) {
-        const error = err instanceof Error ? err.message : "Unknown error"
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", error })}\n\n`))
-      } finally {
-        controller.close()
-      }
-    },
-  })
-}
 
 export async function POST(req: Request) {
   let body: unknown
@@ -61,25 +40,33 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
+
   const parsed = requestSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 })
   }
 
-  const { sessionId, message, attachments = [], agentType, history = [] } = parsed.data
-  const provider = req.headers.get("x-llm-provider") ?? undefined
-  const openRouterApiKey = req.headers.get("x-openrouter-api-key") ?? undefined
-  const openRouterModel = req.headers.get("x-openrouter-model") ?? undefined
-  const openAIApiKey = req.headers.get("x-openai-api-key") ?? undefined
-  const openAIModel = req.headers.get("x-openai-model") ?? undefined
-  const azureOpenAIApiKey = req.headers.get("x-azure-openai-api-key") ?? undefined
-  const azureOpenAIEndpoint = req.headers.get("x-azure-openai-endpoint") ?? undefined
-  const azureOpenAIDeployment = req.headers.get("x-azure-openai-deployment") ?? undefined
-  const azureOpenAIApiVersion = req.headers.get("x-azure-openai-api-version") ?? undefined
+  const {
+    sessionId,
+    message,
+    attachments = [],
+    agentType,
+    agentMode,
+    toolPolicy,
+    history = [],
+  } = parsed.data
   const replayStore = getReplayStore()
+  const sessionStore = getSessionStore()
+  const settings = await getSettingsStore().load()
+  const providerSettings = await getProviderSettings()
+  const resolvedMode = agentMode ?? agentType
+
   const userMessage: ChatMessage =
     history[history.length - 1] && history[history.length - 1].role === "user"
-      ? (history[history.length - 1] as ChatMessage)
+      ? ({
+          ...history[history.length - 1],
+          sessionId,
+        } as ChatMessage)
       : {
           id: crypto.randomUUID(),
           role: "user",
@@ -88,38 +75,58 @@ export async function POST(req: Request) {
           sessionId,
           timestamp: new Date().toISOString(),
         }
-  replayStore.record(sessionId, "user_message", { message: userMessage })
+
+  await sessionStore.saveMessage(sessionId, userMessage)
+  await replayStore.record(sessionId, "user_message", { message: userMessage })
 
   const streamingMessageId = crypto.randomUUID()
   const stream = createEventStream(async (send) => {
-    send({ type: "ack", message: userMessage })
-    send({ type: "assistant_thinking", value: true })
-    replayStore.record(sessionId, "assistant_thinking", { value: true })
+    send({ version: 2, type: "ack", message: userMessage })
+    send({ version: 2, type: "status", phase: "received" })
+    send({ version: 2, type: "status", phase: "thinking" })
+    await replayStore.record(sessionId, "assistant_thinking", { value: true })
+
     try {
       const contextMessages = history.length > 0 ? (history as ChatMessage[]) : [userMessage]
-      const agentResult = await runAgent({
-        headers: req.headers,
+      const agentResult = await runChatTurn({
         contextMessages,
-        provider,
-        openRouterApiKey,
-        openRouterModel,
-        openAIApiKey,
-        openAIModel,
-        azureOpenAIApiKey,
-        azureOpenAIEndpoint,
-        azureOpenAIDeployment,
-        azureOpenAIApiVersion,
-        onToolResult: (toolCall) => {
-          const serialized = JSON.parse(JSON.stringify(toolCall)) as Record<string, unknown>
-          replayStore.record(sessionId, "tool_call", { toolCall: serialized })
-          send({ type: "tool_result", toolCall: serialized })
+        providerSettings,
+        cloudinaryCloudName: settings.cloudinaryCloudName,
+        cloudinaryApiKey: settings.cloudinaryApiKey,
+        cloudinaryApiSecret: settings.cloudinaryApiSecret,
+        origin: req.headers.get("origin") ?? undefined,
+        requestedMode: resolvedMode,
+        requestedToolPolicy: toolPolicy,
+        responseSchema: parsed.data.responseSchema ?? null,
+        onWarning: async (warning) => {
+          await replayStore.record(sessionId, "assistant_message", { warning })
+          send({ version: 2, type: "warning", warning })
         },
-        onChunk: (chunk) => {
-          replayStore.record(sessionId, "message_chunk", {
+        onToolStart: async (toolCall) => {
+          send({ version: 2, type: "status", phase: "running_tools" })
+          await replayStore.record(sessionId, "tool_call", { toolCall })
+          send({ version: 2, type: "tool_started", toolCall })
+        },
+        onToolResult: async (toolCall) => {
+          const serialized = JSON.parse(JSON.stringify(toolCall)) as Record<string, unknown>
+          await replayStore.record(sessionId, "tool_result", { toolCall: serialized })
+          send({
+            version: 2,
+            type: "tool_finished",
+            toolCall: serialized as unknown as ToolCall,
+          })
+        },
+        onChunk: async (chunk) => {
+          await replayStore.record(sessionId, "message_chunk", {
             messageId: streamingMessageId,
             content: chunk,
           })
-          send({ type: "message_chunk", messageId: streamingMessageId, content: chunk })
+          send({
+            version: 2,
+            type: "assistant_delta",
+            messageId: streamingMessageId,
+            content: chunk,
+          })
         },
       })
 
@@ -130,20 +137,28 @@ export async function POST(req: Request) {
         toolCalls: agentResult.toolCalls,
         metadata: {
           tokens: agentResult.usageTokens,
-          agentType: agentType,
+          agentType: agentResult.mode,
+          model: agentResult.model,
         },
         sessionId,
         timestamp: new Date().toISOString(),
       }
-      replayStore.record(sessionId, "assistant_message", { message: assistantMessage })
-      send({ type: "message_complete", message: assistantMessage, tempId: streamingMessageId })
-    } catch (err) {
-      const error = err instanceof Error ? err.message : "Failed to generate response"
-      replayStore.record(sessionId, "assistant_message", { error })
-      send({ type: "error", error })
+
+      await sessionStore.saveMessage(sessionId, assistantMessage)
+      await replayStore.record(sessionId, "assistant_message", { message: assistantMessage })
+      send({
+        version: 2,
+        type: "assistant_final",
+        message: assistantMessage,
+        tempId: streamingMessageId,
+      })
+      send({ version: 2, type: "status", phase: "completed" })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to generate response"
+      await replayStore.record(sessionId, "assistant_message", { error: message })
+      send({ version: 2, type: "error", error: message })
     } finally {
-      send({ type: "assistant_thinking", value: false })
-      replayStore.record(sessionId, "assistant_thinking", { value: false })
+      await replayStore.record(sessionId, "assistant_thinking", { value: false })
     }
   })
 

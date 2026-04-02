@@ -1,3 +1,4 @@
+import { PuppeteerBlocker } from "@ghostery/adblocker-puppeteer"
 import { tool } from "@langchain/core/tools"
 import { Readability } from "@mozilla/readability"
 import { spawn } from "child_process"
@@ -9,7 +10,6 @@ import os from "os"
 import path from "path"
 import type { Browser, Page } from "puppeteer"
 import puppeteer from "puppeteer-extra"
-import AdblockerPlugin from "puppeteer-extra-plugin-adblocker"
 import RecaptchaPlugin from "puppeteer-extra-plugin-recaptcha"
 import StealthPlugin from "puppeteer-extra-plugin-stealth"
 import TurndownService from "turndown"
@@ -21,8 +21,8 @@ const turndown = new TurndownService({ headingStyle: "atx" })
 
 let browserPromise: Promise<Browser> | null = null
 let stealthInitialized = false
-let adblockInitialized = false
 let recaptchaInitialized = false
+let adblockerPromise: Promise<PuppeteerBlocker | null> | null = null
 
 function ensureStealthPlugin() {
   if (stealthInitialized) return
@@ -37,17 +37,14 @@ function ensureStealthPlugin() {
   }
 }
 
-function ensureAdblockPlugin() {
-  if (adblockInitialized) return
-  adblockInitialized = true
-  try {
-    puppeteer.use(AdblockerPlugin({ blockTrackers: true }))
-  } catch (err) {
-    console.warn(
-      "Failed to initialize puppeteer-extra-plugin-adblocker, continuing without adblock.",
-      err
-    )
+function getAdblocker() {
+  if (!adblockerPromise) {
+    adblockerPromise = PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch).catch((err) => {
+      console.warn("Failed to initialize Ghostery adblocker, continuing without adblock.", err)
+      return null
+    })
   }
+  return adblockerPromise
 }
 
 function ensureRecaptchaPlugin() {
@@ -73,7 +70,6 @@ function ensureRecaptchaPlugin() {
 async function getBrowser() {
   if (!browserPromise) {
     ensureStealthPlugin()
-    ensureAdblockPlugin()
     ensureRecaptchaPlugin()
     browserPromise = puppeteer.launch({
       headless: true,
@@ -87,6 +83,10 @@ async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
   const browser = await getBrowser()
   const page = await browser.newPage()
   try {
+    const adblocker = await getAdblocker()
+    if (adblocker) {
+      await adblocker.enableBlockingInPage(page)
+    }
     return await fn(page)
   } finally {
     await page.close()
@@ -2327,10 +2327,10 @@ export const executeCommandTool = tool(
   }
 )
 
-export function createToolset(context?: { headers?: HeadersInit }) {
+export function createToolset(context?: { headers?: HeadersInit; allowedToolNames?: string[] }) {
   const generateLatexPdfTool = createGenerateLatexPdfTool(context)
   const markdownToPdfTool = createMarkdownToPdfTool(context)
-  return [
+  const tools = [
     // Content/API tools
     webSearchTool,
     visitUrlTool,
@@ -2405,6 +2405,11 @@ export function createToolset(context?: { headers?: HeadersInit }) {
     gitBranchesTool,
     gitDiffSummaryTool,
   ]
+  if (!context?.allowedToolNames || context.allowedToolNames.length === 0) {
+    return tools
+  }
+  const allowed = new Set(context.allowedToolNames)
+  return tools.filter((tool) => allowed.has(tool.name))
 }
 
 export const toolset = createToolset()
