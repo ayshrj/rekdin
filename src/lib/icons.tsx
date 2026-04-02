@@ -716,6 +716,13 @@ const Rekdin: React.FC<IconProps> = (props) => (
   </IconBase>
 )
 
+const Torus: React.FC<IconProps> = (props) => (
+  <IconBase fill="currentColor" {...props}>
+    <ellipse cx="12" cy="11" rx="3" ry="2" />
+    <ellipse cx="12" cy="12.5" rx="10" ry="8.5" />
+  </IconBase>
+)
+
 export {
   ArrowDown,
   ArrowDown as ArrowDownIcon,
@@ -854,6 +861,8 @@ export {
   Sun as SunIcon,
   Target,
   Target as TargetIcon,
+  Torus,
+  Torus as TorusIcon,
   Trash,
   Trash as TrashIcon,
   Type,
