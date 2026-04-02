@@ -2,6 +2,7 @@ import * as React from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
+import { Image } from "@/components/ui/image"
 import { cn } from "@/lib/utils"
 
 export function Markdown({ children, className }: { children: string; className?: string }) {
@@ -21,6 +22,22 @@ export function Markdown({ children, className }: { children: string; className?
               {...props}
             />
           ),
+          img: ({ className: imgClassName, alt, src, width, height, ...props }) =>
+            typeof src === "string" && src.length > 0 ? (
+              <Image
+                className={cn(
+                  "border-border my-3 h-auto max-w-full rounded-lg border shadow-sm",
+                  imgClassName
+                )}
+                alt={alt ?? ""}
+                src={src}
+                width={typeof width === "number" ? width : undefined}
+                height={typeof height === "number" ? height : undefined}
+                unoptimized
+                loading="lazy"
+                {...props}
+              />
+            ) : null,
           ul: ({ className: ulClassName, ...props }) => (
             <ul className={cn("my-2 list-disc pl-5", ulClassName)} {...props} />
           ),

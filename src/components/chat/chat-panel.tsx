@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { toast } from "sonner"
 
 import { toolLabels } from "@/components/tools/tool-labels"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useChat } from "@/contexts/chat-context"
 import { ClipboardDocumentList, Cog8Tooth, Sparkles } from "@/lib/icons"
+import { WORKFLOW_PRESETS } from "@/lib/workflows"
 
 import { ChatInput } from "./chat-input"
 import { ChatMessage } from "./chat-message"
@@ -163,6 +165,48 @@ export function ChatPanel() {
     ],
     []
   )
+  const launchWorkflow = React.useCallback(
+    async (workflowId: string, prompt?: string) => {
+      const workflow = WORKFLOW_PRESETS.find((entry) => entry.id === workflowId)
+      if (!workflow) return
+      await sendMessage(prompt ?? workflow.prompt, [], {
+        agentType: workflow.mode,
+        responseSchema: workflow.responseSchema ?? null,
+        workflowId: workflow.id,
+      })
+    },
+    [sendMessage]
+  )
+  const queueWorkflow = React.useCallback(
+    async (workflowId: string, prompt?: string) => {
+      const workflow = WORKFLOW_PRESETS.find((entry) => entry.id === workflowId)
+      if (!workflow) return
+      if (!currentSessionId) {
+        toast.error("Open a session before queueing a background workflow.")
+        return
+      }
+
+      const response = await fetch("/api/background", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: currentSessionId,
+          message: prompt ?? workflow.prompt,
+          agentMode: workflow.mode,
+          workflowId: workflow.id,
+          responseSchema: workflow.responseSchema ?? null,
+        }),
+      }).catch(() => null)
+
+      if (!response?.ok) {
+        toast.error("Unable to queue the background workflow.")
+        return
+      }
+
+      toast.success(`${workflow.title} queued in the background.`)
+    },
+    [currentSessionId]
+  )
 
   if (!hydrated) {
     return (
@@ -193,26 +237,12 @@ export function ChatPanel() {
           </Badge>
         </div>
       </div>
-      <style>{`
-        /* Radix ScrollArea adds: <div style="min-width:100%; display:table"> inside the viewport.
-          Override it so content can shrink and doesn't create hidden horizontal overflow. */
-        .no-scroll-min-width [data-radix-scroll-area-viewport] > div {
-          min-width: 0 !important;
-          display: block !important;
-          width: 100%;
-        }
-        /* Prevent scroll chaining to the page (so wheel/touch stays inside chat). */
-        .no-scroll-min-width [data-radix-scroll-area-viewport] {
-          overscroll-behavior: contain;
-        }
-      `}</style>
-
       <ScrollArea
         className="no-scroll-min-width h-90 flex-1 px-5 py-4"
         onWheelCapture={(event) => event.stopPropagation()}
         onTouchMoveCapture={(event) => event.stopPropagation()}
       >
-        <div className="flex flex-col items-start gap-3">
+        <div className="flex w-full flex-col gap-3">
           {latestChunk ? (
             <div className="bg-background/80 sticky top-0 z-10 w-full rounded-xl border px-3 py-2 backdrop-blur">
               <p className="text-muted-foreground text-[11px] uppercase">Latest chunk</p>
@@ -233,6 +263,10 @@ export function ChatPanel() {
               <p className="text-muted-foreground mb-6 text-xs">
                 Tip: be specific about the output format (JSON/table/bullets) and constraints.
               </p>
+              <p className="text-muted-foreground mb-6 text-xs">
+                Workspace memory: add a `REKDIN.md` file in the workspace root to provide persistent
+                project instructions.
+              </p>
 
               {missingApiKeyMessage ? (
                 <div className="bg-muted/40 border-border mb-4 rounded-xl border px-4 py-3 text-left text-sm">
@@ -251,6 +285,35 @@ export function ChatPanel() {
               ) : null}
 
               <div className="bg-muted/30 border-border rounded-xl border p-4 text-left">
+                <div className="mb-4">
+                  <p className="text-foreground text-sm font-semibold">Workflow presets</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {WORKFLOW_PRESETS.map((workflow) => (
+                      <div key={workflow.id} className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => void launchWorkflow(workflow.id)}
+                          disabled={isLoading || isThinking}
+                        >
+                          {workflow.title}
+                        </Button>
+                        {workflow.supportsBackground ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void queueWorkflow(workflow.id)}
+                            disabled={isLoading || isThinking || !currentSessionId}
+                          >
+                            Queue
+                          </Button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-foreground text-sm font-semibold">Available tools</p>
@@ -278,7 +341,7 @@ export function ChatPanel() {
               </div>
 
               <div className="mt-4 grid gap-3 text-left md:grid-cols-3">
-                {examplePrompts.map((item) => (
+                {examplePrompts.map((item, index) => (
                   <div key={item.title} className="bg-muted/30 border-border rounded-xl border p-4">
                     <p className="text-foreground mb-2 text-sm font-semibold">{item.title}</p>
                     <pre className="text-muted-foreground mb-3 text-xs wrap-break-word whitespace-pre-wrap">
@@ -289,16 +352,15 @@ export function ChatPanel() {
                       size="sm"
                       variant="secondary"
                       className="w-full"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(item.prompt)
-                        } catch {
-                          // ignore; user can still select/copy manually
-                        }
-                      }}
+                      onClick={() =>
+                        void launchWorkflow(
+                          WORKFLOW_PRESETS[index]?.id ?? "workspace-edit",
+                          item.prompt
+                        )
+                      }
                     >
                       <ClipboardDocumentList className="mr-2 h-4 w-4" />
-                      Copy prompt
+                      Run preset
                     </Button>
                   </div>
                 ))}
@@ -314,6 +376,34 @@ export function ChatPanel() {
           <div ref={scrollRef} />
         </div>
       </ScrollArea>
+      <div className="border-t px-5 pt-3">
+        <div className="flex flex-wrap gap-2">
+          {WORKFLOW_PRESETS.map((workflow) => (
+            <div key={workflow.id} className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void launchWorkflow(workflow.id)}
+                disabled={isLoading || isThinking}
+              >
+                {workflow.title}
+              </Button>
+              {workflow.supportsBackground ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void queueWorkflow(workflow.id)}
+                  disabled={isLoading || isThinking || !currentSessionId}
+                >
+                  Queue
+                </Button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
       <div className="px-5 py-4">
         <ChatInput onSend={sendMessage} isLoading={isLoading || isThinking} disabled={false} />
       </div>

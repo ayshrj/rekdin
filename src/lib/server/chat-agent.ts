@@ -14,6 +14,7 @@ import { OPENROUTER_API_KEY, OPENROUTER_FALLBACK_MODEL, OPENROUTER_MODEL } from 
 import { ChatMessage, ToolCall } from "@/types/chat"
 import { LlmProvider, ProviderSettings } from "@/types/runtime"
 
+import { runWithToolExecutionContext } from "./tool-execution-context"
 import { createToolset } from "./tools"
 
 type AgentEventHandlers = {
@@ -217,6 +218,7 @@ function formatUserContent(content: string, attachments?: string[]) {
 }
 
 export interface AgentRunOptions extends AgentEventHandlers {
+  sessionId?: string
   contextMessages: ChatMessage[]
   systemPrompt?: string
   providerSettings: ProviderSettings
@@ -230,6 +232,7 @@ export interface AgentRunResult {
   toolCalls: ToolCall[]
   usageTokens: number
   model: string
+  retryCount: number
 }
 
 function isRetryableModelError(error: unknown) {
@@ -313,6 +316,7 @@ async function streamModelMessage(
 }
 
 export async function runAgent({
+  sessionId,
   contextMessages,
   systemPrompt,
   providerSettings,
@@ -324,142 +328,149 @@ export async function runAgent({
   onChunk,
   onWarning,
 }: AgentRunOptions): Promise<AgentRunResult> {
-  const tools: StructuredToolInterface[] = createToolset({
-    headers: toolHeaders,
-    allowedToolNames,
-  })
-  const providerId = normalizeProvider(providerSettings.provider)
-  let modelId =
-    providerId === "openrouter"
-      ? (providerSettings.openRouterModel ?? OPENROUTER_MODEL)
-      : providerId === "openai"
-        ? (providerSettings.openAIModel ?? "")
-        : (providerSettings.azureOpenAIDeployment ?? "")
+  return runWithToolExecutionContext({ sessionId }, async () => {
+    const tools: StructuredToolInterface[] = createToolset({
+      headers: toolHeaders,
+      allowedToolNames,
+    })
+    const providerId = normalizeProvider(providerSettings.provider)
+    let modelId =
+      providerId === "openrouter"
+        ? (providerSettings.openRouterModel ?? OPENROUTER_MODEL)
+        : providerId === "openai"
+          ? (providerSettings.openAIModel ?? "")
+          : (providerSettings.azureOpenAIDeployment ?? "")
 
-  let llm = createModel({
-    provider: providerId,
-    origin,
-    modelId,
-    openRouterApiKey: providerSettings.openRouterApiKey,
-    openAIApiKey: providerSettings.openAIApiKey,
-    azureOpenAIApiKey: providerSettings.azureOpenAIApiKey,
-    azureOpenAIEndpoint: providerSettings.azureOpenAIEndpoint,
-    azureOpenAIApiVersion: providerSettings.azureOpenAIApiVersion,
-    azureOpenAIDeployment: providerSettings.azureOpenAIDeployment,
-  })
-  let llmWithTools = llm.bindTools(tools)
-  const history: BaseMessage[] = [
-    ...(systemPrompt ? [new SystemMessage(systemPrompt)] : []),
-    ...contextMessages.map(toLangChainMessage),
-  ]
+    let llm = createModel({
+      provider: providerId,
+      origin,
+      modelId,
+      openRouterApiKey: providerSettings.openRouterApiKey,
+      openAIApiKey: providerSettings.openAIApiKey,
+      azureOpenAIApiKey: providerSettings.azureOpenAIApiKey,
+      azureOpenAIEndpoint: providerSettings.azureOpenAIEndpoint,
+      azureOpenAIApiVersion: providerSettings.azureOpenAIApiVersion,
+      azureOpenAIDeployment: providerSettings.azureOpenAIDeployment,
+    })
+    let llmWithTools = llm.bindTools(tools)
+    const history: BaseMessage[] = [
+      ...(systemPrompt ? [new SystemMessage(systemPrompt)] : []),
+      ...contextMessages.map(toLangChainMessage),
+    ]
 
-  const executedTools: ToolCall[] = []
-  let iterations = 0
-  let finalMessage: AIMessageChunk | null = null
+    const executedTools: ToolCall[] = []
+    let iterations = 0
+    let finalMessage: AIMessageChunk | null = null
+    let retryCount = 0
 
-  while (iterations < 8) {
-    iterations += 1
-    let aiMessage: AIMessageChunk
-    try {
-      aiMessage = await streamModelMessage(llmWithTools, history, onChunk)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : ""
-      const lowered = typeof message === "string" ? message.toLowerCase() : ""
-      const shouldFallback = Boolean(
-        providerId === "openrouter" &&
-        OPENROUTER_FALLBACK_MODEL &&
-        modelId !== OPENROUTER_FALLBACK_MODEL &&
-        (lowered.includes("support tool use") ||
-          lowered.includes("model_not_found") ||
-          lowered.includes("model not found"))
-      )
-      if (shouldFallback) {
-        modelId = OPENROUTER_FALLBACK_MODEL
-        await onWarning?.(`Primary model could not use tools; falling back to ${modelId}.`)
-        llm = createModel({
-          provider: providerId,
-          origin,
-          modelId,
-          openRouterApiKey: providerSettings.openRouterApiKey,
-          openAIApiKey: providerSettings.openAIApiKey,
-          azureOpenAIApiKey: providerSettings.azureOpenAIApiKey,
-          azureOpenAIEndpoint: providerSettings.azureOpenAIEndpoint,
-          azureOpenAIApiVersion: providerSettings.azureOpenAIApiVersion,
-          azureOpenAIDeployment: providerSettings.azureOpenAIDeployment,
-        })
-        llmWithTools = llm.bindTools(tools)
-        iterations -= 1
-        continue
-      }
-      if (isRetryableModelError(err) && iterations < 8) {
-        await onWarning?.("Transient model error encountered; retrying the request.")
-        continue
-      }
-      throw err
-    }
-    if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
-      history.push(aiMessage)
-      for (const call of aiMessage.tool_calls) {
-        const tool = tools.find((t) => t.name === call.name)
-        if (!tool) continue
-        const started = Date.now()
-        const toolCallId = call.id ?? `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-        await onToolStart?.({
-          id: toolCallId,
-          name: call.name,
-          arguments: call.args,
-          timestamp: new Date().toISOString(),
-          status: "running",
-        })
-        let status: ToolCall["status"] = "success"
-        let result: unknown
-        let error: string | undefined
-        try {
-          result = await tool.invoke(call.args)
-        } catch (err) {
-          status = "error"
-          error = err instanceof Error ? err.message : "Unknown error"
-          result = { error }
-        }
-        const record: ToolCall = {
-          id: toolCallId,
-          name: call.name,
-          arguments: call.args,
-          result:
-            typeof result === "object" ? (result as Record<string, unknown>) : { output: result },
-          status,
-          error,
-          timestamp: new Date().toISOString(),
-          duration: Date.now() - started,
-        }
-        executedTools.push(record)
-        await onToolResult?.(record)
-        history.push(
-          new ToolMessage({
-            tool_call_id: record.id,
-            content: toolMessageContent(record.result ?? record.error ?? ""),
-          })
+    while (iterations < 8) {
+      iterations += 1
+      let aiMessage: AIMessageChunk
+      try {
+        aiMessage = await streamModelMessage(llmWithTools, history, onChunk)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : ""
+        const lowered = typeof message === "string" ? message.toLowerCase() : ""
+        const shouldFallback = Boolean(
+          providerId === "openrouter" &&
+          OPENROUTER_FALLBACK_MODEL &&
+          modelId !== OPENROUTER_FALLBACK_MODEL &&
+          (lowered.includes("support tool use") ||
+            lowered.includes("model_not_found") ||
+            lowered.includes("model not found"))
         )
+        if (shouldFallback) {
+          modelId = OPENROUTER_FALLBACK_MODEL
+          retryCount += 1
+          await onWarning?.(`Primary model could not use tools; falling back to ${modelId}.`)
+          llm = createModel({
+            provider: providerId,
+            origin,
+            modelId,
+            openRouterApiKey: providerSettings.openRouterApiKey,
+            openAIApiKey: providerSettings.openAIApiKey,
+            azureOpenAIApiKey: providerSettings.azureOpenAIApiKey,
+            azureOpenAIEndpoint: providerSettings.azureOpenAIEndpoint,
+            azureOpenAIApiVersion: providerSettings.azureOpenAIApiVersion,
+            azureOpenAIDeployment: providerSettings.azureOpenAIDeployment,
+          })
+          llmWithTools = llm.bindTools(tools)
+          iterations -= 1
+          continue
+        }
+        if (isRetryableModelError(err) && iterations < 8) {
+          retryCount += 1
+          await onWarning?.("Transient model error encountered; retrying the request.")
+          continue
+        }
+        throw err
       }
-      continue
+      if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
+        history.push(aiMessage)
+        for (const call of aiMessage.tool_calls) {
+          const tool = tools.find((t) => t.name === call.name)
+          if (!tool) continue
+          const started = Date.now()
+          const toolCallId =
+            call.id ?? `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+          await onToolStart?.({
+            id: toolCallId,
+            name: call.name,
+            arguments: call.args,
+            timestamp: new Date().toISOString(),
+            status: "running",
+          })
+          let status: ToolCall["status"] = "success"
+          let result: unknown
+          let error: string | undefined
+          try {
+            result = await tool.invoke(call.args)
+          } catch (err) {
+            status = "error"
+            error = err instanceof Error ? err.message : "Unknown error"
+            result = { error }
+          }
+          const record: ToolCall = {
+            id: toolCallId,
+            name: call.name,
+            arguments: call.args,
+            result:
+              typeof result === "object" ? (result as Record<string, unknown>) : { output: result },
+            status,
+            error,
+            timestamp: new Date().toISOString(),
+            duration: Date.now() - started,
+          }
+          executedTools.push(record)
+          await onToolResult?.(record)
+          history.push(
+            new ToolMessage({
+              tool_call_id: record.id,
+              content: toolMessageContent(record.result ?? record.error ?? ""),
+            })
+          )
+        }
+        continue
+      }
+      finalMessage = aiMessage
+      break
     }
-    finalMessage = aiMessage
-    break
-  }
 
-  if (!finalMessage) {
-    throw new Error("Agent failed to produce a response")
-  }
+    if (!finalMessage) {
+      throw new Error("Agent failed to produce a response")
+    }
 
-  const text =
-    typeof finalMessage.content === "string"
-      ? finalMessage.content
-      : JSON.stringify(finalMessage.content)
+    const text =
+      typeof finalMessage.content === "string"
+        ? finalMessage.content
+        : JSON.stringify(finalMessage.content)
 
-  return {
-    reply: text,
-    toolCalls: executedTools,
-    usageTokens: finalMessage.usage_metadata?.total_tokens ?? 0,
-    model: modelId,
-  }
+    return {
+      reply: text,
+      toolCalls: executedTools,
+      usageTokens: finalMessage.usage_metadata?.total_tokens ?? 0,
+      model: modelId,
+      retryCount,
+    }
+  })
 }

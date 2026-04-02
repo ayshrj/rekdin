@@ -154,3 +154,18 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  /* Radix ScrollArea inserts <div style="min-width:100%; display:table"> inside the viewport.
+     Override it so content can shrink and doesn't create hidden horizontal overflow. */
+  .no-scroll-min-width [data-radix-scroll-area-viewport] > div {
+    min-width: 0 !important;
+    display: block !important;
+    width: 100%;
+  }
+
+  /* Prevent scroll chaining to the page when wheeling inside a scroll area. */
+  .no-scroll-min-width [data-radix-scroll-area-viewport] {
+    overscroll-behavior: contain;
+  }
+}

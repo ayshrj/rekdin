@@ -7,6 +7,7 @@ import { toolLabels } from "@/components/tools/tool-labels"
 import { Badge } from "@/components/ui/badge"
 import { Check, ClipboardDocumentList as Copy, RekdinIcon, User } from "@/lib/icons"
 import { cn } from "@/lib/utils"
+import { parseStructuredWorkflowContent } from "@/lib/workflows"
 import { ChatMessage as ChatMessageType } from "@/types/chat"
 
 interface ChatMessageProps {
@@ -17,6 +18,9 @@ interface ChatMessageProps {
 export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
   const isUser = message.role === "user"
   const [copied, setCopied] = useState(false)
+  const workflowId = message.metadata?.workflowId
+  const structuredContent =
+    !isUser && workflowId ? parseStructuredWorkflowContent(message.content || "") : null
 
   const copyToClipboard = async () => {
     try {
@@ -28,8 +32,188 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
     }
   }
 
+  const renderStructured = () => {
+    if (!structuredContent || !workflowId) return null
+
+    const asArray = (value: unknown) => (Array.isArray(value) ? value : [])
+
+    if (workflowId === "research-plan") {
+      return (
+        <div className="space-y-3 text-sm">
+          <div>
+            <p className="text-muted-foreground text-xs uppercase">Objective</p>
+            <p>
+              {String(structuredContent.objective ?? structuredContent.topic ?? "Research plan")}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-xs uppercase">Questions</p>
+            <ul className="list-disc space-y-1 pl-5">
+              {asArray(structuredContent.questions).map((item, index) => (
+                <li key={`q-${index}`}>{String(item)}</li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-xs uppercase">Search Queries</p>
+            <div className="flex flex-wrap gap-2">
+              {asArray(structuredContent.searchQueries).map((item, index) => (
+                <Badge key={`sq-${index}`} variant="secondary">
+                  {String(item)}
+                </Badge>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-xs uppercase">Deliverables</p>
+            <ul className="list-disc space-y-1 pl-5">
+              {asArray(structuredContent.deliverables).map((item, index) => (
+                <li key={`d-${index}`}>{String(item)}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )
+    }
+
+    if (workflowId === "research-report") {
+      const findings = asArray(structuredContent.keyFindings)
+      const sources = asArray(structuredContent.sources)
+      return (
+        <div className="space-y-3 text-sm">
+          <div>
+            <p className="text-base font-semibold">
+              {String(structuredContent.title ?? "Research Report")}
+            </p>
+            <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
+              {String(structuredContent.executiveSummary ?? "")}
+            </p>
+          </div>
+          {findings.length > 0 ? (
+            <div>
+              <p className="text-muted-foreground text-xs uppercase">Key Findings</p>
+              <div className="mt-2 space-y-2">
+                {findings.map((item, index) => {
+                  const finding = item as Record<string, unknown>
+                  return (
+                    <div key={`finding-${index}`} className="rounded-xl border p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium">
+                          {String(finding.claim ?? `Finding ${index + 1}`)}
+                        </p>
+                        <Badge variant="outline">{String(finding.confidence ?? "unknown")}</Badge>
+                      </div>
+                      <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
+                        {String(finding.evidence ?? "")}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
+          {sources.length > 0 ? (
+            <div>
+              <p className="text-muted-foreground text-xs uppercase">Sources</p>
+              <div className="mt-2 space-y-2">
+                {sources.map((item, index) => {
+                  const source = item as Record<string, unknown>
+                  const url = String(source.url ?? "")
+                  return (
+                    <div key={`source-${index}`} className="rounded-xl border p-3">
+                      <a
+                        className="font-medium underline underline-offset-4"
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {String(source.title ?? url)}
+                      </a>
+                      <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
+                        {String(source.whyItMatters ?? "")}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+
+    if (workflowId === "repo-audit" || workflowId === "diff-review") {
+      const findings = asArray(
+        workflowId === "repo-audit" ? structuredContent.risks : structuredContent.findings
+      )
+      const nextSteps = asArray(
+        workflowId === "repo-audit"
+          ? structuredContent.recommendedNextSteps
+          : structuredContent.validation
+      )
+      return (
+        <div className="space-y-3 text-sm">
+          <p className="whitespace-pre-wrap">
+            {String(structuredContent.summary ?? "Structured workflow result")}
+          </p>
+          {asArray(structuredContent.entryPoints).length > 0 ? (
+            <div>
+              <p className="text-muted-foreground text-xs uppercase">Entry Points</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {asArray(structuredContent.entryPoints).map((item, index) => (
+                  <Badge key={`ep-${index}`} variant="secondary">
+                    {String(item)}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {findings.length > 0 ? (
+            <div>
+              <p className="text-muted-foreground text-xs uppercase">Findings</p>
+              <div className="mt-2 space-y-2">
+                {findings.map((item, index) => {
+                  const finding = item as Record<string, unknown>
+                  return (
+                    <div key={`review-${index}`} className="rounded-xl border p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium">
+                          {String(finding.title ?? `Item ${index + 1}`)}
+                        </p>
+                        <Badge variant="outline">
+                          {String(finding.severity ?? finding.priority ?? "info")}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
+                        {String(finding.reason ?? finding.detail ?? "")}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
+          {nextSteps.length > 0 ? (
+            <div>
+              <p className="text-muted-foreground text-xs uppercase">
+                {workflowId === "repo-audit" ? "Recommended Next Steps" : "Validation"}
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {nextSteps.map((item, index) => (
+                  <li key={`step-${index}`}>{String(item)}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+
+    return null
+  }
+
   return (
-    <div className={cn("group relative flex flex-col gap-2", isUser && "items-end self-end")}>
+    <div className={cn("group relative flex w-full flex-col gap-2", isUser && "items-end")}>
       {!isUser && (
         <button
           onClick={copyToClipboard}
@@ -59,25 +243,27 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
       ) : null}
       <div
         className={cn(
-          "w-fit max-w-[calc(100%-1.5rem)] overflow-hidden rounded-2xl border px-4 py-3 shadow-sm transition",
-          isUser ? "bg-primary text-primary-foreground self-end" : "bg-card self-start"
+          "max-w-[85%] overflow-hidden rounded-2xl border px-4 py-3 shadow-sm transition",
+          isUser ? "bg-primary text-primary-foreground ml-auto" : "bg-card"
         )}
       >
         <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden">
           {isUser ? (
             <p className="text-left text-sm wrap-anywhere whitespace-pre-wrap">{message.content}</p>
           ) : (
-            <Markdown className="max-w-none text-sm wrap-anywhere">
-              {message.content || "_(no response)_"}
-            </Markdown>
+            (renderStructured() ?? (
+              <Markdown className="max-w-none text-sm wrap-anywhere">
+                {message.content || "_(no response)_"}
+              </Markdown>
+            ))
           )}
 
           {message.attachments && message.attachments.length > 0 ? (
             <div className={cn("flex flex-wrap gap-2", isUser && "justify-end")}>
               {message.attachments.map((file) => (
-                <Badge key={file} variant="secondary">
-                  {file}
-                </Badge>
+                <a key={file} href={file} target="_blank" rel="noreferrer">
+                  <Badge variant="secondary">{file}</Badge>
+                </a>
               ))}
             </div>
           ) : null}

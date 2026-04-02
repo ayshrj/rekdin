@@ -37,6 +37,8 @@ export interface ChatMessage {
     thinking?: boolean
     agentType?: string
     model?: string
+    workflowId?: string
+    backgroundJobId?: string
   }
 }
 

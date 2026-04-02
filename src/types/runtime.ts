@@ -33,6 +33,26 @@ export interface ProviderSettings {
   azureOpenAIDeployment: string
 }
 
+export interface ArtifactRef {
+  id: string
+  kind: "image" | "pdf" | "archive" | "file" | "json" | "text"
+  filename: string
+  mimeType: string
+  url: string
+  size: number
+}
+
+export interface WorkflowPreset {
+  id: string
+  title: string
+  description: string
+  prompt: string
+  mode: AgentMode
+  responseSchema?: Record<string, unknown> | null
+  category?: "research" | "browser" | "workspace" | "document" | "code"
+  supportsBackground?: boolean
+}
+
 export interface ChatTurnRequest {
   sessionId: string
   message: string
@@ -41,6 +61,43 @@ export interface ChatTurnRequest {
   agentMode?: AgentMode
   toolPolicy?: ToolPolicyProfile
   responseSchema?: Record<string, unknown> | null
+}
+
+export interface TurnTrace {
+  id: string
+  sessionId: string
+  startedAt: string
+  completedAt: string
+  mode: AgentMode
+  toolPolicy: ToolPolicyProfile
+  provider: LlmProvider
+  model: string
+  warnings: string[]
+  toolCount: number
+  totalToolDurationMs?: number
+  responseSchemaApplied: boolean
+  retryCount: number
+  success: boolean
+  workflowId?: string
+  error?: string
+}
+
+export type BackgroundJobStatus = "queued" | "running" | "completed" | "failed"
+
+export interface BackgroundJob {
+  id: string
+  sessionId: string
+  prompt: string
+  mode: AgentMode
+  toolPolicy: ToolPolicyProfile
+  workflowId?: string
+  responseSchema?: Record<string, unknown> | null
+  status: BackgroundJobStatus
+  createdAt: string
+  startedAt?: string
+  completedAt?: string
+  resultMessageId?: string
+  error?: string
 }
 
 type BaseServerEvent = {

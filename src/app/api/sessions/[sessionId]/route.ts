@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
+import { getBrowserSessionManager } from "@/lib/server/browser-session-manager"
 import { getReplayStore } from "@/lib/server/replay-store"
 import { getSessionStore } from "@/lib/server/session-store"
 
@@ -28,6 +29,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ sessionId: 
   const { sessionId } = await ctx.params
   const deleted = await getSessionStore().deleteSession(sessionId)
   await getReplayStore().deleteReplay(sessionId)
+  await getBrowserSessionManager().reset(sessionId)
   if (!deleted) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 })
   }

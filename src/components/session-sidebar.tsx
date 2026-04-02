@@ -21,7 +21,13 @@ import { useChat } from "@/contexts/chat-context"
 import { Loader, Plus, Trash } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
-export function SessionSidebar() {
+export function SessionSidebar({
+  className,
+  onSessionOpen,
+}: {
+  className?: string
+  onSessionOpen?: () => void
+}) {
   const {
     sessions,
     currentSessionId,
@@ -39,9 +45,13 @@ export function SessionSidebar() {
     setHydrated(true)
   }, [])
 
-  const filtered = sessions.filter((session) =>
-    session.title.toLowerCase().includes(query.toLowerCase())
-  )
+  const normalizedQuery = query.toLowerCase()
+  const filtered = sessions.filter((session) => {
+    if (session.title.toLowerCase().includes(normalizedQuery)) return true
+    return session.messages?.some((message) =>
+      message.content.toLowerCase().includes(normalizedQuery)
+    )
+  })
 
   const handleDelete = React.useCallback(
     async (sessionId: string) => {
@@ -52,7 +62,7 @@ export function SessionSidebar() {
   )
 
   return (
-    <div className="bg-card flex h-full flex-col rounded-2xl border shadow-sm">
+    <div className={cn("bg-card flex h-full flex-col rounded-2xl border shadow-sm", className)}>
       <div className="border-b px-4 py-3">
         <div className="flex items-center justify-between">
           <div>
@@ -60,7 +70,10 @@ export function SessionSidebar() {
             <p className="text-base font-semibold">Recent conversations</p>
           </div>
           <Button
-            onClick={() => void createSession()}
+            onClick={async () => {
+              await createSession()
+              onSessionOpen?.()
+            }}
             size="icon"
             className="rounded-full"
             disabled={isLoading}
@@ -93,11 +106,17 @@ export function SessionSidebar() {
                 key={session.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => void joinSession(session.id)}
+                onClick={async () => {
+                  await joinSession(session.id)
+                  onSessionOpen?.()
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault()
-                    void joinSession(session.id)
+                    void (async () => {
+                      await joinSession(session.id)
+                      onSessionOpen?.()
+                    })()
                   }
                 }}
                 className={cn(

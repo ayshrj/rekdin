@@ -22,9 +22,13 @@ export const PdfRenderer: React.FC<PdfRendererProps> = ({ part }) => {
   const [materializeError, setMaterializeError] = useState<string | null>(null)
 
   const result = part?.toolResult
-  const isSuccess = Boolean(result?.success && result?.pdfGenerated)
+  const isSuccess = Boolean(result?.success && result?.pdfGenerated && !result?.degraded)
+  const isDegraded = Boolean(result?.pdfGenerated && result?.degraded)
+  const isLegacyLatexEngineError = Boolean(
+    typeof result?.error === "string" && result.error.includes("No LaTeX engine found")
+  )
   const pdfFilename = result?.filename || "document"
-  const pdfUrl = result?.cloudinaryUrl || result?.dataUrl || ""
+  const pdfUrl = result?.artifactUrl || result?.cloudinaryUrl || result?.dataUrl || ""
   const hasPdfUrl = Boolean(pdfUrl)
 
   const needsMaterialization = useMemo(() => {
@@ -108,7 +112,11 @@ export const PdfRenderer: React.FC<PdfRendererProps> = ({ part }) => {
               <File className={`${isSuccess ? "text-tool-doc" : "text-destructive"}`} size={16} />
             </div>
             <div>
-              <h3 className="text-foreground text-sm font-semibold">LaTeX PDF Generation</h3>
+              <h3 className="text-foreground text-sm font-semibold">
+                {part.toolName === "markdown_to_pdf"
+                  ? "Document PDF Generation"
+                  : "LaTeX PDF Generation"}
+              </h3>
               <p className="text-muted-foreground text-xs wrap-anywhere">{pdfFilename}.pdf</p>
             </div>
           </div>
@@ -126,6 +134,11 @@ export const PdfRenderer: React.FC<PdfRendererProps> = ({ part }) => {
                 <Check size={12} />
                 <span>Success</span>
               </div>
+            ) : isDegraded ? (
+              <div className="bg-tool-json/10 text-tool-json flex items-center space-x-1 rounded-md px-2 py-1 text-xs font-medium">
+                <Check size={12} />
+                <span>Fallback PDF</span>
+              </div>
             ) : (
               <div className="bg-destructive/10 text-destructive flex items-center space-x-1 rounded-md px-2 py-1 text-xs font-medium">
                 <XMark size={12} />
@@ -136,8 +149,14 @@ export const PdfRenderer: React.FC<PdfRendererProps> = ({ part }) => {
         </div>
 
         <div className="space-y-4 p-4">
-          {isSuccess ? (
+          {isSuccess || isDegraded ? (
             <>
+              {isDegraded && result.error ? (
+                <div className="border-tool-json/30 bg-tool-json/10 rounded-lg border p-4">
+                  <h4 className="text-tool-json mb-2 text-sm font-semibold">Fallback Preview</h4>
+                  <p className="text-foreground text-sm whitespace-pre-wrap">{result.error}</p>
+                </div>
+              ) : null}
               <div className="flex flex-wrap items-center gap-3">
                 <motion.button
                   whileHover={{ scale: 1.02 }}
@@ -265,8 +284,14 @@ export const PdfRenderer: React.FC<PdfRendererProps> = ({ part }) => {
                     <strong>File:</strong> {pdfFilename}.pdf
                   </p>
                   <p>
-                    <strong>Status:</strong> PDF generated successfully
+                    <strong>Status:</strong>{" "}
+                    {isDegraded ? "Fallback PDF generated" : "PDF generated successfully"}
                   </p>
+                  {result.engine ? (
+                    <p>
+                      <strong>Renderer:</strong> {result.engine}
+                    </p>
+                  ) : null}
                   <p>
                     <strong>URL:</strong> <code>{pdfUrl}</code>
                   </p>
@@ -277,8 +302,16 @@ export const PdfRenderer: React.FC<PdfRendererProps> = ({ part }) => {
             <>
               <div className="border-destructive/30 bg-destructive/10 rounded-lg border p-4">
                 <h4 className="text-destructive mb-2 text-sm font-semibold">
-                  LaTeX Compilation Failed
+                  {isLegacyLatexEngineError
+                    ? "LaTeX Engine Unavailable"
+                    : "LaTeX Compilation Failed"}
                 </h4>
+                {isLegacyLatexEngineError ? (
+                  <p className="text-foreground mb-3 text-sm">
+                    This result came from an older run that stopped when no TeX engine was
+                    installed. New runs now fall back to a preview PDF instead of hard-failing.
+                  </p>
+                ) : null}
                 {result.error ? (
                   <div className="border-destructive/30 bg-destructive/10 text-destructive overflow-x-auto rounded border p-3 font-mono text-sm">
                     <pre className="whitespace-pre-wrap">{result.error}</pre>
