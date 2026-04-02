@@ -78,7 +78,7 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
           onKeyDown={handleKeyDown}
           placeholder="Ask Rekdin to research or run commands..."
           disabled={disabled || isLoading}
-          className="placeholder:text-muted-foreground/60 max-h-36 min-h-18 flex-1 resize-none border-0 bg-transparent p-1.5 text-sm focus-visible:ring-0 focus-visible:outline-none"
+          className="placeholder:text-muted-foreground/60 max-h-36 min-h-18 flex-1 resize-none border-0 bg-transparent p-1.5 text-base focus-visible:ring-0 focus-visible:outline-none sm:text-sm"
         />
         <Button
           onClick={() => void handleSend()}

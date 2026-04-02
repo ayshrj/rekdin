@@ -359,6 +359,7 @@ export function OpenRouterSettings({
         </Button>
       </DialogTrigger>
       <DialogShell
+        className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] sm:w-auto sm:max-w-2xl"
         footer={
           <>
             {onRestartTour ? (
@@ -404,7 +405,7 @@ export function OpenRouterSettings({
           className="hidden"
         />
 
-        <div className="space-y-4 px-6 py-4">
+        <div className="min-w-0 space-y-4 px-6 py-4">
           <div className="space-y-2">
             <Label>LLM provider</Label>
             <Select
@@ -469,7 +470,7 @@ export function OpenRouterSettings({
 
               <div className="space-y-2">
                 <Label>Model</Label>
-                <div className="flex w-full flex-col gap-y-2">
+                <div className="flex w-full min-w-0 flex-col gap-y-2">
                   <Button
                     type="button"
                     variant="secondary"
@@ -479,9 +480,9 @@ export function OpenRouterSettings({
                     {isLoadingModels ? "Fetching..." : "Fetch models"}
                   </Button>
 
-                  <Command className="rounded-lg border shadow-md md:min-w-112.5">
+                  <Command className="w-full max-w-full min-w-0 rounded-lg border shadow-md">
                     <CommandInput placeholder="Search models..." />
-                    <CommandList>
+                    <CommandList className="max-w-full">
                       {models.length === 0 && (
                         <CommandEmpty>
                           No models found. Click &quot;Fetch models&quot; to load, or type a model
@@ -494,6 +495,7 @@ export function OpenRouterSettings({
                             <CommandItem
                               key={m.id}
                               value={m.id}
+                              className="min-w-0"
                               onSelect={() => {
                                 setOpenRouterModelDraft(m.id)
                               }}
