@@ -83,6 +83,7 @@ export function OpenRouterSettings({
   const {
     llmProvider,
     openRouterApiKey,
+    hasOpenRouterApiKey,
     openRouterModel,
     openAIApiKey,
     openAIModel,
@@ -161,7 +162,7 @@ export function OpenRouterSettings({
       toast.error("Model fetch is available only for OpenRouter")
       return
     }
-    if (!openRouterApiKeyDraft.trim()) {
+    if (!openRouterApiKeyDraft.trim() && !hasOpenRouterApiKey) {
       toast.error("Enter your OpenRouter API key first")
       return
     }
@@ -186,7 +187,7 @@ export function OpenRouterSettings({
     } finally {
       setIsLoadingModels(false)
     }
-  }, [openRouterApiKeyDraft, providerDraft])
+  }, [hasOpenRouterApiKey, openRouterApiKeyDraft, providerDraft])
 
   const save = React.useCallback(() => {
     updateLlmSettings({

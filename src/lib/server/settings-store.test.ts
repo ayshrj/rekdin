@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { hasProviderCredentials, normalizeSettings } from "./settings-store"
+import {
+  hasProviderCredentials,
+  normalizeSettings,
+  resolveOpenRouterApiKey,
+  sanitizeSettingsForClient,
+} from "./settings-store"
 
 describe("settings-store helpers", () => {
   it("normalizes provider aliases and default values", () => {
@@ -47,5 +52,24 @@ describe("settings-store helpers", () => {
         })
       )
     ).toBe(false)
+  })
+
+  it("falls back to the env OpenRouter key without exposing it to the client payload", () => {
+    const originalKey = process.env.OPENROUTER_API_KEY
+    process.env.OPENROUTER_API_KEY = "sk-env-openrouter"
+
+    const settings = normalizeSettings({
+      llmProvider: "openrouter",
+      openRouterApiKey: "",
+    })
+
+    expect(resolveOpenRouterApiKey(settings)).toBe("sk-env-openrouter")
+    expect(hasProviderCredentials(settings)).toBe(true)
+    expect(sanitizeSettingsForClient(settings)).toMatchObject({
+      openRouterApiKey: "",
+      hasOpenRouterApiKeyFromEnv: true,
+    })
+
+    process.env.OPENROUTER_API_KEY = originalKey
   })
 })

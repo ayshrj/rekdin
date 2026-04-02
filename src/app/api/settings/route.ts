@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
-import { getSettingsStore, normalizeProvider } from "@/lib/server/settings-store"
+import {
+  getSettingsStore,
+  normalizeProvider,
+  sanitizeSettingsForClient,
+} from "@/lib/server/settings-store"
 import { ServerSettings } from "@/types/runtime"
 
 export const runtime = "nodejs"
@@ -25,7 +29,7 @@ const requestSchema = z.object({
 
 export async function GET() {
   const settings = await getSettingsStore().load()
-  return NextResponse.json({ settings })
+  return NextResponse.json({ settings: sanitizeSettingsForClient(settings) })
 }
 
 export async function PUT(req: Request) {

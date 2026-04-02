@@ -35,6 +35,7 @@ type ChatContextValue = {
   llmProvider: LlmProvider
   openRouterModel: string
   openRouterApiKey: string
+  hasOpenRouterApiKey: boolean
   openAIModel: string
   openAIApiKey: string
   azureOpenAIApiKey: string
@@ -258,6 +259,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [llmProvider, setLlmProvider] = React.useState<LlmProvider>("openrouter")
   const [openRouterModel, setOpenRouterModel] = React.useState("openai/gpt-4o-mini")
   const [openRouterApiKey, setOpenRouterApiKey] = React.useState("")
+  const [hasOpenRouterApiKeyFromEnv, setHasOpenRouterApiKeyFromEnv] = React.useState(false)
   const [openAIModel, setOpenAIModel] = React.useState("gpt-4o-mini")
   const [openAIApiKey, setOpenAIApiKey] = React.useState("")
   const [azureOpenAIApiKey, setAzureOpenAIApiKey] = React.useState("")
@@ -502,6 +504,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setLlmProvider(normalizeProvider(serverSettings.llmProvider))
         setOpenRouterModel(serverSettings.openRouterModel || "openai/gpt-4o-mini")
         setOpenRouterApiKey(serverSettings.openRouterApiKey || "")
+        setHasOpenRouterApiKeyFromEnv(Boolean(serverSettings.hasOpenRouterApiKeyFromEnv))
         setOpenAIModel(serverSettings.openAIModel || "gpt-4o-mini")
         setOpenAIApiKey(serverSettings.openAIApiKey || "")
         setAzureOpenAIApiKey(serverSettings.azureOpenAIApiKey || "")
@@ -533,14 +536,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [hydrateFromIdb])
 
   React.useEffect(() => {
+    const hasOpenRouterApiKey = Boolean(openRouterApiKey || hasOpenRouterApiKeyFromEnv)
     const key =
       llmProvider === "openrouter"
-        ? openRouterApiKey
+        ? hasOpenRouterApiKey
         : llmProvider === "openai"
           ? openAIApiKey
           : azureOpenAIApiKey
     setConnected(Boolean(key))
-  }, [azureOpenAIApiKey, llmProvider, openAIApiKey, openRouterApiKey])
+  }, [azureOpenAIApiKey, hasOpenRouterApiKeyFromEnv, llmProvider, openAIApiKey, openRouterApiKey])
 
   React.useEffect(() => {
     if (!settingsHydratedRef.current) return
@@ -772,7 +776,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       if (isLoading) return
       const hasLlmConfig =
         llmProvider === "openrouter"
-          ? Boolean(openRouterApiKey && openRouterModel)
+          ? Boolean((openRouterApiKey || hasOpenRouterApiKeyFromEnv) && openRouterModel)
           : llmProvider === "openai"
             ? Boolean(openAIApiKey && openAIModel)
             : Boolean(azureOpenAIApiKey && azureOpenAIEndpoint && azureOpenAIDeployment)
@@ -1130,6 +1134,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       openAIApiKey,
       openAIModel,
       openRouterApiKey,
+      hasOpenRouterApiKeyFromEnv,
       openRouterModel,
       azureOpenAIApiKey,
       azureOpenAIEndpoint,
@@ -1156,6 +1161,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       llmProvider,
       openRouterModel,
       openRouterApiKey,
+      hasOpenRouterApiKey: Boolean(openRouterApiKey || hasOpenRouterApiKeyFromEnv),
       openAIModel,
       openAIApiKey,
       azureOpenAIApiKey,
@@ -1194,6 +1200,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       openAIApiKey,
       openAIModel,
       openRouterApiKey,
+      hasOpenRouterApiKeyFromEnv,
       openRouterModel,
       liveModeEnabled,
       refreshSessions,
