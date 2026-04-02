@@ -593,7 +593,7 @@ export function WorkspacePanel() {
   return (
     <div className="bg-card flex h-full min-w-0 overflow-hidden rounded-xl border shadow-(--shadow-panel)">
       <motion.div
-        className="bg-muted/20 shrink-0 overflow-y-auto border-r py-3"
+        className="bg-muted/20 hidden shrink-0 overflow-y-auto border-r py-3 sm:block"
         initial={false}
         animate={{
           width: showTimeline ? 240 : 56,
@@ -702,7 +702,7 @@ export function WorkspacePanel() {
               </span>
             ) : null}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="hidden items-center gap-1 sm:flex">
             {currentSessionId ? (
               <>
                 <Button
@@ -731,8 +731,8 @@ export function WorkspacePanel() {
         </div>
 
         {/* Tab bar */}
-        <div className="bg-muted/20 flex shrink-0 items-center justify-between border-b px-4">
-          <div className="flex">
+        <div className="bg-muted/20 flex shrink-0 items-center justify-between border-b px-2 sm:px-4">
+          <div className="flex min-w-0 flex-1">
             {[
               { id: "timeline", label: "Timeline", icon: GalleryVerticalEnd },
               { id: "artifacts", label: "Artifacts", icon: File },
@@ -745,14 +745,14 @@ export function WorkspacePanel() {
                   type="button"
                   onClick={() => setActiveTab(tab.id as typeof activeTab)}
                   className={cn(
-                    "flex h-10 items-center gap-1.5 border-b-2 px-3 text-xs font-medium transition-colors",
+                    "flex h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 border-b-2 px-2 text-[11px] font-medium transition-colors sm:h-10 sm:flex-none sm:flex-row sm:gap-1.5 sm:px-3 sm:text-xs",
                     activeTab === tab.id
                       ? "border-primary text-primary"
                       : "text-muted-foreground hover:text-foreground border-transparent"
                   )}
                 >
                   <Icon className="h-3.5 w-3.5" />
-                  {tab.label}
+                  <span className="truncate">{tab.label}</span>
                 </button>
               )
             })}

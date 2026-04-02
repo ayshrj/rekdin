@@ -42,6 +42,7 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
     <div
       id="tour-chat-input"
       className="bg-background ring-border/50 focus-within:ring-primary/30 rounded-xl border shadow-(--shadow-float) ring-1 transition-shadow"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-3 pt-2">

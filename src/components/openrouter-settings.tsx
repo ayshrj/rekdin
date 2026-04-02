@@ -65,7 +65,21 @@ type SettingsExport = {
   cloudinaryApiSecret: string
 }
 
-export function OpenRouterSettings({ onRestartTour }: { onRestartTour?: () => void } = {}) {
+export function OpenRouterSettings({
+  onRestartTour,
+  triggerClassName,
+  triggerVariant = "outline",
+  triggerSize = "icon",
+  triggerChildren,
+  triggerAriaLabel = "Open settings",
+}: {
+  onRestartTour?: () => void
+  triggerClassName?: string
+  triggerVariant?: React.ComponentProps<typeof Button>["variant"]
+  triggerSize?: React.ComponentProps<typeof Button>["size"]
+  triggerChildren?: React.ReactNode
+  triggerAriaLabel?: string
+} = {}) {
   const {
     llmProvider,
     openRouterApiKey,
@@ -333,8 +347,14 @@ export function OpenRouterSettings({ onRestartTour }: { onRestartTour?: () => vo
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className="rounded-full" aria-label="Open settings">
+        <Button
+          variant={triggerVariant}
+          size={triggerSize}
+          className={cn("rounded-full", triggerClassName)}
+          aria-label={triggerAriaLabel}
+        >
           <Settings className="h-4 w-4" />
+          {triggerChildren}
         </Button>
       </DialogTrigger>
       <DialogShell

@@ -9,13 +9,21 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { TourAlertDialog, TourProvider, type TourStep, useTour } from "@/components/tour"
 import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { WorkspacePanel } from "@/components/workspace-panel"
 import { useChat } from "@/contexts/chat-context"
-import { GitHub, PanelLeft, Rekdin } from "@/lib/icons"
+import { Clock, GalleryVerticalEnd, GitHub, PanelLeft, Rekdin, Sparkles } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 const MAIN_LAYOUT = { chat: 38, workspace: 62 }
 const TOUR_SEEN_KEY = "rekdin-tour-seen"
+const PHONE_MEDIA_QUERY = "(max-width: 639px)"
 
 const TOUR_STEPS: TourStep[] = [
   {
@@ -111,16 +119,68 @@ function ThinkingBadge() {
   )
 }
 
-function HomePageContent() {
-  const { connected, llmProvider, isThinking, sessions, currentSessionId } = useChat()
-  const [sidebarOpen, setSidebarOpen] = React.useState(false)
-  const [tourOpen, setTourOpen] = React.useState(false)
+function useIsPhone() {
+  const [isPhone, setIsPhone] = React.useState(false)
 
   React.useEffect(() => {
-    if (!localStorage.getItem(TOUR_SEEN_KEY)) {
+    const mediaQuery = window.matchMedia(PHONE_MEDIA_QUERY)
+    const update = () => setIsPhone(mediaQuery.matches)
+    update()
+    mediaQuery.addEventListener("change", update)
+    return () => mediaQuery.removeEventListener("change", update)
+  }, [])
+
+  return isPhone
+}
+
+function MobileNavButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active?: boolean
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-2 text-[11px] font-medium transition-colors",
+        active ? "text-primary" : "text-muted-foreground"
+      )}
+    >
+      <span
+        className={cn(
+          "absolute inset-x-4 top-0 h-0.5 rounded-full transition-opacity",
+          active ? "bg-primary opacity-100" : "opacity-0"
+        )}
+      />
+      <span className="flex h-5 items-center justify-center">{icon}</span>
+      <span className="truncate">{label}</span>
+    </button>
+  )
+}
+
+function HomePageContent() {
+  const { connected, llmProvider, isThinking, sessions, currentSessionId } = useChat()
+  const isPhone = useIsPhone()
+  const [sidebarOpen, setSidebarOpen] = React.useState(false)
+  const [tourOpen, setTourOpen] = React.useState(false)
+  const [mobilePanel, setMobilePanel] = React.useState<"chat" | "workspace">("chat")
+
+  React.useEffect(() => {
+    if (!isPhone && !localStorage.getItem(TOUR_SEEN_KEY)) {
       setTourOpen(true)
     }
-  }, [])
+  }, [isPhone])
+
+  React.useEffect(() => {
+    if (isPhone) setTourOpen(false)
+  }, [isPhone])
 
   const markTourSeen = React.useCallback(() => {
     localStorage.setItem(TOUR_SEEN_KEY, "1")
@@ -140,8 +200,7 @@ function HomePageContent() {
 
   return (
     <div className="bg-background flex h-screen w-screen flex-col overflow-hidden">
-      {/* Header */}
-      <header className="bg-background/95 flex h-14 shrink-0 items-center justify-between border-b px-4 backdrop-blur">
+      <header className="bg-background/95 flex h-12 shrink-0 items-center justify-between border-b px-3 backdrop-blur sm:h-14 sm:px-4">
         <div className="flex items-center gap-3">
           <Button
             id="tour-sidebar-btn"
@@ -161,11 +220,23 @@ function HomePageContent() {
           </div>
           <span className="text-muted-foreground hidden text-xs sm:block">·</span>
           <span className="text-muted-foreground hidden text-sm sm:block">{sessionTitle}</span>
-          {isThinking && <ThinkingBadge />}
+          {isThinking && (
+            <span className="hidden sm:inline-flex">
+              <ThinkingBadge />
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <ConnectionBadge connected={connected} label={`${providerLabel} connected`} />
-          <div id="tour-settings">
+          <span className="hidden sm:inline-flex">
+            <ConnectionBadge connected={connected} label={`${providerLabel} connected`} />
+          </span>
+          <div className="sm:hidden">
+            <OpenRouterSettings
+              triggerClassName="h-8 w-8 rounded-lg border"
+              onRestartTour={undefined}
+            />
+          </div>
+          <div id="tour-settings" className="hidden sm:block">
             <OpenRouterSettings onRestartTour={restartTour} />
           </div>
           <a
@@ -173,68 +244,140 @@ function HomePageContent() {
             target="_blank"
             rel="noreferrer"
             aria-label="GitHub profile"
+            className="hidden sm:block"
           >
             <Button variant="outline" size="icon" className="rounded-full">
               <GitHub className="h-4 w-4" />
             </Button>
           </a>
-          <ThemeToggle />
+          <div className="hidden sm:block">
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
-      {/* Main panels — explicit height so react-resizable-panels resolves h-full */}
-      <main className="overflow-hidden p-3" style={{ height: "calc(100vh - 3.5rem)" }}>
-        <ResizablePanelGroup
-          id="main-workspace"
-          orientation="horizontal"
-          defaultLayout={MAIN_LAYOUT}
-          className="h-full"
-        >
-          <ResizablePanel id="chat" minSize={24} className="min-h-0 min-w-0">
-            <div id="tour-chat-panel" className="h-full">
-              <ChatPanel />
-            </div>
-          </ResizablePanel>
-          <ResizableHandle withHandle className="bg-border mx-1 w-px" />
-          <ResizablePanel id="workspace" minSize={28} className="min-h-0 min-w-0">
-            <div id="tour-workspace-panel" className="h-full">
-              <WorkspacePanel />
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </main>
+      {!isPhone ? (
+        <main className="min-h-0 flex-1 overflow-hidden p-3">
+          <ResizablePanelGroup
+            id="main-workspace"
+            orientation="horizontal"
+            defaultLayout={MAIN_LAYOUT}
+            className="h-full"
+          >
+            <ResizablePanel id="chat" minSize={24} className="min-h-0 min-w-0">
+              <div id="tour-chat-panel" className="h-full">
+                <ChatPanel />
+              </div>
+            </ResizablePanel>
+            <ResizableHandle withHandle className="bg-border mx-1 w-px" />
+            <ResizablePanel id="workspace" minSize={28} className="min-h-0 min-w-0">
+              <div id="tour-workspace-panel" className="h-full">
+                <WorkspacePanel />
+              </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </main>
+      ) : (
+        <>
+          <main className="min-h-0 flex-1 overflow-hidden px-3 pt-3">
+            {mobilePanel === "chat" ? (
+              <div className="h-full">
+                <ChatPanel />
+              </div>
+            ) : (
+              <div className="h-full">
+                <WorkspacePanel />
+              </div>
+            )}
+          </main>
 
-      {/* Overlay sidebar backdrop */}
-      {sidebarOpen && (
+          <nav
+            className="bg-background/95 border-border shrink-0 border-t"
+            style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.25rem)" }}
+          >
+            <div className="flex h-14 items-stretch">
+              <MobileNavButton
+                active={mobilePanel === "chat"}
+                icon={<Sparkles className="h-4 w-4" />}
+                label="Chat"
+                onClick={() => setMobilePanel("chat")}
+              />
+              <MobileNavButton
+                active={mobilePanel === "workspace"}
+                icon={<GalleryVerticalEnd className="h-4 w-4" />}
+                label="Work"
+                onClick={() => setMobilePanel("workspace")}
+              />
+              <MobileNavButton
+                icon={<Clock className="h-4 w-4" />}
+                label="History"
+                onClick={() => setSidebarOpen(true)}
+              />
+              <OpenRouterSettings
+                triggerVariant="ghost"
+                triggerSize="default"
+                triggerClassName="relative h-full min-w-0 flex-1 flex-col gap-1 rounded-none px-2 py-2 text-[11px] font-medium text-muted-foreground"
+                triggerAriaLabel="Open settings"
+                triggerChildren={<span className="truncate">Settings</span>}
+                onRestartTour={undefined}
+              />
+            </div>
+          </nav>
+        </>
+      )}
+
+      {!isPhone && sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Overlay sidebar panel */}
-      <aside
-        className={cn(
-          "bg-sidebar fixed inset-y-0 left-0 z-50 flex w-72 flex-col overflow-hidden transition-transform duration-300 ease-in-out",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
-        {/* Sidebar header */}
-        <div className="border-sidebar-border flex h-14 shrink-0 items-center gap-2.5 border-b px-4">
-          <div className="bg-primary/15 flex h-7 w-7 items-center justify-center rounded-lg">
-            <Rekdin className="text-primary h-4 w-4" />
+      {!isPhone ? (
+        <aside
+          className={cn(
+            "bg-sidebar fixed inset-y-0 left-0 z-50 flex w-64 flex-col overflow-hidden transition-transform duration-300 ease-in-out lg:w-72",
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          )}
+        >
+          <div className="border-sidebar-border flex h-14 shrink-0 items-center gap-2.5 border-b px-4">
+            <div className="bg-primary/15 flex h-7 w-7 items-center justify-center rounded-lg">
+              <Rekdin className="text-primary h-4 w-4" />
+            </div>
+            <span className="text-sidebar-foreground text-sm font-semibold tracking-tight">
+              REKDIN
+            </span>
+            <span className="text-sidebar-foreground/40 ml-auto text-xs">Sessions</span>
           </div>
-          <span className="text-sidebar-foreground text-sm font-semibold tracking-tight">
-            REKDIN
-          </span>
-          <span className="text-sidebar-foreground/40 ml-auto text-xs">Sessions</span>
-        </div>
 
-        {/* Sessions list */}
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <SessionSidebar onSessionOpen={() => setSidebarOpen(false)} />
-        </div>
-      </aside>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <SessionSidebar onSessionOpen={() => setSidebarOpen(false)} />
+          </div>
+        </aside>
+      ) : null}
+
+      <Sheet open={isPhone && sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SheetContent
+          side="bottom"
+          className="max-h-[75vh] rounded-t-3xl border-t p-0 [&>button]:top-3 [&>button]:right-3"
+        >
+          <SheetHeader className="border-b px-4 py-3 text-left">
+            <SheetTitle className="flex items-center gap-2 text-sm tracking-tight">
+              <span className="bg-primary/10 text-primary flex h-7 w-7 items-center justify-center rounded-lg">
+                <Rekdin className="h-4 w-4" />
+              </span>
+              REKDIN
+            </SheetTitle>
+            <SheetDescription>Open previous sessions or start a new conversation.</SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <SessionSidebar
+              className="h-full rounded-none border-0 shadow-none"
+              onSessionOpen={() => setSidebarOpen(false)}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <TourAlertDialog
         isOpen={tourOpen}

@@ -362,9 +362,9 @@ export function ChatPanel() {
         </div>
       </ScrollArea>
       <div className="bg-muted/30 shrink-0 border-t px-4 py-2">
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap">
           {WORKFLOW_PRESETS.map((workflow) => (
-            <div key={workflow.id} className="flex items-center gap-1.5">
+            <div key={workflow.id} className="flex shrink-0 items-center gap-1.5">
               <Button
                 type="button"
                 variant="ghost"
@@ -430,7 +430,10 @@ export function ChatPanel() {
           </div>
         )
       })()}
-      <div className="px-3 pt-1 pb-3">
+      <div
+        className="px-3 pt-1 pb-3 sm:pb-3"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
+      >
         <ChatInput onSend={sendMessage} isLoading={isLoading || isThinking} disabled={false} />
       </div>
     </div>
