@@ -27,6 +27,34 @@ import { cn } from "@/lib/utils"
 
 import { Button } from "./ui/button"
 
+const TRACE_SHOW_ONLY_KEYS = [
+  "mode",
+  "provider",
+  "model",
+  "toolPolicy",
+  "toolCount",
+  "totalToolDurationMs",
+  "retryCount",
+  "success",
+  "warnings",
+  "error",
+  "startedAt",
+  "completedAt",
+  "workflowId",
+] as const
+
+const REPLAY_EVENT_SHOW_ONLY_KEYS = [
+  "phase",
+  "message",
+  "content",
+  "warning",
+  "error",
+  "toolCall",
+  "messageId",
+  "tempId",
+  "at",
+] as const
+
 function toContentPart(entry: ToolResultEntry): ToolResultContentPart {
   return {
     type: entry.toolName || "generic",
@@ -287,6 +315,7 @@ export function WorkspacePanel() {
   }, [toolResults])
 
   const activeEntry = toolResults[selectedIndex]
+  const runningEntry = toolResults.find((r) => r.status === "running")
   const isScrollMode = navigationMode === "scroll"
   const stepLabel =
     toolResults.length > 0 ? `Step ${selectedIndex + 1} of ${toolResults.length}` : "No steps yet"
@@ -615,21 +644,26 @@ export function WorkspacePanel() {
               >
                 {showTimeline ? (
                   <>
-                    <div className="flex flex-wrap items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-1">
                       <span className="font-medium">
                         {toolLabels[result.toolName] ?? result.toolName}
                       </span>
-                      <span className="text-muted-foreground text-[10px]">
-                        {toolLabels[result.status] ?? result.status}
-                      </span>
+                      {result.status === "running" ? (
+                        <span className="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full" />
+                      ) : (
+                        <span className="text-muted-foreground text-[10px]">{result.status}</span>
+                      )}
                     </div>
                     <p className="text-muted-foreground text-[10px]">
                       {new Date(result.timestamp).toLocaleTimeString()}
                     </p>
                   </>
                 ) : (
-                  <div className="flex items-center justify-center">
+                  <div className="flex items-center justify-center gap-1">
                     <span className="text-xs font-medium">{index + 1}</span>
+                    {result.status === "running" && (
+                      <span className="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full" />
+                    )}
                   </div>
                 )}
               </button>
@@ -740,6 +774,14 @@ export function WorkspacePanel() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
+          {activeTab === "timeline" && runningEntry ? (
+            <div className="border-primary/20 bg-primary/5 sticky top-0 z-10 mt-3 mb-1 flex items-center gap-2 rounded-lg border px-3 py-2">
+              <span className="bg-primary h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
+              <span className="text-primary truncate text-xs font-medium">
+                Running: {toolLabels[runningEntry.toolName] ?? runningEntry.toolName}
+              </span>
+            </div>
+          ) : null}
           {activeTab === "timeline" && toolResults.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
               <div className="bg-muted/50 rounded-xl border p-4">
@@ -865,6 +907,7 @@ export function WorkspacePanel() {
                       <JsonTreeViewer
                         json={trace as unknown as JsonValue}
                         className="px-0 pt-3 pb-0"
+                        showOnlyKeys={{ keys: [...TRACE_SHOW_ONLY_KEYS] }}
                       />
                     </div>
                   ))}
@@ -883,6 +926,7 @@ export function WorkspacePanel() {
                       <JsonTreeViewer
                         json={(event.data ?? event) as unknown as JsonValue}
                         className="px-0 pt-3 pb-0"
+                        showOnlyKeys={{ keys: [...REPLAY_EVENT_SHOW_ONLY_KEYS] }}
                       />
                     </div>
                   ))}
