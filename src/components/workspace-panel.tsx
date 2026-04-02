@@ -155,7 +155,7 @@ export function WorkspacePanel() {
           })}
         </div>
       </motion.div>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="bg-card flex items-center justify-between border-b px-4 pt-4 pb-3">
           <div>
             <p className="text-muted-foreground text-xs uppercase">Tool steps</p>
@@ -169,7 +169,7 @@ export function WorkspacePanel() {
             </div>
           ) : null}
         </div>
-        <div className="flex-1 overflow-auto px-4 pb-4">
+        <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
           {toolResults.length === 0 ? (
             <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
               <div className="flex flex-col items-center gap-2 text-center">
@@ -178,22 +178,20 @@ export function WorkspacePanel() {
               </div>
             </div>
           ) : isScrollMode ? (
-            <div className="mt-8 space-y-6">
+            <div className="mt-4 space-y-6">
               {toolResults.map((result, index) => {
                 const resultId = `tool-result-${result.id}`
                 const contentPart = toContentPart(result)
                 return (
-                  <div
-                    key={result.id}
-                    id={resultId}
-                    className={cn(
-                      "scroll-mt-20 rounded-2xl border p-3 transition-colors",
-                      index === selectedIndex
-                        ? "border-primary/40 bg-primary/5"
-                        : "border-border/60"
-                    )}
-                  >
-                    <div className="text-muted-foreground mb-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div key={result.id} id={resultId} className="scroll-mt-4">
+                    <div
+                      className={cn(
+                        "mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 text-xs transition-colors",
+                        index === selectedIndex
+                          ? "bg-primary/5 text-primary"
+                          : "text-muted-foreground"
+                      )}
+                    >
                       <span>Step {index + 1}</span>
                       <span>{toolLabels[result.toolName] ?? result.toolName}</span>
                       <span>{new Date(result.timestamp).toLocaleTimeString()}</span>
@@ -204,8 +202,8 @@ export function WorkspacePanel() {
               })}
             </div>
           ) : activeEntry ? (
-            <div className="mt-8 rounded-2xl border p-3">
-              <div className="text-muted-foreground mb-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="mt-4">
+              <div className="text-muted-foreground mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
                 <span>{stepLabel}</span>
                 <span>{toolLabels[activeEntry.toolName] ?? activeEntry.toolName}</span>
                 <span>{new Date(activeEntry.timestamp).toLocaleTimeString()}</span>

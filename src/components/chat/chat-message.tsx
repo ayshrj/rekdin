@@ -29,7 +29,7 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
   }
 
   return (
-    <div className={cn("group relative flex flex-col gap-2", isUser && "items-end self-end")}>
+    <div className={cn("group relative flex w-full flex-col gap-2", isUser && "items-end")}>
       {!isUser && (
         <button
           onClick={copyToClipboard}
@@ -59,8 +59,8 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
       ) : null}
       <div
         className={cn(
-          "w-fit max-w-[calc(100%-1.5rem)] overflow-hidden rounded-2xl border px-4 py-3 shadow-sm transition",
-          isUser ? "bg-primary text-primary-foreground self-end" : "bg-card self-start"
+          "max-w-[85%] overflow-hidden rounded-2xl border px-4 py-3 shadow-sm transition",
+          isUser ? "bg-primary text-primary-foreground ml-auto" : "bg-card"
         )}
       >
         <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden">

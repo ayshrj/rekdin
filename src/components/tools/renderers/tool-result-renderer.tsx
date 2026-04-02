@@ -362,9 +362,9 @@ export function ToolResultRenderer({
               <Renderer part={part} onAction={onAction} />
             </div>
             {normalizedSteps.length > 0 ? (
-              <div className="border-border/60 bg-muted/40 rounded-lg border p-3">
-                <div className="text-muted-foreground text-xs uppercase">Steps</div>
-                <ol className="mt-2 space-y-2 text-sm">
+              <div className="border-t pt-3">
+                <div className="text-muted-foreground mb-2 text-xs uppercase">Steps</div>
+                <ol className="space-y-3">
                   {normalizedSteps.map((step, stepIndex) => {
                     const timestamp =
                       step.at && !Number.isNaN(new Date(step.at).getTime())
@@ -373,16 +373,18 @@ export function ToolResultRenderer({
                     return (
                       <li
                         key={stepIndex}
-                        className="border-border/60 bg-background/70 rounded-md border p-2"
+                        className="before:bg-border relative pl-4 before:absolute before:top-1.75 before:left-0 before:h-1.5 before:w-1.5 before:rounded-full"
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-foreground font-medium">{step.label}</span>
+                        <div className="flex items-start justify-between gap-3">
+                          <span className="text-foreground text-sm font-medium">{step.label}</span>
                           {timestamp ? (
-                            <span className="text-muted-foreground text-xs">{timestamp}</span>
+                            <span className="text-muted-foreground shrink-0 text-xs">
+                              {timestamp}
+                            </span>
                           ) : null}
                         </div>
                         {step.detail ? (
-                          <div className="text-muted-foreground mt-1 text-xs wrap-anywhere">
+                          <div className="text-muted-foreground mt-0.5 text-xs leading-relaxed wrap-anywhere">
                             {step.detail}
                           </div>
                         ) : null}

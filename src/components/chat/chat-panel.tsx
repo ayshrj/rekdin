@@ -193,26 +193,12 @@ export function ChatPanel() {
           </Badge>
         </div>
       </div>
-      <style>{`
-        /* Radix ScrollArea adds: <div style="min-width:100%; display:table"> inside the viewport.
-          Override it so content can shrink and doesn't create hidden horizontal overflow. */
-        .no-scroll-min-width [data-radix-scroll-area-viewport] > div {
-          min-width: 0 !important;
-          display: block !important;
-          width: 100%;
-        }
-        /* Prevent scroll chaining to the page (so wheel/touch stays inside chat). */
-        .no-scroll-min-width [data-radix-scroll-area-viewport] {
-          overscroll-behavior: contain;
-        }
-      `}</style>
-
       <ScrollArea
         className="no-scroll-min-width h-90 flex-1 px-5 py-4"
         onWheelCapture={(event) => event.stopPropagation()}
         onTouchMoveCapture={(event) => event.stopPropagation()}
       >
-        <div className="flex flex-col items-start gap-3">
+        <div className="flex w-full flex-col gap-3">
           {latestChunk ? (
             <div className="bg-background/80 sticky top-0 z-10 w-full rounded-xl border px-3 py-2 backdrop-blur">
               <p className="text-muted-foreground text-[11px] uppercase">Latest chunk</p>
