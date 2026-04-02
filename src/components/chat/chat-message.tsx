@@ -213,11 +213,11 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
   }
 
   return (
-    <div className={cn("group relative flex w-full flex-col gap-2", isUser && "items-end")}>
+    <div className={cn("group relative flex w-full flex-col gap-1.5", isUser && "items-end")}>
       {!isUser && (
         <button
           onClick={copyToClipboard}
-          className="hover:bg-muted absolute top-2 right-4 rounded p-1.5 opacity-0 transition-opacity group-hover:opacity-100"
+          className="hover:bg-muted text-muted-foreground/40 hover:text-foreground absolute -top-1 right-0 rounded-md p-1.5 opacity-0 transition-all group-hover:opacity-100"
           aria-label="Copy message"
         >
           {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
@@ -226,14 +226,23 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
       {showHeader ? (
         <div
           className={cn(
-            "text-muted-foreground flex items-center gap-2 text-xs tracking-wide uppercase",
+            "text-muted-foreground flex items-center gap-2 text-xs",
             isUser && "ml-auto w-fit flex-row-reverse text-right"
           )}
         >
-          <div className="border-muted shrink-0 self-start rounded-full border p-1.5">
-            {isUser ? <User className="h-3.5 w-3.5" /> : <RekdinIcon className="h-3.5 w-3.5" />}
+          <div
+            className={cn(
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
+              isUser ? "bg-primary/20" : "bg-primary/10"
+            )}
+          >
+            {isUser ? (
+              <User className="h-3 w-3" />
+            ) : (
+              <RekdinIcon className="text-primary h-3 w-3" />
+            )}
           </div>
-          <span>{isUser ? "You" : "Rekdin"}</span>
+          <span className="text-[11px] font-medium">{isUser ? "You" : "Rekdin"}</span>
           {message.metadata?.agentType && !isUser ? (
             <Badge variant="outline" className="text-[0.65rem] tracking-wide uppercase">
               {message.metadata.agentType}
@@ -243,8 +252,10 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
       ) : null}
       <div
         className={cn(
-          "max-w-[85%] overflow-hidden rounded-2xl border px-4 py-3 shadow-sm transition",
-          isUser ? "bg-primary text-primary-foreground ml-auto" : "bg-card"
+          "overflow-hidden transition",
+          isUser
+            ? "bg-primary text-primary-foreground ml-auto max-w-[82%] rounded-2xl px-4 py-3 shadow-sm"
+            : "w-full px-0 py-0"
         )}
       >
         <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden">
@@ -269,12 +280,22 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
           ) : null}
 
           {message.toolCalls && message.toolCalls.length > 0 && (
-            <div className="bg-muted/30 text-muted-foreground rounded p-1 text-xs wrap-anywhere italic">
-              <span className="font-medium">Tools:</span>{" "}
-              <span>
-                {message.toolCalls.map((call) => toolLabels[call.name] ?? call.name).join(", ")}
-              </span>
-            </div>
+            <details className="mt-2">
+              <summary className="border-primary/30 text-muted-foreground hover:text-foreground cursor-pointer list-none border-l-2 pl-2 text-[11px] font-medium select-none">
+                {message.toolCalls.length} tool call
+                {message.toolCalls.length > 1 ? "s" : ""}
+              </summary>
+              <div className="border-primary/15 mt-1 flex flex-wrap gap-1.5 border-l-2 pt-1 pl-2">
+                {message.toolCalls.map((call) => (
+                  <span
+                    key={call.id ?? call.name}
+                    className="bg-muted/60 text-muted-foreground rounded-md border px-2 py-0.5 text-[11px]"
+                  >
+                    {toolLabels[call.name] ?? call.name}
+                  </span>
+                ))}
+              </div>
+            </details>
           )}
         </div>
       </div>

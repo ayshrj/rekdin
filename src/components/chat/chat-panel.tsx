@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useChat } from "@/contexts/chat-context"
-import { ClipboardDocumentList, Cog8Tooth, Sparkles } from "@/lib/icons"
+import { ArrowPath, ClipboardDocumentList, Cog8Tooth, Sparkles } from "@/lib/icons"
+import { parseLLMError } from "@/lib/llm-errors"
 import { WORKFLOW_PRESETS } from "@/lib/workflows"
 
 import { ChatInput } from "./chat-input"
@@ -135,8 +136,7 @@ export function ChatPanel() {
     setHydrated(true)
   }, [])
 
-  const currentSession = sessions.find((session) => session.id === currentSessionId)
-  const sessionTitle = currentSession?.title ?? "New conversation"
+  sessions.find((session) => session.id === currentSessionId)
   const toolsSorted = React.useMemo(
     () =>
       Object.entries(toolLabels).sort((a, b) =>
@@ -210,14 +210,14 @@ export function ChatPanel() {
 
   if (!hydrated) {
     return (
-      <div className="bg-card flex h-full flex-col rounded-2xl border shadow-sm">
-        <div className="border-b px-5 py-4">
-          <div className="bg-muted h-5 w-32 animate-pulse rounded" />
+      <div className="bg-card flex h-full flex-col overflow-hidden rounded-xl border shadow-(--shadow-panel)">
+        <div className="border-b px-4 py-3">
+          <div className="bg-muted h-4 w-32 animate-pulse rounded" />
         </div>
-        <div className="text-muted-foreground flex flex-1 items-center justify-center">
+        <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">
           Loading chat…
         </div>
-        <div className="px-5 py-4 opacity-50">
+        <div className="px-3 pt-1 pb-3 opacity-50">
           <ChatInput onSend={() => Promise.resolve()} isLoading disabled />
         </div>
       </div>
@@ -225,53 +225,38 @@ export function ChatPanel() {
   }
 
   return (
-    <div className="bg-card flex h-full flex-col rounded-2xl border shadow-sm">
-      <div className="border-b px-5 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-muted-foreground text-xs uppercase">Active session</p>
-            <h2 className="text-lg font-semibold">{sessionTitle}</h2>
-          </div>
-          <Badge variant={isThinking ? "default" : "secondary"}>
-            {isThinking ? "Thinking..." : "Ready"}
-          </Badge>
-        </div>
-      </div>
+    <div className="bg-card flex h-full flex-col overflow-hidden rounded-xl border shadow-(--shadow-panel)">
       <ScrollArea
-        className="no-scroll-min-width h-90 flex-1 px-5 py-4"
+        className="no-scroll-min-width min-h-0 flex-1 px-4 py-4"
         onWheelCapture={(event) => event.stopPropagation()}
         onTouchMoveCapture={(event) => event.stopPropagation()}
       >
         <div className="flex w-full flex-col gap-3">
           {latestChunk ? (
-            <div className="bg-background/80 sticky top-0 z-10 w-full rounded-xl border px-3 py-2 backdrop-blur">
-              <p className="text-muted-foreground text-[11px] uppercase">Latest chunk</p>
+            <div className="bg-primary/5 sticky top-0 z-10 mb-2 w-full rounded-lg border px-3 py-2 backdrop-blur">
+              <p className="text-primary/60 text-[10px] font-medium tracking-wider uppercase">
+                Streaming
+              </p>
               <div className="text-sm leading-relaxed whitespace-pre-wrap">{latestChunk}</div>
             </div>
           ) : null}
-          {!hydrated ? (
-            <div className="text-muted-foreground mt-20 text-center">
-              <Sparkles className="mx-auto mb-3 h-6 w-6 animate-pulse" />
-              <p className="mb-3">Loading your workspace…</p>
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="mx-auto mt-16 w-full max-w-2xl text-center">
-              <Sparkles className="mx-auto mb-3 h-6 w-6" />
-              <p className="text-muted-foreground mb-2 text-sm">
-                Ask Rekdin to use tools (web, browser automation, files, code, PDFs) to help you.
-              </p>
-              <p className="text-muted-foreground mb-6 text-xs">
-                Tip: be specific about the output format (JSON/table/bullets) and constraints.
-              </p>
-              <p className="text-muted-foreground mb-6 text-xs">
-                Workspace memory: add a `REKDIN.md` file in the workspace root to provide persistent
-                project instructions.
+          {messages.length === 0 ? (
+            <div className="mx-auto mt-12 w-full max-w-xl text-center">
+              <div className="mb-4 flex justify-center">
+                <div className="bg-muted/50 rounded-xl border p-3">
+                  <Sparkles className="text-muted-foreground h-5 w-5" />
+                </div>
+              </div>
+              <h3 className="text-foreground mb-1 text-sm font-semibold">Start a research task</h3>
+              <p className="text-muted-foreground mb-6 text-xs leading-relaxed">
+                Ask Rekdin to use tools (web, browser automation, files, code, PDFs). Be specific
+                about output format and constraints.
               </p>
 
               {missingApiKeyMessage ? (
-                <div className="bg-muted/40 border-border mb-4 rounded-xl border px-4 py-3 text-left text-sm">
+                <div className="bg-muted/40 border-border mb-4 rounded-lg border px-4 py-3 text-left text-sm">
                   <div className="flex items-start gap-2">
-                    <span className="bg-primary/10 text-primary mt-0.5 rounded-full p-1">
+                    <span className="bg-primary/10 text-primary mt-0.5 rounded-md p-1">
                       <Cog8Tooth className="h-4 w-4" />
                     </span>
                     <div className="space-y-1">
@@ -284,15 +269,15 @@ export function ChatPanel() {
                 </div>
               ) : null}
 
-              <div className="bg-muted/30 border-border rounded-xl border p-4 text-left">
+              <div className="bg-muted/40 rounded-lg border p-3 text-left">
                 <div className="mb-4">
                   <p className="text-foreground text-sm font-semibold">Workflow presets</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {WORKFLOW_PRESETS.map((workflow) => (
-                      <div key={workflow.id} className="flex items-center gap-2">
+                      <div key={workflow.id} className="flex items-center gap-1.5">
                         <Button
                           type="button"
-                          variant="secondary"
+                          variant="outline"
                           size="sm"
                           onClick={() => void launchWorkflow(workflow.id)}
                           disabled={isLoading || isThinking}
@@ -323,7 +308,7 @@ export function ChatPanel() {
                   </div>
                   <Button
                     type="button"
-                    variant="secondary"
+                    variant="ghost"
                     size="sm"
                     onClick={() => setShowAllTools((prev) => !prev)}
                   >
@@ -331,7 +316,7 @@ export function ChatPanel() {
                   </Button>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {toolPreview.map(([key, label]) => (
                     <Badge key={key} variant="secondary" title={key} className="max-w-full">
                       <span className="truncate">{label}</span>
@@ -342,7 +327,7 @@ export function ChatPanel() {
 
               <div className="mt-4 grid gap-3 text-left md:grid-cols-3">
                 {examplePrompts.map((item, index) => (
-                  <div key={item.title} className="bg-muted/30 border-border rounded-xl border p-4">
+                  <div key={item.title} className="bg-muted/30 rounded-lg border p-3">
                     <p className="text-foreground mb-2 text-sm font-semibold">{item.title}</p>
                     <pre className="text-muted-foreground mb-3 text-xs wrap-break-word whitespace-pre-wrap">
                       {item.prompt}
@@ -350,7 +335,7 @@ export function ChatPanel() {
                     <Button
                       type="button"
                       size="sm"
-                      variant="secondary"
+                      variant="outline"
                       className="w-full"
                       onClick={() =>
                         void launchWorkflow(
@@ -376,13 +361,13 @@ export function ChatPanel() {
           <div ref={scrollRef} />
         </div>
       </ScrollArea>
-      <div className="border-t px-5 pt-3">
-        <div className="flex flex-wrap gap-2">
+      <div className="bg-muted/30 shrink-0 border-t px-4 py-2">
+        <div className="flex flex-wrap gap-1.5">
           {WORKFLOW_PRESETS.map((workflow) => (
-            <div key={workflow.id} className="flex items-center gap-2">
+            <div key={workflow.id} className="flex items-center gap-1.5">
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={() => void launchWorkflow(workflow.id)}
                 disabled={isLoading || isThinking}
@@ -404,7 +389,48 @@ export function ChatPanel() {
           ))}
         </div>
       </div>
-      <div className="px-5 py-4">
+      {(() => {
+        const lastMsg = messages[messages.length - 1]
+        const hasError = lastMsg?.role === "system"
+        const lastUserMsg = hasError ? [...messages].reverse().find((m) => m.role === "user") : null
+        if (!hasError || !lastUserMsg) return null
+        const parsed = parseLLMError(lastMsg.content ?? "")
+        return (
+          <div className="border-destructive/20 bg-destructive/5 mx-3 mb-2 rounded-lg border px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                {parsed.code !== null && (
+                  <span className="bg-destructive/15 text-destructive shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                    {parsed.code}
+                  </span>
+                )}
+                <p className="text-destructive truncate text-xs font-medium">{parsed.title}</p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive h-7 shrink-0 gap-1.5 text-xs"
+                disabled={isLoading || isThinking}
+                onClick={() =>
+                  void sendMessage(lastUserMsg.content, [], {
+                    agentType: lastUserMsg.metadata?.agentType,
+                    responseSchema: null,
+                    workflowId: lastUserMsg.metadata?.workflowId,
+                  })
+                }
+              >
+                <ArrowPath className="h-3 w-3" />
+                Retry
+              </Button>
+            </div>
+            {parsed.action && (
+              <p className="text-destructive/70 mt-1 text-[11px]">{parsed.action}</p>
+            )}
+          </div>
+        )
+      })()}
+      <div className="px-3 pt-1 pb-3">
         <ChatInput onSend={sendMessage} isLoading={isLoading || isThinking} disabled={false} />
       </div>
     </div>

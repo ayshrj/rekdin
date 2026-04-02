@@ -562,17 +562,17 @@ export function WorkspacePanel() {
   }, [backgroundJobs, replayEvents, traces])
 
   return (
-    <div className="bg-card flex h-full min-w-0 gap-3 rounded-2xl border shadow-sm">
+    <div className="bg-card flex h-full min-w-0 overflow-hidden rounded-xl border shadow-(--shadow-panel)">
       <motion.div
-        className="shrink-0 overflow-y-auto border-r p-4"
+        className="bg-muted/20 shrink-0 overflow-y-auto border-r py-3"
         initial={false}
         animate={{
-          width: showTimeline ? 280 : 64,
-          minWidth: showTimeline ? 240 : 64,
+          width: showTimeline ? 240 : 56,
+          minWidth: showTimeline ? 200 : 56,
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
       >
-        <div className="mb-1 flex w-full items-center justify-between">
+        <div className="mb-1 flex w-full items-center justify-between px-2">
           {showTimeline && (
             <motion.p
               className="text-muted-foreground text-xs uppercase"
@@ -580,18 +580,22 @@ export function WorkspacePanel() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              Tool timeline
+              Timeline
             </motion.p>
           )}
           <Button
             onClick={() => setShowTimeline(!showTimeline)}
             size="icon-sm"
-            className={cn(!showTimeline && "ml-auto", "cursor-pointer")}
+            variant="ghost"
+            className={cn(
+              !showTimeline && "mx-auto",
+              "text-muted-foreground hover:text-foreground cursor-pointer"
+            )}
           >
             <GalleryVerticalEnd className="size-4" />
           </Button>
         </div>
-        <div className="mt-3 space-y-2">
+        <div className="mt-2 space-y-0.5 px-1.5">
           {toolResults.map((result, index) => {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
             const resultId = `tool-result-${result.id}`
@@ -600,10 +604,10 @@ export function WorkspacePanel() {
                 key={result.id}
                 type="button"
                 className={cn(
-                  "w-full rounded-xl border px-3 py-2 text-left text-sm transition",
+                  "w-full rounded-md px-2.5 py-2 text-left text-xs transition-colors",
                   index === selectedIndex
-                    ? "border-primary/40 bg-primary/5"
-                    : "hover:border-border hover:bg-muted/50 border-transparent"
+                    ? "bg-primary/10 text-primary font-medium"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
                 onClick={() => {
                   handleStepChange(index)
@@ -615,17 +619,17 @@ export function WorkspacePanel() {
                       <span className="font-medium">
                         {toolLabels[result.toolName] ?? result.toolName}
                       </span>
-                      <span className="text-muted-foreground text-xs">
+                      <span className="text-muted-foreground text-[10px]">
                         {toolLabels[result.status] ?? result.status}
                       </span>
                     </div>
-                    <p className="text-muted-foreground text-xs">
+                    <p className="text-muted-foreground text-[10px]">
                       {new Date(result.timestamp).toLocaleTimeString()}
                     </p>
                   </>
                 ) : (
                   <div className="flex items-center justify-center">
-                    <span className="text-muted-foreground text-xs font-medium">{index + 1}</span>
+                    <span className="text-xs font-medium">{index + 1}</span>
                   </div>
                 )}
               </button>
@@ -634,92 +638,118 @@ export function WorkspacePanel() {
         </div>
       </motion.div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="bg-card flex items-center justify-between border-b px-4 pt-4 pb-3">
-          <div>
-            <p className="text-muted-foreground text-xs uppercase">Tool steps</p>
-            <h3 className="text-lg font-semibold">
+        {/* Header */}
+        <div className="flex h-12 shrink-0 items-center justify-between border-b px-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-foreground text-sm font-semibold">
               {activeTab === "timeline"
                 ? toolResults.length > 0
-                  ? `${toolResults.length} steps`
+                  ? "Tool steps"
                   : "No steps yet"
                 : activeTab === "artifacts"
-                  ? `${artifacts.length} artifacts`
+                  ? "Artifacts"
                   : showDiagnostics
-                    ? `${traces.length + replayEvents.length} diagnostics`
-                    : `${activityItems.length} activities`}
+                    ? "Diagnostics"
+                    : "Activity"}
             </h3>
+            {activeTab === "timeline" && toolResults.length > 0 && (
+              <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">
+                {toolResults.length}
+              </span>
+            )}
+            {activeTab === "artifacts" && artifacts.length > 0 && (
+              <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">
+                {artifacts.length}
+              </span>
+            )}
+            {activeEntry ? (
+              <span className="bg-muted/60 text-muted-foreground rounded-full border px-2 py-0.5 text-[11px]">
+                {toolLabels[activeEntry.toolName] ?? activeEntry.toolName}
+              </span>
+            ) : null}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {currentSessionId ? (
               <>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
+                  className="h-7 gap-1 text-xs"
                   onClick={() => downloadBundle("json")}
                 >
-                  <ArrowDownTray className="size-4" />
-                  Export JSON
+                  <ArrowDownTray className="h-3 w-3" />
+                  JSON
                 </Button>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
+                  className="h-7 gap-1 text-xs"
                   onClick={() => downloadBundle("html")}
                 >
-                  <ClipboardDocumentList className="size-4" />
-                  Replay HTML
+                  <ClipboardDocumentList className="h-3 w-3" />
+                  HTML
                 </Button>
               </>
             ) : null}
-            {activeEntry ? (
-              <div className="rounded-full border px-3 py-1 text-xs">
-                Active: {toolLabels[activeEntry.toolName] ?? activeEntry.toolName}
-              </div>
-            ) : null}
           </div>
         </div>
-        <div className="border-b px-4 py-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap gap-2">
-              {[
-                { id: "timeline", label: "Timeline", icon: GalleryVerticalEnd },
-                { id: "artifacts", label: "Artifacts", icon: File },
-                { id: "replay", label: "Replay", icon: ClipboardDocumentList },
-              ].map((tab) => {
-                const Icon = tab.icon
-                return (
-                  <Button
-                    key={tab.id}
-                    type="button"
-                    variant={activeTab === tab.id ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                  >
-                    <Icon className="mr-2 size-4" />
-                    {tab.label}
-                  </Button>
-                )
-              })}
-            </div>
-            {activeTab === "replay" ? (
-              <Button
-                type="button"
-                variant={showDiagnostics ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowDiagnostics((value) => !value)}
-              >
-                {showDiagnostics ? "Hide diagnostics" : "Show diagnostics"}
-              </Button>
-            ) : null}
+
+        {/* Tab bar */}
+        <div className="bg-muted/20 flex shrink-0 items-center justify-between border-b px-4">
+          <div className="flex">
+            {[
+              { id: "timeline", label: "Timeline", icon: GalleryVerticalEnd },
+              { id: "artifacts", label: "Artifacts", icon: File },
+              { id: "replay", label: "Activity", icon: PlayCircle },
+            ].map((tab) => {
+              const Icon = tab.icon
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                  className={cn(
+                    "flex h-10 items-center gap-1.5 border-b-2 px-3 text-xs font-medium transition-colors",
+                    activeTab === tab.id
+                      ? "border-primary text-primary"
+                      : "text-muted-foreground hover:text-foreground border-transparent"
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {tab.label}
+                </button>
+              )
+            })}
           </div>
+          {activeTab === "replay" ? (
+            <button
+              type="button"
+              onClick={() => setShowDiagnostics((value) => !value)}
+              className={cn(
+                "rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                showDiagnostics
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {showDiagnostics ? "Hide diagnostics" : "Diagnostics"}
+            </button>
+          ) : null}
         </div>
+
         <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
           {activeTab === "timeline" && toolResults.length === 0 ? (
-            <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
-              <div className="flex flex-col items-center gap-2 text-center">
-                <Globe className="h-6 w-6" />
-                <span>Tool calls will appear here as the agent works.</span>
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+              <div className="bg-muted/50 rounded-xl border p-4">
+                <Globe className="text-muted-foreground/60 h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-foreground text-sm font-medium">No tool steps yet</p>
+                <p className="text-muted-foreground mt-0.5 text-xs">
+                  Tool results will appear here as the agent works.
+                </p>
               </div>
             </div>
           ) : activeTab === "timeline" && isScrollMode ? (
@@ -768,7 +798,7 @@ export function WorkspacePanel() {
                     href={artifact.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="hover:border-border hover:bg-muted/40 block rounded-xl border p-3 transition"
+                    className="group bg-card hover:border-primary/30 hover:bg-primary/5 block rounded-lg border p-3 transition-colors"
                   >
                     <div className="text-sm font-medium">{artifact.label}</div>
                     <div className="text-muted-foreground text-xs wrap-anywhere">
@@ -782,7 +812,10 @@ export function WorkspacePanel() {
             <div className="mt-4 space-y-3">
               {!showDiagnostics && activityItems.length > 0
                 ? activityItems.map((item) => (
-                    <div key={item.id} className="rounded-xl border p-3">
+                    <div
+                      key={item.id}
+                      className="bg-card/60 hover:bg-card rounded-lg border p-3 transition-colors"
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <PlayCircle className="size-4" />
@@ -824,7 +857,7 @@ export function WorkspacePanel() {
               {showDiagnostics && traces.length > 0 ? (
                 <div className="space-y-3">
                   {traces.map((trace) => (
-                    <div key={String(trace.id)} className="rounded-xl border p-3">
+                    <div key={String(trace.id)} className="bg-card/60 rounded-lg border p-3">
                       <div className="text-sm font-medium">
                         Diagnostic trace · {String(trace.mode ?? "general")} ·{" "}
                         {String(trace.model ?? "model")}
@@ -840,7 +873,10 @@ export function WorkspacePanel() {
               {showDiagnostics && replayEvents.length > 0 ? (
                 <div className="space-y-3">
                   {replayEvents.map((event, index) => (
-                    <div key={`${String(event.id ?? index)}`} className="rounded-xl border p-3">
+                    <div
+                      key={`${String(event.id ?? index)}`}
+                      className="bg-card/60 rounded-lg border p-3"
+                    >
                       <div className="text-sm font-medium">
                         Diagnostic event · {String(event.type ?? "event")}
                       </div>
@@ -865,7 +901,7 @@ export function WorkspacePanel() {
             </div>
           )}
         </div>
-        <div className="bg-card flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+        <div className="bg-muted/20 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-2">
           <ToggleGroup
             type="single"
             value={navigationMode}

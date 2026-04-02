@@ -39,6 +39,8 @@ export interface ChatMessage {
     model?: string
     workflowId?: string
     backgroundJobId?: string
+    errorCode?: number | null
+    errorAction?: string | null
   }
 }
 

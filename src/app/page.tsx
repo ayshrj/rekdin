@@ -6,27 +6,46 @@ import { ChatPanel } from "@/components/chat/chat-panel"
 import { OpenRouterSettings } from "@/components/openrouter-settings"
 import { SessionSidebar } from "@/components/session-sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar"
 import { WorkspacePanel } from "@/components/workspace-panel"
 import { useChat } from "@/contexts/chat-context"
-import { ExclamationCircle, Rekdin } from "@/lib/icons"
+import { PanelLeft, Rekdin } from "@/lib/icons"
+import { cn } from "@/lib/utils"
 
-const MAIN_LAYOUT = {
-  chat: 40,
-  workspace: 60,
+const MAIN_LAYOUT = { chat: 38, workspace: 62 }
+
+function ConnectionBadge({ connected, label }: { connected: boolean; label: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+        connected
+          ? "border-green-500/20 bg-green-500/8 text-green-700 dark:text-green-400"
+          : "border-destructive/20 bg-destructive/8 text-destructive"
+      )}
+    >
+      <span
+        className={cn("h-1.5 w-1.5 rounded-full", connected ? "bg-green-500" : "bg-destructive")}
+      />
+      {connected ? label : "Disconnected"}
+    </span>
+  )
+}
+
+function ThinkingBadge() {
+  return (
+    <span className="bg-primary/10 text-primary inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium">
+      <span className="bg-primary h-1.5 w-1.5 animate-pulse rounded-full" />
+      Thinking
+    </span>
+  )
 }
 
 export default function HomePage() {
-  const { connected, llmProvider } = useChat()
-  const [historyOpen, setHistoryOpen] = React.useState(false)
+  const { connected, llmProvider, isThinking, sessions, currentSessionId } = useChat()
+  const [sidebarOpen, setSidebarOpen] = React.useState(false)
+
   const providerLabel =
     llmProvider === "openai"
       ? "OpenAI"
@@ -34,90 +53,89 @@ export default function HomePage() {
         ? "Azure OpenAI"
         : "OpenRouter"
 
-  return (
-    <SidebarProvider
-      open={historyOpen}
-      onOpenChange={setHistoryOpen}
-      defaultOpen={false}
-      style={
-        {
-          "--sidebar-width": "24rem",
-          "--sidebar-width-mobile": "min(24rem, calc(100vw - 1rem))",
-        } as React.CSSProperties
-      }
-      className="bg-muted/30 [&_[data-slot=sidebar-gap]]:hidden"
-    >
-      <Sidebar side="left" variant="floating" collapsible="offcanvas" className="z-50 p-2">
-        <SidebarHeader className="border-b px-4 py-4">
-          <div className="text-left">
-            <p className="text-muted-foreground text-xs uppercase">Chat history</p>
-            <p className="text-base font-semibold">Switch sessions</p>
-          </div>
-        </SidebarHeader>
-        <SidebarContent className="p-4">
-          <SessionSidebar
-            className="h-full rounded-[1.5rem] shadow-none"
-            onSessionOpen={() => setHistoryOpen(false)}
-          />
-        </SidebarContent>
-      </Sidebar>
+  const currentSession = sessions?.find((s) => s.id === currentSessionId)
+  const sessionTitle = currentSession?.title ?? "New conversation"
 
-      <div className="flex min-h-screen flex-1 flex-col">
-        <header className="bg-background/80 supports-backdrop-filter:bg-background/60 flex items-center justify-between border-b px-6 py-4 backdrop-blur">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger
-              className="bg-background hover:bg-muted h-11 w-11 rounded-2xl border shadow-sm"
-              aria-label="Open chat history"
-            />
-            <div className="bg-primary/10 text-primary rounded-xl p-2">
-              <Rekdin className="h-6 w-6" />
+  return (
+    <div className="bg-background flex h-screen w-screen flex-col overflow-hidden">
+      {/* Header */}
+      <header className="bg-background/95 flex h-14 shrink-0 items-center justify-between border-b px-4 backdrop-blur">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-foreground h-8 w-8 rounded-lg"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open session history"
+          >
+            <PanelLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex items-center gap-2">
+            <div className="bg-primary/10 flex h-6 w-6 items-center justify-center rounded-md">
+              <Rekdin className="text-primary h-3.5 w-3.5" />
             </div>
-            <div>
-              <p className="text-muted-foreground text-xs uppercase">Rekdin</p>
-              <h1 className="text-2xl leading-tight font-semibold">Research & Automation</h1>
-            </div>
+            <span className="text-sm font-semibold tracking-tight">REKDIN</span>
           </div>
-          <div className="flex items-center gap-3">
-            <Badge variant={connected ? "default" : "destructive"} className="gap-1 text-xs">
-              <span
-                className={`h-2 w-2 rounded-full ${connected ? "bg-green-500" : "bg-red-500"}`}
-              />
-              {connected ? `${providerLabel} connected` : "Disconnected"}
-            </Badge>
-            <OpenRouterSettings />
-            <ThemeToggle />
+          <span className="text-muted-foreground hidden text-xs sm:block">·</span>
+          <span className="text-muted-foreground hidden text-sm sm:block">{sessionTitle}</span>
+          {isThinking && <ThinkingBadge />}
+        </div>
+        <div className="flex items-center gap-2">
+          <ConnectionBadge connected={connected} label={`${providerLabel} connected`} />
+          <OpenRouterSettings />
+          <ThemeToggle />
+        </div>
+      </header>
+
+      {/* Main panels — explicit height so react-resizable-panels resolves h-full */}
+      <main className="overflow-hidden p-3" style={{ height: "calc(100vh - 3.5rem)" }}>
+        <ResizablePanelGroup
+          id="main-workspace"
+          orientation="horizontal"
+          defaultLayout={MAIN_LAYOUT}
+          className="h-full"
+        >
+          <ResizablePanel id="chat" minSize={24} className="min-h-0 min-w-0">
+            <ChatPanel />
+          </ResizablePanel>
+          <ResizableHandle withHandle className="bg-border mx-1 w-px" />
+          <ResizablePanel id="workspace" minSize={28} className="min-h-0 min-w-0">
+            <WorkspacePanel />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </main>
+
+      {/* Overlay sidebar backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Overlay sidebar panel */}
+      <aside
+        className={cn(
+          "bg-sidebar fixed inset-y-0 left-0 z-50 flex w-72 flex-col overflow-hidden transition-transform duration-300 ease-in-out",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        {/* Sidebar header */}
+        <div className="border-sidebar-border flex h-14 shrink-0 items-center gap-2.5 border-b px-4">
+          <div className="bg-primary/15 flex h-7 w-7 items-center justify-center rounded-lg">
+            <Rekdin className="text-primary h-4 w-4" />
           </div>
-        </header>
-        <main className="flex-1 overflow-hidden p-4">
-          <div className="flex h-[calc(100vh-152px)] min-h-0 min-w-0 flex-col gap-4 lg:flex-row">
-            <ResizablePanelGroup
-              id="main-workspace"
-              orientation="horizontal"
-              defaultLayout={MAIN_LAYOUT}
-              className="min-h-0 min-w-0 flex-1"
-            >
-              <ResizablePanel id="chat" minSize={24} className="min-h-0 min-w-0">
-                <div className="h-full min-h-0 overflow-hidden">
-                  <ChatPanel />
-                </div>
-              </ResizablePanel>
-              <ResizableHandle withHandle className="mx-2" />
-              <ResizablePanel id="workspace" minSize={28} className="min-h-0 min-w-0">
-                <div className="h-full min-h-0 overflow-hidden">
-                  <WorkspacePanel />
-                </div>
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          </div>
-        </main>
-        <footer className="bg-background/80 text-muted-foreground border-t px-6 py-3 text-xs">
-          <p className="flex items-center gap-2">
-            <ExclamationCircle className="h-4 w-4" />
-            Uses LangChain + tools. Use the <span className="font-medium">+</span> button in the
-            Sessions panel to start a new conversation.
-          </p>
-        </footer>
-      </div>
-    </SidebarProvider>
+          <span className="text-sidebar-foreground text-sm font-semibold tracking-tight">
+            REKDIN
+          </span>
+          <span className="text-sidebar-foreground/40 ml-auto text-xs">Sessions</span>
+        </div>
+
+        {/* Sessions list */}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <SessionSidebar onSessionOpen={() => setSidebarOpen(false)} />
+        </div>
+      </aside>
+    </div>
   )
 }

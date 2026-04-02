@@ -13,12 +13,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useChat } from "@/contexts/chat-context"
-import { Loader, Plus, Trash } from "@/lib/icons"
+import { Loader, Plus, Search, Trash } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 export function SessionSidebar({
@@ -28,15 +27,8 @@ export function SessionSidebar({
   className?: string
   onSessionOpen?: () => void
 }) {
-  const {
-    sessions,
-    currentSessionId,
-    createSession,
-    joinSession,
-    deleteSession,
-    connected,
-    isLoading,
-  } = useChat()
+  const { sessions, currentSessionId, createSession, joinSession, deleteSession, isLoading } =
+    useChat()
   const [query, setQuery] = React.useState("")
   const [hydrated, setHydrated] = React.useState(false)
   const [sessionToDelete, setSessionToDelete] = React.useState<string | null>(null)
@@ -62,102 +54,98 @@ export function SessionSidebar({
   )
 
   return (
-    <div className={cn("bg-card flex h-full flex-col rounded-2xl border shadow-sm", className)}>
-      <div className="border-b px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-muted-foreground text-xs uppercase">Sessions</p>
-            <p className="text-base font-semibold">Recent conversations</p>
-          </div>
-          <Button
-            onClick={async () => {
-              await createSession()
-              onSessionOpen?.()
-            }}
-            size="icon"
-            className="rounded-full"
-            disabled={isLoading}
-          >
-            {isLoading ? <Loader className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-          </Button>
-        </div>
-        <div className="mt-3">
+    <div className={cn("flex h-full flex-col", className)}>
+      {/* Search bar */}
+      <div className="px-3 pt-3 pb-2">
+        <div className="relative flex items-center">
+          <Search className="text-sidebar-foreground/40 pointer-events-none absolute left-2.5 h-3.5 w-3.5" />
           <Input
-            placeholder="Search..."
+            placeholder="Search sessions…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className="bg-muted/50 h-9 rounded-full"
+            className="border-sidebar-border bg-sidebar-accent/60 text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-sidebar-ring h-8 w-full rounded-md pl-8 text-xs"
           />
         </div>
       </div>
-      <ScrollArea className="flex-1 overflow-auto">
-        <div className="space-y-1 px-3 py-3">
+
+      {/* Sessions list */}
+      <ScrollArea className="no-scroll-min-width min-h-0 flex-1 overflow-auto">
+        <div className="space-y-0.5 px-2 py-1">
           {!hydrated ? (
-            <div className="bg-muted/40 text-muted-foreground rounded-lg border border-dashed p-6 text-center text-sm">
+            <div className="text-sidebar-foreground/40 px-2 py-6 text-center text-xs">
               Loading sessions…
             </div>
           ) : filtered.length === 0 ? (
-            <div className="bg-muted/40 text-muted-foreground rounded-lg border border-dashed p-6 text-center text-sm">
-              No sessions yet. Start chatting!
+            <div className="text-sidebar-foreground/40 px-2 py-6 text-center text-xs">
+              No sessions yet.
             </div>
           ) : (
             filtered.map((session) => (
-              <div
-                key={session.id}
-                role="button"
-                tabIndex={0}
-                onClick={async () => {
-                  await joinSession(session.id)
-                  onSessionOpen?.()
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault()
-                    void (async () => {
-                      await joinSession(session.id)
-                      onSessionOpen?.()
-                    })()
-                  }
-                }}
-                className={cn(
-                  "group flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition",
-                  session.id === currentSessionId
-                    ? "border-primary/40 bg-primary/5"
-                    : "hover:border-border hover:bg-muted/60 border-transparent"
+              <div key={session.id} className="relative">
+                {session.id === currentSessionId && (
+                  <span className="bg-sidebar-primary absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-full" />
                 )}
-              >
-                <div>
-                  <p className="text-sm font-medium">{session.title}</p>
-                  <p className="text-muted-foreground text-xs">
-                    Updated{" "}
-                    {formatDistanceToNow(new Date(session.updatedAt), {
-                      addSuffix: true,
-                    })}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground hover:text-destructive h-8 w-8"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    setSessionToDelete(session.id)
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={async () => {
+                    await joinSession(session.id)
+                    onSessionOpen?.()
                   }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      void (async () => {
+                        await joinSession(session.id)
+                        onSessionOpen?.()
+                      })()
+                    }
+                  }}
+                  className={cn(
+                    "group flex w-full cursor-pointer items-center justify-between rounded-md py-2.5 pr-1.5 pl-3 text-left transition-colors",
+                    session.id === currentSessionId
+                      ? "bg-sidebar-primary/15 text-sidebar-foreground"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  )}
                 >
-                  <Trash className="h-4 w-4" />
-                </Button>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm leading-snug font-medium">{session.title}</p>
+                    <p className="text-sidebar-foreground/45 mt-0.5 text-xs">
+                      {formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true })}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-sidebar-foreground/30 hover:text-destructive h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setSessionToDelete(session.id)
+                    }}
+                  >
+                    <Trash className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
             ))
           )}
         </div>
       </ScrollArea>
-      <div className="border-t px-4 py-3">
-        <div className="text-muted-foreground flex items-center justify-between text-xs">
-          <span>Status</span>
-          <Badge variant={connected ? "default" : "secondary"}>
-            {connected ? "Connected" : "Offline"}
-          </Badge>
-        </div>
+
+      {/* Bottom: New session button */}
+      <div className="border-sidebar-border shrink-0 border-t px-3 py-3">
+        <Button
+          onClick={async () => {
+            await createSession()
+            onSessionOpen?.()
+          }}
+          disabled={isLoading}
+          variant="ghost"
+          className="bg-sidebar-accent/60 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground h-9 w-full justify-start gap-2 rounded-lg text-sm"
+        >
+          {isLoading ? <Loader className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          New session
+        </Button>
       </div>
 
       <AlertDialog

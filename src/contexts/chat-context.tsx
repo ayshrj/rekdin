@@ -19,6 +19,7 @@ import {
   saveToolResults,
   updateSessionTitle,
 } from "@/lib/client/idb"
+import { parseLLMError } from "@/lib/llm-errors"
 import { logger } from "@/lib/logger"
 import { ChatMessage, ChatSession, ToolResultEntry } from "@/types/chat"
 import { LlmProvider, ServerEventV2, ServerSettings } from "@/types/runtime"
@@ -882,7 +883,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const history = trimHistory((messagesBySession[targetSession] ?? []).concat(optimisticUser))
+        const history = trimHistory(
+          (messagesBySession[targetSession] ?? [])
+            .filter((m) => !(m.role === "system" && m.metadata?.errorCode !== undefined))
+            .concat(optimisticUser)
+        )
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1062,25 +1067,47 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             case "done":
               setIsThinking(false)
               break
-            case "error":
-              toast.error(event.error)
+            case "error": {
+              const parsed = parseLLMError(event.error)
+              toast.error(parsed.title, {
+                description: parsed.action ?? parsed.detail,
+              })
               logger.error("Chat stream error", event.error)
+              const errorMsg: ChatMessage = {
+                id: crypto.randomUUID(),
+                sessionId: targetSession,
+                role: "system" as const,
+                content: parsed.detail,
+                timestamp: new Date().toISOString(),
+                metadata: { errorCode: parsed.code, errorAction: parsed.action },
+              }
+              updateMessages(targetSession, (prev) => [...prev, errorMsg])
+              void appendMessage(targetSession, errorMsg).catch((err) => {
+                logger.warn("Failed to persist error message to IndexedDB", err)
+              })
               break
+            }
           }
         })
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to send message")
+        const raw = err instanceof Error ? err.message : "Request failed"
+        const parsed = parseLLMError(raw)
+        toast.error(parsed.title, {
+          description: parsed.action ?? parsed.detail,
+        })
         logger.error("Send message failed", err)
-        updateMessages(targetSession, (prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            sessionId: targetSession,
-            role: "system",
-            content: err instanceof Error ? err.message : "Request failed",
-            timestamp: new Date().toISOString(),
-          },
-        ])
+        const catchErrorMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          sessionId: targetSession,
+          role: "system" as const,
+          content: parsed.detail,
+          timestamp: new Date().toISOString(),
+          metadata: { errorCode: parsed.code, errorAction: parsed.action },
+        }
+        updateMessages(targetSession, (prev) => [...prev, catchErrorMsg])
+        void appendMessage(targetSession, catchErrorMsg).catch((e) => {
+          logger.warn("Failed to persist catch error message to IndexedDB", e)
+        })
       } finally {
         setIsLoading(false)
         setIsThinking(false)
