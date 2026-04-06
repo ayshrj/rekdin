@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
+import {
+  getOpenAICompatibleProviderConfig,
+  getProviderApiKey,
+  getProviderDefaultModel,
+  getProviderModel,
+  isOpenAICompatibleProvider,
+  normalizeLlmProvider,
+} from "@/lib/llm-providers"
 import { getSettingsStore } from "@/lib/server/settings-store"
 
 export const runtime = "nodejs"
@@ -40,21 +48,34 @@ export async function POST(req: Request) {
   }
 
   const settings = await getSettingsStore().load()
-  const apiKey = settings.openRouterApiKey.trim()
-  const model = settings.openRouterModel.trim() || "openai/gpt-4o-mini"
+  const provider = normalizeLlmProvider(settings.llmProvider)
+
+  if (!isOpenAICompatibleProvider(provider)) {
+    return NextResponse.json({ title: fallbackTitle(parsed.data.prompt), source: "fallback" })
+  }
+
+  const apiKey = getProviderApiKey(provider, settings).trim()
+  const model =
+    getProviderModel(provider, settings).trim() ||
+    (provider === "openrouter"
+      ? getProviderDefaultModel("openrouter")
+      : getProviderDefaultModel(provider))
 
   if (!apiKey) {
     return NextResponse.json({ title: fallbackTitle(parsed.data.prompt), source: "fallback" })
   }
 
   try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const { baseURL, defaultHeaders } = getOpenAICompatibleProviderConfig(
+      provider,
+      req.headers.get("origin") ?? undefined
+    )
+    const res = await fetch(`${baseURL.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": req.headers.get("origin") ?? "http://localhost:3000",
-        "X-Title": "Rekdin Next",
+        ...(defaultHeaders ?? {}),
       },
       body: JSON.stringify({
         model,
@@ -82,7 +103,7 @@ export async function POST(req: Request) {
     } | null
     const raw = data?.choices?.[0]?.message?.content ?? ""
     const title = cleanModelTitle(raw) ?? fallbackTitle(parsed.data.prompt)
-    return NextResponse.json({ title, source: "openrouter" })
+    return NextResponse.json({ title, source: provider })
   } catch {
     return NextResponse.json({ title: fallbackTitle(parsed.data.prompt), source: "fallback" })
   }

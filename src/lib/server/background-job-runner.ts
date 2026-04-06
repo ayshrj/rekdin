@@ -1,5 +1,6 @@
 import crypto from "crypto"
 
+import { getProviderModel, normalizeLlmProvider } from "@/lib/llm-providers"
 import { ChatMessage } from "@/types/chat"
 
 import { getBackgroundJobStore } from "./background-job-store"
@@ -175,12 +176,7 @@ async function runBackgroundJob(jobId: string, input: RunBackgroundJobInput) {
           ? input.requestedToolPolicy
           : "balanced",
       provider: providerSettings.provider,
-      model:
-        providerSettings.provider === "openrouter"
-          ? providerSettings.openRouterModel
-          : providerSettings.provider === "openai"
-            ? providerSettings.openAIModel
-            : providerSettings.azureOpenAIDeployment,
+      model: getProviderModel(normalizeLlmProvider(providerSettings.provider), providerSettings),
       warnings,
       toolCount: 0,
       totalToolDurationMs: 0,

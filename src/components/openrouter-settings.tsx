@@ -33,6 +33,13 @@ import {
   EyeSlash,
   PlayCircle,
 } from "@/lib/icons"
+import type { LlmProvider } from "@/lib/llm-providers"
+import {
+  getProviderDefaultModel,
+  LLM_PROVIDER_METADATA,
+  LLM_PROVIDER_OPTIONS,
+  normalizeLlmProvider,
+} from "@/lib/llm-providers"
 import { cn } from "@/lib/utils"
 
 type OpenRouterModel = {
@@ -42,19 +49,18 @@ type OpenRouterModel = {
   contextLength?: number | null
 }
 
-type ProviderValue = "openrouter" | "openai" | "azure_openai"
-
-function coerceProvider(value: string): ProviderValue {
-  if (value === "openai" || value === "azure_openai") return value
-  return "openrouter"
-}
-
 type SettingsExport = {
   llmProvider: string
   openRouterApiKey: string
   openRouterModel: string
   openAIApiKey: string
   openAIModel: string
+  geminiApiKey: string
+  geminiModel: string
+  claudeApiKey: string
+  claudeModel: string
+  grokApiKey: string
+  grokModel: string
   azureOpenAIApiKey: string
   azureOpenAIEndpoint: string
   azureOpenAIApiVersion: string
@@ -86,6 +92,12 @@ export function OpenRouterSettings({
     openRouterModel,
     openAIApiKey,
     openAIModel,
+    geminiApiKey,
+    geminiModel,
+    claudeApiKey,
+    claudeModel,
+    grokApiKey,
+    grokModel,
     azureOpenAIApiKey,
     azureOpenAIEndpoint,
     azureOpenAIApiVersion,
@@ -100,17 +112,26 @@ export function OpenRouterSettings({
   const [open, setOpen] = React.useState(false)
   const [showOpenRouterKey, setShowOpenRouterKey] = React.useState(false)
   const [showOpenAIKey, setShowOpenAIKey] = React.useState(false)
+  const [showGeminiKey, setShowGeminiKey] = React.useState(false)
+  const [showClaudeKey, setShowClaudeKey] = React.useState(false)
+  const [showGrokKey, setShowGrokKey] = React.useState(false)
   const [showAzureKey, setShowAzureKey] = React.useState(false)
   const [showCloudinaryKey, setShowCloudinaryKey] = React.useState(false)
   const [showCloudinarySecret, setShowCloudinarySecret] = React.useState(false)
 
-  const [providerDraft, setProviderDraft] = React.useState<ProviderValue>(() =>
-    coerceProvider(llmProvider)
+  const [providerDraft, setProviderDraft] = React.useState<LlmProvider>(() =>
+    normalizeLlmProvider(llmProvider)
   )
   const [openRouterApiKeyDraft, setOpenRouterApiKeyDraft] = React.useState("")
   const [openRouterModelDraft, setOpenRouterModelDraft] = React.useState("")
   const [openAIApiKeyDraft, setOpenAIApiKeyDraft] = React.useState("")
   const [openAIModelDraft, setOpenAIModelDraft] = React.useState("")
+  const [geminiApiKeyDraft, setGeminiApiKeyDraft] = React.useState("")
+  const [geminiModelDraft, setGeminiModelDraft] = React.useState("")
+  const [claudeApiKeyDraft, setClaudeApiKeyDraft] = React.useState("")
+  const [claudeModelDraft, setClaudeModelDraft] = React.useState("")
+  const [grokApiKeyDraft, setGrokApiKeyDraft] = React.useState("")
+  const [grokModelDraft, setGrokModelDraft] = React.useState("")
   const [azureOpenAIApiKeyDraft, setAzureOpenAIApiKeyDraft] = React.useState("")
   const [azureOpenAIEndpointDraft, setAzureOpenAIEndpointDraft] = React.useState("")
   const [azureOpenAIApiVersionDraft, setAzureOpenAIApiVersionDraft] = React.useState("")
@@ -126,11 +147,17 @@ export function OpenRouterSettings({
 
   React.useEffect(() => {
     if (!open) return
-    setProviderDraft(coerceProvider(llmProvider))
+    setProviderDraft(normalizeLlmProvider(llmProvider))
     setOpenRouterApiKeyDraft(openRouterApiKey)
     setOpenRouterModelDraft(openRouterModel)
     setOpenAIApiKeyDraft(openAIApiKey)
     setOpenAIModelDraft(openAIModel)
+    setGeminiApiKeyDraft(geminiApiKey)
+    setGeminiModelDraft(geminiModel)
+    setClaudeApiKeyDraft(claudeApiKey)
+    setClaudeModelDraft(claudeModel)
+    setGrokApiKeyDraft(grokApiKey)
+    setGrokModelDraft(grokModel)
     setAzureOpenAIApiKeyDraft(azureOpenAIApiKey)
     setAzureOpenAIEndpointDraft(azureOpenAIEndpoint)
     setAzureOpenAIApiVersionDraft(azureOpenAIApiVersion)
@@ -146,6 +173,12 @@ export function OpenRouterSettings({
     openRouterModel,
     openAIApiKey,
     openAIModel,
+    geminiApiKey,
+    geminiModel,
+    claudeApiKey,
+    claudeModel,
+    grokApiKey,
+    grokModel,
     azureOpenAIApiKey,
     azureOpenAIEndpoint,
     azureOpenAIApiVersion,
@@ -190,11 +223,17 @@ export function OpenRouterSettings({
 
   const save = React.useCallback(() => {
     updateLlmSettings({
-      provider: providerDraft as "openrouter" | "openai" | "azure_openai",
+      provider: providerDraft,
       openRouterApiKey: openRouterApiKeyDraft,
       openRouterModel: openRouterModelDraft,
       openAIApiKey: openAIApiKeyDraft,
       openAIModel: openAIModelDraft,
+      geminiApiKey: geminiApiKeyDraft,
+      geminiModel: geminiModelDraft,
+      claudeApiKey: claudeApiKeyDraft,
+      claudeModel: claudeModelDraft,
+      grokApiKey: grokApiKeyDraft,
+      grokModel: grokModelDraft,
       azureOpenAIApiKey: azureOpenAIApiKeyDraft,
       azureOpenAIEndpoint: azureOpenAIEndpointDraft,
       azureOpenAIApiVersion: azureOpenAIApiVersionDraft,
@@ -214,6 +253,12 @@ export function OpenRouterSettings({
     openRouterModelDraft,
     openAIApiKeyDraft,
     openAIModelDraft,
+    geminiApiKeyDraft,
+    geminiModelDraft,
+    claudeApiKeyDraft,
+    claudeModelDraft,
+    grokApiKeyDraft,
+    grokModelDraft,
     azureOpenAIApiKeyDraft,
     azureOpenAIEndpointDraft,
     azureOpenAIApiVersionDraft,
@@ -229,9 +274,15 @@ export function OpenRouterSettings({
   const clear = React.useCallback(() => {
     setProviderDraft("openrouter")
     setOpenRouterApiKeyDraft("")
-    setOpenRouterModelDraft("openai/gpt-4o-mini")
+    setOpenRouterModelDraft(getProviderDefaultModel("openrouter"))
     setOpenAIApiKeyDraft("")
-    setOpenAIModelDraft("gpt-4o-mini")
+    setOpenAIModelDraft(getProviderDefaultModel("openai"))
+    setGeminiApiKeyDraft("")
+    setGeminiModelDraft(getProviderDefaultModel("gemini"))
+    setClaudeApiKeyDraft("")
+    setClaudeModelDraft(getProviderDefaultModel("claude"))
+    setGrokApiKeyDraft("")
+    setGrokModelDraft(getProviderDefaultModel("grok"))
     setAzureOpenAIApiKeyDraft("")
     setAzureOpenAIEndpointDraft("")
     setAzureOpenAIApiVersionDraft("2024-02-15-preview")
@@ -243,9 +294,15 @@ export function OpenRouterSettings({
     updateLlmSettings({
       provider: "openrouter",
       openRouterApiKey: "",
-      openRouterModel: "openai/gpt-4o-mini",
+      openRouterModel: getProviderDefaultModel("openrouter"),
       openAIApiKey: "",
-      openAIModel: "gpt-4o-mini",
+      openAIModel: getProviderDefaultModel("openai"),
+      geminiApiKey: "",
+      geminiModel: getProviderDefaultModel("gemini"),
+      claudeApiKey: "",
+      claudeModel: getProviderDefaultModel("claude"),
+      grokApiKey: "",
+      grokModel: getProviderDefaultModel("grok"),
       azureOpenAIApiKey: "",
       azureOpenAIEndpoint: "",
       azureOpenAIApiVersion: "2024-02-15-preview",
@@ -263,6 +320,12 @@ export function OpenRouterSettings({
       openRouterModel: openRouterModelDraft,
       openAIApiKey: openAIApiKeyDraft,
       openAIModel: openAIModelDraft,
+      geminiApiKey: geminiApiKeyDraft,
+      geminiModel: geminiModelDraft,
+      claudeApiKey: claudeApiKeyDraft,
+      claudeModel: claudeModelDraft,
+      grokApiKey: grokApiKeyDraft,
+      grokModel: grokModelDraft,
       azureOpenAIApiKey: azureOpenAIApiKeyDraft,
       azureOpenAIEndpoint: azureOpenAIEndpointDraft,
       azureOpenAIApiVersion: azureOpenAIApiVersionDraft,
@@ -290,6 +353,12 @@ export function OpenRouterSettings({
     openRouterModelDraft,
     openAIApiKeyDraft,
     openAIModelDraft,
+    geminiApiKeyDraft,
+    geminiModelDraft,
+    claudeApiKeyDraft,
+    claudeModelDraft,
+    grokApiKeyDraft,
+    grokModelDraft,
     azureOpenAIApiKeyDraft,
     azureOpenAIEndpointDraft,
     azureOpenAIApiVersionDraft,
@@ -310,11 +379,17 @@ export function OpenRouterSettings({
         const json = event.target?.result as string
         const settings = JSON.parse(json) as SettingsExport
 
-        setProviderDraft(coerceProvider(settings.llmProvider || "openrouter"))
+        setProviderDraft(normalizeLlmProvider(settings.llmProvider || "openrouter"))
         setOpenRouterApiKeyDraft(settings.openRouterApiKey || "")
         setOpenRouterModelDraft(settings.openRouterModel || "")
         setOpenAIApiKeyDraft(settings.openAIApiKey || "")
         setOpenAIModelDraft(settings.openAIModel || "")
+        setGeminiApiKeyDraft(settings.geminiApiKey || "")
+        setGeminiModelDraft(settings.geminiModel || "")
+        setClaudeApiKeyDraft(settings.claudeApiKey || "")
+        setClaudeModelDraft(settings.claudeModel || "")
+        setGrokApiKeyDraft(settings.grokApiKey || "")
+        setGrokModelDraft(settings.grokModel || "")
         setAzureOpenAIApiKeyDraft(settings.azureOpenAIApiKey || "")
         setAzureOpenAIEndpointDraft(settings.azureOpenAIEndpoint || "")
         setAzureOpenAIApiVersionDraft(settings.azureOpenAIApiVersion || "")
@@ -343,6 +418,53 @@ export function OpenRouterSettings({
   }, [])
 
   const selected = models.find((m) => m.id === openRouterModelDraft)
+  const activeProviderMeta = LLM_PROVIDER_METADATA[providerDraft]
+  const directProviderState =
+    providerDraft === "openai"
+      ? {
+          apiKeyId: "openai-key",
+          modelId: "openai-model",
+          apiKeyDraft: openAIApiKeyDraft,
+          setApiKeyDraft: setOpenAIApiKeyDraft,
+          modelDraft: openAIModelDraft,
+          setModelDraft: setOpenAIModelDraft,
+          showApiKey: showOpenAIKey,
+          setShowApiKey: setShowOpenAIKey,
+        }
+      : providerDraft === "gemini"
+        ? {
+            apiKeyId: "gemini-key",
+            modelId: "gemini-model",
+            apiKeyDraft: geminiApiKeyDraft,
+            setApiKeyDraft: setGeminiApiKeyDraft,
+            modelDraft: geminiModelDraft,
+            setModelDraft: setGeminiModelDraft,
+            showApiKey: showGeminiKey,
+            setShowApiKey: setShowGeminiKey,
+          }
+        : providerDraft === "claude"
+          ? {
+              apiKeyId: "claude-key",
+              modelId: "claude-model",
+              apiKeyDraft: claudeApiKeyDraft,
+              setApiKeyDraft: setClaudeApiKeyDraft,
+              modelDraft: claudeModelDraft,
+              setModelDraft: setClaudeModelDraft,
+              showApiKey: showClaudeKey,
+              setShowApiKey: setShowClaudeKey,
+            }
+          : providerDraft === "grok"
+            ? {
+                apiKeyId: "grok-key",
+                modelId: "grok-model",
+                apiKeyDraft: grokApiKeyDraft,
+                setApiKeyDraft: setGrokApiKeyDraft,
+                modelDraft: grokModelDraft,
+                setModelDraft: setGrokModelDraft,
+                showApiKey: showGrokKey,
+                setShowApiKey: setShowGrokKey,
+              }
+            : null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -409,19 +531,22 @@ export function OpenRouterSettings({
             <Label>LLM provider</Label>
             <Select
               value={providerDraft}
-              onValueChange={(value) => setProviderDraft(coerceProvider(value))}
+              onValueChange={(value) => setProviderDraft(normalizeLlmProvider(value))}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a provider" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="openrouter">OpenRouter</SelectItem>
-                <SelectItem value="openai">OpenAI</SelectItem>
-                <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
+                {LLM_PROVIDER_OPTIONS.map((providerId) => (
+                  <SelectItem key={providerId} value={providerId}>
+                    {LLM_PROVIDER_METADATA[providerId].label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="text-muted-foreground text-xs">
-              Keys are stored by the local server and reused across chat turns.
+              {activeProviderMeta.description} Keys are stored by the local server and reused across
+              chat turns.
             </p>
           </div>
 
@@ -545,37 +670,43 @@ export function OpenRouterSettings({
                 </div>
               </div>
             </>
-          ) : providerDraft === "openai" ? (
+          ) : directProviderState ? (
             <>
               <div className="space-y-2">
-                <Label htmlFor="openai-key">OpenAI API key</Label>
+                <Label htmlFor={directProviderState.apiKeyId}>
+                  {activeProviderMeta.apiKeyLabel}
+                </Label>
                 <div className="flex gap-2">
                   <Input
-                    id="openai-key"
-                    type={showOpenAIKey ? "text" : "password"}
-                    placeholder="sk-..."
-                    value={openAIApiKeyDraft}
-                    onChange={(e) => setOpenAIApiKeyDraft(e.target.value)}
+                    id={directProviderState.apiKeyId}
+                    type={directProviderState.showApiKey ? "text" : "password"}
+                    placeholder={activeProviderMeta.apiKeyPlaceholder}
+                    value={directProviderState.apiKeyDraft}
+                    onChange={(e) => directProviderState.setApiKeyDraft(e.target.value)}
                   />
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
-                    onClick={() => setShowOpenAIKey((v) => !v)}
-                    aria-label={showOpenAIKey ? "Hide API key" : "Show API key"}
+                    onClick={() => directProviderState.setShowApiKey((v) => !v)}
+                    aria-label={directProviderState.showApiKey ? "Hide API key" : "Show API key"}
                   >
-                    {showOpenAIKey ? <EyeSlash className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {directProviderState.showApiKey ? (
+                      <EyeSlash className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="openai-model">Model</Label>
+                <Label htmlFor={directProviderState.modelId}>{activeProviderMeta.modelLabel}</Label>
                 <Input
-                  id="openai-model"
-                  placeholder="gpt-4o-mini"
-                  value={openAIModelDraft}
-                  onChange={(e) => setOpenAIModelDraft(e.target.value)}
+                  id={directProviderState.modelId}
+                  placeholder={activeProviderMeta.modelPlaceholder}
+                  value={directProviderState.modelDraft}
+                  onChange={(e) => directProviderState.setModelDraft(e.target.value)}
                 />
               </div>
             </>

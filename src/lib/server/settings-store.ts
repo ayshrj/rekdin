@@ -1,5 +1,10 @@
 import { OPENROUTER_MODEL } from "@/configs"
-import { LlmProvider, ProviderSettings, ServerSettings } from "@/types/runtime"
+import {
+  getProviderDefaultModel,
+  hasProviderCredentials as providerHasCredentials,
+  normalizeLlmProvider,
+} from "@/lib/llm-providers"
+import { ProviderSettings, ServerSettings } from "@/types/runtime"
 
 import { readJsonFile, withFileWriteLock, writeJsonFileAtomic } from "./json-store"
 import { ensureWorkspaceDirs, getSettingsFilePath } from "./workspace"
@@ -11,6 +16,12 @@ const DEFAULT_SETTINGS: ServerSettings = {
   openRouterApiKey: "",
   openAIModel: "gpt-4o-mini",
   openAIApiKey: "",
+  geminiModel: getProviderDefaultModel("gemini"),
+  geminiApiKey: "",
+  claudeModel: getProviderDefaultModel("claude"),
+  claudeApiKey: "",
+  grokModel: getProviderDefaultModel("grok"),
+  grokApiKey: "",
   azureOpenAIApiKey: "",
   azureOpenAIEndpoint: "",
   azureOpenAIApiVersion: "2024-02-15-preview",
@@ -21,15 +32,6 @@ const DEFAULT_SETTINGS: ServerSettings = {
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET ?? "",
 }
 
-function normalizeProvider(value: string | null | undefined): LlmProvider {
-  const normalized = (value ?? "").trim().toLowerCase()
-  if (normalized === "openai") return "openai"
-  if (normalized === "azure" || normalized === "azure-openai" || normalized === "azure_openai") {
-    return "azure_openai"
-  }
-  return "openrouter"
-}
-
 function normalizeSettings(raw?: Partial<ServerSettings> | null): ServerSettings {
   return {
     ...DEFAULT_SETTINGS,
@@ -38,11 +40,17 @@ function normalizeSettings(raw?: Partial<ServerSettings> | null): ServerSettings
       typeof raw?.currentSessionId === "string" || raw?.currentSessionId === null
         ? raw.currentSessionId
         : DEFAULT_SETTINGS.currentSessionId,
-    llmProvider: normalizeProvider(raw?.llmProvider),
+    llmProvider: normalizeLlmProvider(raw?.llmProvider),
     openRouterModel: raw?.openRouterModel?.trim() || DEFAULT_SETTINGS.openRouterModel,
     openRouterApiKey: raw?.openRouterApiKey?.trim() || DEFAULT_SETTINGS.openRouterApiKey,
     openAIModel: raw?.openAIModel?.trim() || DEFAULT_SETTINGS.openAIModel,
     openAIApiKey: raw?.openAIApiKey?.trim() ?? DEFAULT_SETTINGS.openAIApiKey,
+    geminiModel: raw?.geminiModel?.trim() || DEFAULT_SETTINGS.geminiModel,
+    geminiApiKey: raw?.geminiApiKey?.trim() ?? DEFAULT_SETTINGS.geminiApiKey,
+    claudeModel: raw?.claudeModel?.trim() || DEFAULT_SETTINGS.claudeModel,
+    claudeApiKey: raw?.claudeApiKey?.trim() ?? DEFAULT_SETTINGS.claudeApiKey,
+    grokModel: raw?.grokModel?.trim() || DEFAULT_SETTINGS.grokModel,
+    grokApiKey: raw?.grokApiKey?.trim() ?? DEFAULT_SETTINGS.grokApiKey,
     azureOpenAIApiKey: raw?.azureOpenAIApiKey?.trim() ?? DEFAULT_SETTINGS.azureOpenAIApiKey,
     azureOpenAIEndpoint: raw?.azureOpenAIEndpoint?.trim() ?? DEFAULT_SETTINGS.azureOpenAIEndpoint,
     azureOpenAIApiVersion:
@@ -103,6 +111,12 @@ export async function getProviderSettings(): Promise<ProviderSettings> {
     openRouterApiKey: settings.openRouterApiKey,
     openAIModel: settings.openAIModel,
     openAIApiKey: settings.openAIApiKey,
+    geminiModel: settings.geminiModel,
+    geminiApiKey: settings.geminiApiKey,
+    claudeModel: settings.claudeModel,
+    claudeApiKey: settings.claudeApiKey,
+    grokModel: settings.grokModel,
+    grokApiKey: settings.grokApiKey,
     azureOpenAIApiKey: settings.azureOpenAIApiKey,
     azureOpenAIEndpoint: settings.azureOpenAIEndpoint,
     azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
@@ -111,15 +125,7 @@ export async function getProviderSettings(): Promise<ProviderSettings> {
 }
 
 export function hasProviderCredentials(settings: ServerSettings) {
-  if (settings.llmProvider === "openrouter") {
-    return Boolean(settings.openRouterApiKey && settings.openRouterModel)
-  }
-  if (settings.llmProvider === "openai") {
-    return Boolean(settings.openAIApiKey && settings.openAIModel)
-  }
-  return Boolean(
-    settings.azureOpenAIApiKey && settings.azureOpenAIEndpoint && settings.azureOpenAIDeployment
-  )
+  return providerHasCredentials(settings.llmProvider, settings)
 }
 
-export { DEFAULT_SETTINGS, normalizeProvider, normalizeSettings }
+export { DEFAULT_SETTINGS, normalizeLlmProvider as normalizeProvider, normalizeSettings }

@@ -15,6 +15,18 @@ type OpenRouterModelsResponse = {
   }>
 }
 
+const DIRECT_PROVIDER_MODEL_PREFIXES = [
+  "openai/",
+  "anthropic/claude",
+  "google/gemini",
+  "x-ai/grok",
+  "xai/grok",
+] as const
+
+function isFilteredDirectProviderModel(modelId: string) {
+  return DIRECT_PROVIDER_MODEL_PREFIXES.some((prefix) => modelId.startsWith(prefix))
+}
+
 export async function GET(req: Request) {
   const settings = await getSettingsStore().load()
   const apiKey = req.headers.get("x-openrouter-api-key")?.trim() || settings.openRouterApiKey
@@ -41,12 +53,14 @@ export async function GET(req: Request) {
 
   const data = (await res.json()) as OpenRouterModelsResponse
   const models =
-    data.data?.map((m) => ({
-      id: m.id,
-      name: m.name ?? m.id,
-      description: m.description ?? "",
-      contextLength: m.context_length ?? null,
-    })) ?? []
+    data.data
+      ?.filter((m) => !isFilteredDirectProviderModel(m.id))
+      .map((m) => ({
+        id: m.id,
+        name: m.name ?? m.id,
+        description: m.description ?? "",
+        contextLength: m.context_length ?? null,
+      })) ?? []
 
   return NextResponse.json({ models })
 }

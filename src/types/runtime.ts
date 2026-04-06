@@ -1,36 +1,22 @@
+import { LlmProvider, ProviderCredentialFields } from "@/lib/llm-providers"
 import { ChatMessage, ToolCall } from "@/types/chat"
 
-export type LlmProvider = "openrouter" | "openai" | "azure_openai"
+export type { LlmProvider } from "@/lib/llm-providers"
+
 export type AgentMode = "general" | "research" | "browser" | "workspace" | "document"
 export type ToolPolicyProfile = "read_only" | "balanced" | "full_auto"
 
-export interface ServerSettings {
+export interface ServerSettings extends ProviderCredentialFields {
   currentSessionId?: string | null
   llmProvider: LlmProvider
-  openRouterModel: string
-  openRouterApiKey: string
-  openAIModel: string
-  openAIApiKey: string
-  azureOpenAIApiKey: string
-  azureOpenAIEndpoint: string
-  azureOpenAIApiVersion: string
-  azureOpenAIDeployment: string
   liveModeEnabled: boolean
   cloudinaryCloudName: string
   cloudinaryApiKey: string
   cloudinaryApiSecret: string
 }
 
-export interface ProviderSettings {
+export interface ProviderSettings extends ProviderCredentialFields {
   provider: LlmProvider
-  openRouterModel: string
-  openRouterApiKey: string
-  openAIModel: string
-  openAIApiKey: string
-  azureOpenAIApiKey: string
-  azureOpenAIEndpoint: string
-  azureOpenAIApiVersion: string
-  azureOpenAIDeployment: string
 }
 
 export interface ArtifactRef {

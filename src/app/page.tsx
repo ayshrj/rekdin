@@ -19,6 +19,7 @@ import {
 import { WorkspacePanel } from "@/components/workspace-panel"
 import { useChat } from "@/contexts/chat-context"
 import { Clock, GalleryVerticalEnd, GitHub, PanelLeft, Rekdin, Sparkles } from "@/lib/icons"
+import { getProviderLabel } from "@/lib/llm-providers"
 import { cn } from "@/lib/utils"
 
 const MAIN_LAYOUT = { chat: 38, workspace: 62 }
@@ -84,8 +85,8 @@ const TOUR_STEPS: TourStep[] = [
       <div>
         <p className="text-foreground mb-1 text-sm font-semibold">Settings</p>
         <p className="text-muted-foreground text-xs leading-relaxed">
-          Add your API key to connect to OpenRouter, OpenAI, or Azure OpenAI. You can also change
-          models and configure agent behavior here.
+          Choose between OpenRouter, OpenAI, Gemini, Claude, Grok, or Azure OpenAI. You can also
+          change models and configure agent behavior here.
         </p>
       </div>
     ),
@@ -190,12 +191,7 @@ function HomePageContent() {
 
   const { restartTour } = useTour()
 
-  const providerLabel =
-    llmProvider === "openai"
-      ? "OpenAI"
-      : llmProvider === "azure_openai"
-        ? "Azure OpenAI"
-        : "OpenRouter"
+  const providerLabel = getProviderLabel(llmProvider)
 
   const currentSession = sessions?.find((s) => s.id === currentSessionId)
   const sessionTitle = currentSession?.title ?? "New conversation"

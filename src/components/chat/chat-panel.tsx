@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useChat } from "@/contexts/chat-context"
 import { ArrowPath, ClipboardDocumentList, Cog8Tooth, Sparkles } from "@/lib/icons"
 import { parseLLMError } from "@/lib/llm-errors"
+import { getProviderMissingConfigMessage, hasProviderCredentials } from "@/lib/llm-providers"
 import { WORKFLOW_PRESETS } from "@/lib/workflows"
 
 import { ChatInput } from "./chat-input"
@@ -25,8 +26,19 @@ export function ChatPanel() {
     sessions,
     llmProvider,
     openRouterApiKey,
+    openRouterModel,
     openAIApiKey,
+    openAIModel,
+    geminiApiKey,
+    geminiModel,
+    claudeApiKey,
+    claudeModel,
+    grokApiKey,
+    grokModel,
     azureOpenAIApiKey,
+    azureOpenAIEndpoint,
+    azureOpenAIApiVersion,
+    azureOpenAIDeployment,
   } = useChat()
   const scrollRef = React.useRef<HTMLDivElement | null>(null)
   const scrollViewportRef = React.useRef<HTMLDivElement | null>(null)
@@ -39,17 +51,42 @@ export function ChatPanel() {
   const [hydrated, setHydrated] = React.useState(false)
   const [showAllTools, setShowAllTools] = React.useState(false)
   const missingApiKey = React.useMemo(() => {
-    if (llmProvider === "openai") return !openAIApiKey
-    if (llmProvider === "azure_openai") return !azureOpenAIApiKey
-    return !openRouterApiKey
-  }, [azureOpenAIApiKey, llmProvider, openAIApiKey, openRouterApiKey])
+    return !hasProviderCredentials(llmProvider, {
+      openRouterModel,
+      openRouterApiKey,
+      openAIModel,
+      openAIApiKey,
+      geminiModel,
+      geminiApiKey,
+      claudeModel,
+      claudeApiKey,
+      grokModel,
+      grokApiKey,
+      azureOpenAIApiKey,
+      azureOpenAIEndpoint,
+      azureOpenAIApiVersion,
+      azureOpenAIDeployment,
+    })
+  }, [
+    azureOpenAIApiKey,
+    azureOpenAIApiVersion,
+    azureOpenAIDeployment,
+    azureOpenAIEndpoint,
+    claudeApiKey,
+    claudeModel,
+    geminiApiKey,
+    geminiModel,
+    grokApiKey,
+    grokModel,
+    llmProvider,
+    openAIApiKey,
+    openAIModel,
+    openRouterApiKey,
+    openRouterModel,
+  ])
   const missingApiKeyMessage = React.useMemo(() => {
     if (!missingApiKey) return ""
-    if (llmProvider === "openai") return "Add your OpenAI API key to use chat."
-    if (llmProvider === "azure_openai") {
-      return "Add your Azure OpenAI API key to use chat."
-    }
-    return "Add your OpenRouter API key to use chat."
+    return getProviderMissingConfigMessage(llmProvider).replace("Set your ", "Add your ")
   }, [llmProvider, missingApiKey])
 
   React.useEffect(() => {

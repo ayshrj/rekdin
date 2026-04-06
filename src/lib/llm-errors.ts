@@ -16,7 +16,8 @@ const ERROR_MAP: Record<number, { title: string; action: string }> = {
   },
   402: {
     title: "Insufficient credits",
-    action: "Add credits at openrouter.ai/settings/credits, or switch to a free model in Settings.",
+    action:
+      "Add billing or credits for the selected provider, or switch to another model in Settings.",
   },
   403: {
     title: "Access denied",

@@ -2,6 +2,7 @@ import crypto from "crypto"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
+import { getProviderModel, normalizeLlmProvider } from "@/lib/llm-providers"
 import { getReplayStore } from "@/lib/server/replay-store"
 import { runChatTurn } from "@/lib/server/runtime/agent-runtime"
 import { createEventStream } from "@/lib/server/runtime/events"
@@ -198,12 +199,7 @@ export async function POST(req: Request) {
         toolPolicy:
           toolPolicy === "read_only" || toolPolicy === "full_auto" ? toolPolicy : "balanced",
         provider: providerSettings.provider,
-        model:
-          providerSettings.provider === "openrouter"
-            ? providerSettings.openRouterModel
-            : providerSettings.provider === "openai"
-              ? providerSettings.openAIModel
-              : providerSettings.azureOpenAIDeployment,
+        model: getProviderModel(normalizeLlmProvider(providerSettings.provider), providerSettings),
         warnings,
         toolCount: 0,
         totalToolDurationMs: 0,

@@ -17,6 +17,12 @@ describe("settings-store helpers", () => {
     expect(settings.liveModeEnabled).toBe(false)
   })
 
+  it("normalizes gemini, claude, and grok provider aliases", () => {
+    expect(normalizeSettings({ llmProvider: "google" as never }).llmProvider).toBe("gemini")
+    expect(normalizeSettings({ llmProvider: "anthropic" as never }).llmProvider).toBe("claude")
+    expect(normalizeSettings({ llmProvider: "xai" as never }).llmProvider).toBe("grok")
+  })
+
   it("detects whether the configured provider is ready to run", () => {
     expect(
       hasProviderCredentials(
@@ -47,5 +53,15 @@ describe("settings-store helpers", () => {
         })
       )
     ).toBe(false)
+
+    expect(
+      hasProviderCredentials(
+        normalizeSettings({
+          llmProvider: "claude",
+          claudeApiKey: "sk-ant-test",
+          claudeModel: "claude-sonnet-4-20250514",
+        })
+      )
+    ).toBe(true)
   })
 })

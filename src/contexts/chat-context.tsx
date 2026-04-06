@@ -20,6 +20,12 @@ import {
   updateSessionTitle,
 } from "@/lib/client/idb"
 import { parseLLMError } from "@/lib/llm-errors"
+import {
+  getProviderDefaultModel,
+  getProviderMissingConfigMessage,
+  hasProviderCredentials,
+  normalizeLlmProvider,
+} from "@/lib/llm-providers"
 import { logger } from "@/lib/logger"
 import { ChatMessage, ChatSession, ToolResultEntry } from "@/types/chat"
 import { LlmProvider, ServerEventV2, ServerSettings } from "@/types/runtime"
@@ -37,6 +43,12 @@ type ChatContextValue = {
   openRouterApiKey: string
   openAIModel: string
   openAIApiKey: string
+  geminiModel: string
+  geminiApiKey: string
+  claudeModel: string
+  claudeApiKey: string
+  grokModel: string
+  grokApiKey: string
   azureOpenAIApiKey: string
   azureOpenAIEndpoint: string
   azureOpenAIApiVersion: string
@@ -82,20 +94,17 @@ type LlmSettings = {
   openRouterApiKey: string
   openAIModel: string
   openAIApiKey: string
+  geminiModel: string
+  geminiApiKey: string
+  claudeModel: string
+  claudeApiKey: string
+  grokModel: string
+  grokApiKey: string
   azureOpenAIApiKey: string
   azureOpenAIEndpoint: string
   azureOpenAIApiVersion: string
   azureOpenAIDeployment: string
   liveModeEnabled: boolean
-}
-
-function normalizeProvider(value: string | null | undefined): LlmProvider {
-  const normalized = (value ?? "").trim().toLowerCase()
-  if (normalized === "openai") return "openai"
-  if (normalized === "azure_openai" || normalized === "azure-openai" || normalized === "azure") {
-    return "azure_openai"
-  }
-  return "openrouter"
 }
 
 async function fetchServerSettings(): Promise<ServerSettings> {
@@ -256,10 +265,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [sessions, setSessions] = React.useState<ChatSession[]>([])
   const [currentSessionId, setCurrentSessionId] = React.useState<string | null>(null)
   const [llmProvider, setLlmProvider] = React.useState<LlmProvider>("openrouter")
-  const [openRouterModel, setOpenRouterModel] = React.useState("openai/gpt-4o-mini")
+  const [openRouterModel, setOpenRouterModel] = React.useState(
+    getProviderDefaultModel("openrouter")
+  )
   const [openRouterApiKey, setOpenRouterApiKey] = React.useState("")
-  const [openAIModel, setOpenAIModel] = React.useState("gpt-4o-mini")
+  const [openAIModel, setOpenAIModel] = React.useState(getProviderDefaultModel("openai"))
   const [openAIApiKey, setOpenAIApiKey] = React.useState("")
+  const [geminiModel, setGeminiModel] = React.useState(getProviderDefaultModel("gemini"))
+  const [geminiApiKey, setGeminiApiKey] = React.useState("")
+  const [claudeModel, setClaudeModel] = React.useState(getProviderDefaultModel("claude"))
+  const [claudeApiKey, setClaudeApiKey] = React.useState("")
+  const [grokModel, setGrokModel] = React.useState(getProviderDefaultModel("grok"))
+  const [grokApiKey, setGrokApiKey] = React.useState("")
   const [azureOpenAIApiKey, setAzureOpenAIApiKey] = React.useState("")
   const [azureOpenAIEndpoint, setAzureOpenAIEndpoint] = React.useState("")
   const [azureOpenAIApiVersion, setAzureOpenAIApiVersion] = React.useState("2024-02-15-preview")
@@ -499,11 +516,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       let preferredSessionId: string | null = null
       try {
         const serverSettings = await fetchServerSettings()
-        setLlmProvider(normalizeProvider(serverSettings.llmProvider))
-        setOpenRouterModel(serverSettings.openRouterModel || "openai/gpt-4o-mini")
+        setLlmProvider(normalizeLlmProvider(serverSettings.llmProvider))
+        setOpenRouterModel(serverSettings.openRouterModel || getProviderDefaultModel("openrouter"))
         setOpenRouterApiKey(serverSettings.openRouterApiKey || "")
-        setOpenAIModel(serverSettings.openAIModel || "gpt-4o-mini")
+        setOpenAIModel(serverSettings.openAIModel || getProviderDefaultModel("openai"))
         setOpenAIApiKey(serverSettings.openAIApiKey || "")
+        setGeminiModel(serverSettings.geminiModel || getProviderDefaultModel("gemini"))
+        setGeminiApiKey(serverSettings.geminiApiKey || "")
+        setClaudeModel(serverSettings.claudeModel || getProviderDefaultModel("claude"))
+        setClaudeApiKey(serverSettings.claudeApiKey || "")
+        setGrokModel(serverSettings.grokModel || getProviderDefaultModel("grok"))
+        setGrokApiKey(serverSettings.grokApiKey || "")
         setAzureOpenAIApiKey(serverSettings.azureOpenAIApiKey || "")
         setAzureOpenAIEndpoint(serverSettings.azureOpenAIEndpoint || "")
         setAzureOpenAIApiVersion(serverSettings.azureOpenAIApiVersion || "2024-02-15-preview")
@@ -533,14 +556,41 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [hydrateFromIdb])
 
   React.useEffect(() => {
-    const key =
-      llmProvider === "openrouter"
-        ? openRouterApiKey
-        : llmProvider === "openai"
-          ? openAIApiKey
-          : azureOpenAIApiKey
-    setConnected(Boolean(key))
-  }, [azureOpenAIApiKey, llmProvider, openAIApiKey, openRouterApiKey])
+    setConnected(
+      hasProviderCredentials(llmProvider, {
+        openRouterModel,
+        openRouterApiKey,
+        openAIModel,
+        openAIApiKey,
+        geminiModel,
+        geminiApiKey,
+        claudeModel,
+        claudeApiKey,
+        grokModel,
+        grokApiKey,
+        azureOpenAIApiKey,
+        azureOpenAIEndpoint,
+        azureOpenAIApiVersion,
+        azureOpenAIDeployment,
+      })
+    )
+  }, [
+    azureOpenAIApiKey,
+    azureOpenAIApiVersion,
+    azureOpenAIDeployment,
+    azureOpenAIEndpoint,
+    claudeApiKey,
+    claudeModel,
+    geminiApiKey,
+    geminiModel,
+    grokApiKey,
+    grokModel,
+    llmProvider,
+    openAIApiKey,
+    openAIModel,
+    openRouterApiKey,
+    openRouterModel,
+  ])
 
   React.useEffect(() => {
     if (!settingsHydratedRef.current) return
@@ -552,12 +602,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const updateLlmSettings = React.useCallback((next: Partial<LlmSettings>) => {
     if (typeof next.provider === "string") {
-      const value = normalizeProvider(next.provider)
+      const value = normalizeLlmProvider(next.provider)
       setLlmProvider(value)
     }
     if (typeof next.openRouterModel === "string") {
       const value = next.openRouterModel.trim()
-      setOpenRouterModel(value || "openai/gpt-4o-mini")
+      setOpenRouterModel(value || getProviderDefaultModel("openrouter"))
     }
     if (typeof next.openRouterApiKey === "string") {
       const value = next.openRouterApiKey.trim()
@@ -565,11 +615,35 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
     if (typeof next.openAIModel === "string") {
       const value = next.openAIModel.trim()
-      setOpenAIModel(value || "gpt-4o-mini")
+      setOpenAIModel(value || getProviderDefaultModel("openai"))
     }
     if (typeof next.openAIApiKey === "string") {
       const value = next.openAIApiKey.trim()
       setOpenAIApiKey(value)
+    }
+    if (typeof next.geminiModel === "string") {
+      const value = next.geminiModel.trim()
+      setGeminiModel(value || getProviderDefaultModel("gemini"))
+    }
+    if (typeof next.geminiApiKey === "string") {
+      const value = next.geminiApiKey.trim()
+      setGeminiApiKey(value)
+    }
+    if (typeof next.claudeModel === "string") {
+      const value = next.claudeModel.trim()
+      setClaudeModel(value || getProviderDefaultModel("claude"))
+    }
+    if (typeof next.claudeApiKey === "string") {
+      const value = next.claudeApiKey.trim()
+      setClaudeApiKey(value)
+    }
+    if (typeof next.grokModel === "string") {
+      const value = next.grokModel.trim()
+      setGrokModel(value || getProviderDefaultModel("grok"))
+    }
+    if (typeof next.grokApiKey === "string") {
+      const value = next.grokApiKey.trim()
+      setGrokApiKey(value)
     }
     if (typeof next.azureOpenAIApiKey === "string") {
       const value = next.azureOpenAIApiKey.trim()
@@ -592,18 +666,30 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
     void saveServerSettings({
       ...(typeof next.provider === "string"
-        ? { llmProvider: normalizeProvider(next.provider) }
+        ? { llmProvider: normalizeLlmProvider(next.provider) }
         : {}),
       ...(typeof next.openRouterModel === "string"
-        ? { openRouterModel: next.openRouterModel.trim() || "openai/gpt-4o-mini" }
+        ? { openRouterModel: next.openRouterModel.trim() || getProviderDefaultModel("openrouter") }
         : {}),
       ...(typeof next.openRouterApiKey === "string"
         ? { openRouterApiKey: next.openRouterApiKey.trim() }
         : {}),
       ...(typeof next.openAIModel === "string"
-        ? { openAIModel: next.openAIModel.trim() || "gpt-4o-mini" }
+        ? { openAIModel: next.openAIModel.trim() || getProviderDefaultModel("openai") }
         : {}),
       ...(typeof next.openAIApiKey === "string" ? { openAIApiKey: next.openAIApiKey.trim() } : {}),
+      ...(typeof next.geminiModel === "string"
+        ? { geminiModel: next.geminiModel.trim() || getProviderDefaultModel("gemini") }
+        : {}),
+      ...(typeof next.geminiApiKey === "string" ? { geminiApiKey: next.geminiApiKey.trim() } : {}),
+      ...(typeof next.claudeModel === "string"
+        ? { claudeModel: next.claudeModel.trim() || getProviderDefaultModel("claude") }
+        : {}),
+      ...(typeof next.claudeApiKey === "string" ? { claudeApiKey: next.claudeApiKey.trim() } : {}),
+      ...(typeof next.grokModel === "string"
+        ? { grokModel: next.grokModel.trim() || getProviderDefaultModel("grok") }
+        : {}),
+      ...(typeof next.grokApiKey === "string" ? { grokApiKey: next.grokApiKey.trim() } : {}),
       ...(typeof next.azureOpenAIApiKey === "string"
         ? { azureOpenAIApiKey: next.azureOpenAIApiKey.trim() }
         : {}),
@@ -770,20 +856,24 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     ) => {
       if (!content.trim()) return
       if (isLoading) return
-      const hasLlmConfig =
-        llmProvider === "openrouter"
-          ? Boolean(openRouterApiKey && openRouterModel)
-          : llmProvider === "openai"
-            ? Boolean(openAIApiKey && openAIModel)
-            : Boolean(azureOpenAIApiKey && azureOpenAIEndpoint && azureOpenAIDeployment)
+      const hasLlmConfig = hasProviderCredentials(llmProvider, {
+        openRouterModel,
+        openRouterApiKey,
+        openAIModel,
+        openAIApiKey,
+        geminiModel,
+        geminiApiKey,
+        claudeModel,
+        claudeApiKey,
+        grokModel,
+        grokApiKey,
+        azureOpenAIApiKey,
+        azureOpenAIEndpoint,
+        azureOpenAIApiVersion,
+        azureOpenAIDeployment,
+      })
       if (!hasLlmConfig) {
-        if (llmProvider === "openrouter") {
-          toast.error("Set your OpenRouter API key + model in Settings first")
-        } else if (llmProvider === "openai") {
-          toast.error("Set your OpenAI API key + model in Settings first")
-        } else {
-          toast.error("Set your Azure OpenAI key + endpoint + deployment in Settings first")
-        }
+        toast.error(getProviderMissingConfigMessage(llmProvider))
         return
       }
 
@@ -1127,6 +1217,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       mergeToolResults,
       normalizeMessageToolCalls,
       normalizeToolCall,
+      geminiApiKey,
+      geminiModel,
+      claudeApiKey,
+      claudeModel,
+      grokApiKey,
+      grokModel,
       openAIApiKey,
       openAIModel,
       openRouterApiKey,
@@ -1158,6 +1254,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       openRouterApiKey,
       openAIModel,
       openAIApiKey,
+      geminiModel,
+      geminiApiKey,
+      claudeModel,
+      claudeApiKey,
+      grokModel,
+      grokApiKey,
       azureOpenAIApiKey,
       azureOpenAIEndpoint,
       azureOpenAIApiVersion,
@@ -1191,6 +1293,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       joinSession,
       llmProvider,
       messages,
+      geminiApiKey,
+      geminiModel,
+      claudeApiKey,
+      claudeModel,
+      grokApiKey,
+      grokModel,
       openAIApiKey,
       openAIModel,
       openRouterApiKey,

@@ -1,3 +1,4 @@
+import { ChatAnthropic } from "@langchain/anthropic"
 import {
   AIMessage,
   AIMessageChunk,
@@ -8,9 +9,18 @@ import {
 } from "@langchain/core/messages"
 import { StructuredToolInterface } from "@langchain/core/tools"
 import { IterableReadableStream } from "@langchain/core/utils/stream"
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
 import { AzureChatOpenAI, ChatOpenAI } from "@langchain/openai"
 
 import { OPENROUTER_API_KEY, OPENROUTER_FALLBACK_MODEL, OPENROUTER_MODEL } from "@/configs"
+import {
+  getOpenAICompatibleProviderConfig,
+  getProviderDefaultModel,
+  getProviderLabel,
+  getProviderModel,
+  isOpenAICompatibleProvider,
+  normalizeLlmProvider,
+} from "@/lib/llm-providers"
 import { ChatMessage, ToolCall } from "@/types/chat"
 import { LlmProvider, ProviderSettings } from "@/types/runtime"
 
@@ -24,11 +34,27 @@ type AgentEventHandlers = {
   onWarning?: (warning: string) => void | Promise<void>
 }
 
+type BoundToolModel = {
+  stream: (
+    messages: BaseMessage[]
+  ) => Promise<AsyncIterable<AIMessageChunk> | IterableReadableStream<AIMessageChunk>>
+}
+
+type ToolCapableChatModel = {
+  bindTools: (tools: StructuredToolInterface[]) => BoundToolModel
+}
+
 const MAX_TOOL_RESULT_CHARS = 12_000
 const MAX_STRING_CHARS = 6_000
 const MAX_ARRAY_ITEMS = 30
 const MAX_OBJECT_KEYS = 50
 const MAX_DEPTH = 4
+const GEMINI_UNSUPPORTED_TOOL_NAMES = new Set([
+  "http_request",
+  "download_fetch",
+  "json_patch",
+  "yaml_patch",
+])
 
 function truncateString(value: string, max = MAX_STRING_CHARS) {
   if (value.length <= max) return value
@@ -106,21 +132,15 @@ function toolMessageContent(result: unknown) {
   return content
 }
 
-function normalizeProvider(value: string | undefined | null): LlmProvider {
-  const normalized = (value ?? "").trim().toLowerCase()
-  if (normalized === "openai") return "openai"
-  if (normalized === "azure_openai" || normalized === "azure-openai" || normalized === "azure") {
-    return "azure_openai"
-  }
-  return "openrouter"
-}
-
 function createModel({
   provider,
   origin,
   modelId,
   openRouterApiKey,
   openAIApiKey,
+  geminiApiKey,
+  claudeApiKey,
+  grokApiKey,
   azureOpenAIApiKey,
   azureOpenAIEndpoint,
   azureOpenAIApiVersion,
@@ -131,38 +151,60 @@ function createModel({
   modelId: string
   openRouterApiKey?: string
   openAIApiKey?: string
+  geminiApiKey?: string
+  claudeApiKey?: string
+  grokApiKey?: string
   azureOpenAIApiKey?: string
   azureOpenAIEndpoint?: string
   azureOpenAIApiVersion?: string
   azureOpenAIDeployment?: string
-}) {
-  const referer = typeof origin === "string" ? origin : "http://localhost:3000"
+}): ToolCapableChatModel {
+  if (provider === "gemini") {
+    const apiKey = geminiApiKey
+    const model = modelId || getProviderDefaultModel("gemini")
+    if (!apiKey) throw new Error("Missing Gemini API key (set it in Settings)")
+    if (!model) throw new Error("Missing Gemini model (set it in Settings)")
 
-  if (provider === "openrouter") {
-    const apiKey = openRouterApiKey ?? OPENROUTER_API_KEY
-    const model = modelId || OPENROUTER_MODEL
-    if (!apiKey) throw new Error("Missing OpenRouter API key (set it in Settings)")
-    if (!model) throw new Error("Missing OpenRouter model (set it in Settings)")
+    return new ChatGoogleGenerativeAI({
+      apiKey,
+      model,
+      temperature: 0.2,
+    })
+  }
+
+  if (provider === "claude") {
+    const apiKey = claudeApiKey
+    const model = modelId || getProviderDefaultModel("claude")
+    if (!apiKey) throw new Error("Missing Claude API key (set it in Settings)")
+    if (!model) throw new Error("Missing Claude model (set it in Settings)")
+
+    return new ChatAnthropic({
+      apiKey,
+      model,
+      temperature: 0.2,
+    })
+  }
+
+  if (isOpenAICompatibleProvider(provider)) {
+    const apiKey =
+      provider === "openrouter"
+        ? (openRouterApiKey ?? OPENROUTER_API_KEY)
+        : provider === "openai"
+          ? openAIApiKey
+          : grokApiKey
+    const model =
+      modelId || (provider === "openrouter" ? OPENROUTER_MODEL : getProviderDefaultModel(provider))
+    const label = getProviderLabel(provider)
+    if (!apiKey) throw new Error(`Missing ${label} API key (set it in Settings)`)
+    if (!model) throw new Error(`Missing ${label} model (set it in Settings)`)
+    const configuration = getOpenAICompatibleProviderConfig(provider, origin)
+
     return new ChatOpenAI({
       apiKey,
       model,
       temperature: 0.2,
-      configuration: {
-        baseURL: "https://openrouter.ai/api/v1",
-        defaultHeaders: {
-          "HTTP-Referer": referer,
-          "X-Title": "Rekdin Next",
-        },
-      },
+      configuration,
     })
-  }
-
-  if (provider === "openai") {
-    const apiKey = openAIApiKey
-    const model = modelId
-    if (!apiKey) throw new Error("Missing OpenAI API key (set it in Settings)")
-    if (!model) throw new Error("Missing OpenAI model (set it in Settings)")
-    return new ChatOpenAI({ apiKey, model, temperature: 0.2 })
   }
 
   const apiKey = azureOpenAIApiKey
@@ -329,17 +371,33 @@ export async function runAgent({
   onWarning,
 }: AgentRunOptions): Promise<AgentRunResult> {
   return runWithToolExecutionContext({ sessionId }, async () => {
+    const providerId = normalizeLlmProvider(providerSettings.provider)
     const tools: StructuredToolInterface[] = createToolset({
       headers: toolHeaders,
       allowedToolNames,
-    })
-    const providerId = normalizeProvider(providerSettings.provider)
+    }).filter((tool) =>
+      providerId === "gemini" ? !GEMINI_UNSUPPORTED_TOOL_NAMES.has(tool.name) : true
+    )
+
+    if (providerId === "gemini") {
+      const disabledTools = createToolset({
+        headers: toolHeaders,
+        allowedToolNames,
+      })
+        .map((tool) => tool.name)
+        .filter((name) => GEMINI_UNSUPPORTED_TOOL_NAMES.has(name))
+      if (disabledTools.length > 0) {
+        await onWarning?.(`Gemini disables unsupported tool schemas: ${disabledTools.join(", ")}.`)
+      }
+    }
+
     let modelId =
-      providerId === "openrouter"
-        ? (providerSettings.openRouterModel ?? OPENROUTER_MODEL)
-        : providerId === "openai"
-          ? (providerSettings.openAIModel ?? "")
-          : (providerSettings.azureOpenAIDeployment ?? "")
+      getProviderModel(providerId, providerSettings).trim() ||
+      (providerId === "openrouter"
+        ? OPENROUTER_MODEL
+        : providerId === "azure_openai"
+          ? ""
+          : getProviderDefaultModel(providerId))
 
     let llm = createModel({
       provider: providerId,
@@ -347,6 +405,9 @@ export async function runAgent({
       modelId,
       openRouterApiKey: providerSettings.openRouterApiKey,
       openAIApiKey: providerSettings.openAIApiKey,
+      geminiApiKey: providerSettings.geminiApiKey,
+      claudeApiKey: providerSettings.claudeApiKey,
+      grokApiKey: providerSettings.grokApiKey,
       azureOpenAIApiKey: providerSettings.azureOpenAIApiKey,
       azureOpenAIEndpoint: providerSettings.azureOpenAIEndpoint,
       azureOpenAIApiVersion: providerSettings.azureOpenAIApiVersion,
@@ -389,6 +450,9 @@ export async function runAgent({
             modelId,
             openRouterApiKey: providerSettings.openRouterApiKey,
             openAIApiKey: providerSettings.openAIApiKey,
+            geminiApiKey: providerSettings.geminiApiKey,
+            claudeApiKey: providerSettings.claudeApiKey,
+            grokApiKey: providerSettings.grokApiKey,
             azureOpenAIApiKey: providerSettings.azureOpenAIApiKey,
             azureOpenAIEndpoint: providerSettings.azureOpenAIEndpoint,
             azureOpenAIApiVersion: providerSettings.azureOpenAIApiVersion,
