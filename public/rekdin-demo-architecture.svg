@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" fill="none">
+  <g id="background">
+    <rect width="1600" height="900" fill="#F7F8FA"/>
+    <rect x="40" y="36" width="1520" height="828" rx="28" fill="#FFFFFF" stroke="#D8DEE9" stroke-width="2"/>
+  </g>
+  <g id="header">
+    <text x="80" y="100" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700">Rekdin Runtime Architecture</text>
+    <text x="80" y="136" fill="#4B5563" font-family="Arial, Helvetica, sans-serif" font-size="18">Foreground chat, background workflows, tool execution, and observable persistence</text>
+  </g>
+  <g id="ui-surface">
+    <rect x="80" y="190" width="280" height="260" rx="24" fill="#EEF4FF" stroke="#8AB4F8" stroke-width="2"/>
+    <text x="110" y="235" fill="#1D4ED8" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">UI Surface</text>
+    <g id="chat-panel">
+      <rect x="108" y="260" width="224" height="58" rx="14" fill="#FFFFFF" stroke="#BFD4FF"/>
+      <text x="128" y="295" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">ChatPanel</text>
+    </g>
+    <g id="chat-context">
+      <rect x="108" y="334" width="224" height="58" rx="14" fill="#FFFFFF" stroke="#BFD4FF"/>
+      <text x="128" y="369" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">ChatContext</text>
+    </g>
+    <text x="100" y="422" fill="#4B5563" font-family="Arial, Helvetica, sans-serif" font-size="16">Optimistic UI and SSE IndexedDB</text>
+    <text x="115" y="444" fill="#4B5563" font-family="Arial, Helvetica, sans-serif" font-size="16">mirror with live state merge</text>
+  </g>
+  <g id="inspector-ui">
+    <rect x="80" y="480" width="280" height="260" rx="24" fill="#EFFCF6" stroke="#6EE7B7" stroke-width="2"/>
+    <text x="110" y="525" fill="#047857" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Inspector UI</text>
+    <g id="workspace-panel">
+      <rect x="108" y="550" width="224" height="58" rx="14" fill="#FFFFFF" stroke="#A7F3D0"/>
+      <text x="128" y="585" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">WorkspacePanel</text>
+    </g>
+    <g id="openrouter-settings">
+      <rect x="108" y="624" width="224" height="58" rx="14" fill="#FFFFFF" stroke="#A7F3D0"/>
+      <text x="128" y="659" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">OpenRouterSettings</text>
+    </g>
+    <text x="100" y="710" fill="#4B5563" font-family="Arial, Helvetica, sans-serif" font-size="16">Timeline, traces, replay artifacts,</text>
+    <text x="90" y="732" fill="#4B5563" font-family="Arial, Helvetica, sans-serif" font-size="16">background jobs &amp; provider settings</text>
+  </g>
+  <g id="api-layer">
+    <rect x="430" y="190" width="320" height="520" rx="24" fill="#FFF7ED" stroke="#FDBA74" stroke-width="2"/>
+    <text x="460" y="235" fill="#C2410C" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">API Layer</text>
+    <g id="api-chat">
+      <rect x="458" y="260" width="264" height="90" rx="14" fill="#FFFFFF" stroke="#FED7AA"/>
+      <text x="478" y="293" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="600">POST /api/chat</text>
+      <foreignObject x="478" y="305" width="220" height="70">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Arial, Helvetica, sans-serif; font-size:14px; color:#6B7280; line-height:1.3; word-wrap:break-word;">
+          validate input, persist user msg, open SSE
+        </div>
+      </foreignObject>
+    </g>
+    <g id="api-background">
+      <rect x="458" y="370" width="264" height="70" rx="14" fill="#FFFFFF" stroke="#FED7AA"/>
+      <text x="478" y="403" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="600">POST /api/background</text>
+      <foreignObject x="478" y="415" width="230" height="70">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Arial, Helvetica, sans-serif; font-size:14px; color:#6B7280; line-height:1.3; word-wrap:break-word;">
+          queue workflow, return job metadata
+        </div>
+      </foreignObject>
+    </g>
+    <g id="api-settings">
+      <rect x="458" y="460" width="264" height="70" rx="14" fill="#FFFFFF" stroke="#FED7AA"/>
+      <text x="478" y="493" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="600">GET/PUT /api/settings</text>
+      <foreignObject x="478" y="505" width="220" height="70">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Arial, Helvetica, sans-serif; font-size:14px; color:#6B7280; line-height:1.3; word-wrap:break-word;">
+          provider config, live mode, uploads
+        </div>
+      </foreignObject>
+    </g>
+    <g id="api-observability">
+      <rect x="458" y="550" width="264" height="90" rx="14" fill="#FFFFFF" stroke="#FED7AA"/>
+      <text x="478" y="583" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="600">Replay / traces / export</text>
+      <foreignObject x="478" y="595" width="220" height="70">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Arial, Helvetica, sans-serif; font-size:14px; color:#6B7280; line-height:1.3; word-wrap:break-word;">
+          observable outputs for demos and review
+        </div>
+      </foreignObject>
+    </g>
+    <text x="460" y="668" fill="#4B5563" font-family="Arial, Helvetica, sans-serif" font-size="16">Foreground and background paths</text>
+    <text x="460" y="690" fill="#4B5563" font-family="Arial, Helvetica, sans-serif" font-size="16">share the same runtime primitives</text>
+  </g>
+  <g id="runtime-core">
+    <rect x="820" y="190" width="340" height="510" rx="24" fill="#F5F3FF" stroke="#A78BFA" stroke-width="2"/>
+    <text x="850" y="235" fill="#6D28D9" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Runtime Core</text>
+    <g id="run-chat-turn">
+      <rect x="848" y="260" width="284" height="64" rx="14" fill="#FFFFFF" stroke="#DDD6FE"/>
+      <text x="868" y="300" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">runChatTurn</text>
+    </g>
+    <g id="build-system-prompt">
+      <rect x="848" y="338" width="284" height="64" rx="14" fill="#FFFFFF" stroke="#DDD6FE"/>
+      <text x="868" y="378" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">buildSystemPrompt</text>
+    </g>
+    <g id="resolve-allowed-tool-names">
+      <rect x="848" y="416" width="284" height="64" rx="14" fill="#FFFFFF" stroke="#DDD6FE"/>
+      <text x="868" y="456" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">resolveAllowedToolNames</text>
+    </g>
+    <g id="run-agent-langchain">
+      <rect x="848" y="494" width="284" height="64" rx="14" fill="#FFFFFF" stroke="#DDD6FE"/>
+      <text x="868" y="534" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">runAgent + LangChain</text>
+    </g>
+    <g id="create-toolset-providers">
+      <rect x="848" y="572" width="284" height="64" rx="14" fill="#FFFFFF" stroke="#DDD6FE"/>
+      <text x="868" y="612" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">createToolset + providers</text>
+    </g>
+    <text x="850" y="662" fill="#4B5563" font-family="Arial, Helvetica, sans-serif" font-size="16">AgentMode, tool policy, and response</text>
+    <text x="900" y="684" fill="#4B5563" font-family="Arial, Helvetica, sans-serif" font-size="16">schema shape the turn</text>
+  </g>
+  <g id="execution-storage">
+    <rect x="1230" y="190" width="290" height="520" rx="24" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="2"/>
+    <text x="1260" y="235" fill="#B91C1C" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Execution + Storage</text>
+    <g id="tool-execution">
+      <rect x="1258" y="260" width="234" height="64" rx="14" fill="#FFFFFF" stroke="#FECACA"/>
+      <text x="1278" y="300" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">Tool execution</text>
+    </g>
+    <g id="session-store">
+      <rect x="1258" y="338" width="234" height="64" rx="14" fill="#FFFFFF" stroke="#FECACA"/>
+      <text x="1278" y="378" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">session-store</text>
+    </g>
+    <g id="replay-store">
+      <rect x="1258" y="416" width="234" height="64" rx="14" fill="#FFFFFF" stroke="#FECACA"/>
+      <text x="1278" y="456" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">replay-store</text>
+    </g>
+    <g id="trace-store">
+      <rect x="1258" y="494" width="234" height="64" rx="14" fill="#FFFFFF" stroke="#FECACA"/>
+      <text x="1278" y="534" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">trace-store</text>
+    </g>
+    <g id="background-job-store">
+      <rect x="1258" y="572" width="234" height="64" rx="14" fill="#FFFFFF" stroke="#FECACA"/>
+      <text x="1278" y="612" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">background-job-store</text>
+    </g>
+    <text x="1280" y="660" fill="#4B5563" font-family="Arial, Helvetica, sans-serif" font-size="16">JSON-backed server data</text>
+    <text x="1280" y="682" fill="#4B5563" font-family="Arial, Helvetica, sans-serif" font-size="16">under REKDIN_DATA_DIR</text>
+    <text x="1300" y="704" fill="#4B5563" font-family="Arial, Helvetica, sans-serif" font-size="16">plus client IndexedDB</text>
+  </g>
+  <g id="arrows">
+    <path d="M360 300H430" stroke="#6B7280" stroke-width="3" stroke-linecap="round"/>
+    <path d="M360 610H430" stroke="#6B7280" stroke-width="3" stroke-linecap="round"/>
+    <path d="M750 296H820" stroke="#6B7280" stroke-width="3" stroke-linecap="round"/>
+    <path d="M750 386H820" stroke="#6B7280" stroke-width="3" stroke-linecap="round"/>
+    <path d="M1160 526H1230" stroke="#6B7280" stroke-width="3" stroke-linecap="round"/>
+    <path d="M990 700V760H220V740" stroke="#6B7280" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M1375 710V790H220V740" stroke="#6B7280" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 10"/>
+    <polygon points="420,300 406,292 406,308" fill="#6B7280"/>
+    <polygon points="420,610 406,602 406,618" fill="#6B7280"/>
+    <polygon points="810,296 796,288 796,304" fill="#6B7280"/>
+    <polygon points="810,386 796,378 796,394" fill="#6B7280"/>
+    <polygon points="1220,526 1206,518 1206,534" fill="#6B7280"/>
+  </g>
+  <g id="flow-labels">
+    <text x="590" y="180" fill="#6B7280" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="middle">foreground request / background queue</text>
+    <text x="990" y="180" fill="#6B7280" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="middle">prompting, policy, model, tool orchestration</text>
+    <text x="1375" y="180" fill="#6B7280" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="middle">persistent observability</text>
+  </g>
+  <g id="footer">
+    <text x="120" y="820" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">SSE return path</text>
+    <text x="300" y="820" fill="#4B5563" font-family="Arial, Helvetica, sans-serif" font-size="18">ServerEventV2 streams ack, assistant_delta, tool_started, tool_finished, warning, assistant_final back into the UI.</text>
+  </g>
+</svg>

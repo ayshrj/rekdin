@@ -3,17 +3,24 @@
 import * as React from "react"
 import { toast } from "sonner"
 
-import { toolLabels } from "@/components/tools/tool-labels"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { useChat } from "@/contexts/chat-context"
-import { ArrowPath, ClipboardDocumentList, Cog8Tooth, Sparkles } from "@/lib/icons"
+import {
+  ArrowPath,
+  Bolt,
+  ClipboardDocumentList,
+  Cog8Tooth,
+  CursorArrowRays,
+  Eye,
+  GalleryVerticalEnd,
+  Globe,
+  Rekdin as RekdinIcon,
+} from "@/lib/icons"
 import { parseLLMError } from "@/lib/llm-errors"
 import { getProviderMissingConfigMessage, hasProviderCredentials } from "@/lib/llm-providers"
 import { WORKFLOW_PRESETS } from "@/lib/workflows"
 
-import { ChatInput } from "./chat-input"
+import { ChatInput, ChatInputHandle } from "./chat-input"
 import { ChatMessage } from "./chat-message"
 
 export function ChatPanel() {
@@ -23,7 +30,6 @@ export function ChatPanel() {
     isThinking,
     sendMessage,
     currentSessionId,
-    sessions,
     llmProvider,
     openRouterApiKey,
     openRouterModel,
@@ -40,8 +46,11 @@ export function ChatPanel() {
     azureOpenAIApiVersion,
     azureOpenAIDeployment,
   } = useChat()
+
+  const panelRef = React.useRef<HTMLDivElement | null>(null)
   const scrollRef = React.useRef<HTMLDivElement | null>(null)
   const scrollViewportRef = React.useRef<HTMLDivElement | null>(null)
+  const presetsRef = React.useRef<HTMLDivElement | null>(null)
   const stickToBottomRef = React.useRef(true)
   const lastMessageIdRef = React.useRef<string | null>(null)
   const scrollRafRef = React.useRef<number | null>(null)
@@ -49,95 +58,113 @@ export function ChatPanel() {
   const lastDraftIdRef = React.useRef<string | null>(null)
   const lastDraftLenRef = React.useRef(0)
   const [hydrated, setHydrated] = React.useState(false)
-  const [showAllTools, setShowAllTools] = React.useState(false)
-  const missingApiKey = React.useMemo(() => {
-    return !hasProviderCredentials(llmProvider, {
-      openRouterModel,
-      openRouterApiKey,
-      openAIModel,
-      openAIApiKey,
-      geminiModel,
-      geminiApiKey,
-      claudeModel,
-      claudeApiKey,
-      grokModel,
-      grokApiKey,
+  const [presetsCanScrollRight, setPresetsCanScrollRight] = React.useState(false)
+  const [inputValue, setInputValue] = React.useState("")
+  const chatInputRef = React.useRef<ChatInputHandle | null>(null)
+
+  const missingApiKey = React.useMemo(
+    () =>
+      !hasProviderCredentials(llmProvider, {
+        openRouterModel,
+        openRouterApiKey,
+        openAIModel,
+        openAIApiKey,
+        geminiModel,
+        geminiApiKey,
+        claudeModel,
+        claudeApiKey,
+        grokModel,
+        grokApiKey,
+        azureOpenAIApiKey,
+        azureOpenAIEndpoint,
+        azureOpenAIApiVersion,
+        azureOpenAIDeployment,
+      }),
+    [
       azureOpenAIApiKey,
-      azureOpenAIEndpoint,
       azureOpenAIApiVersion,
       azureOpenAIDeployment,
-    })
-  }, [
-    azureOpenAIApiKey,
-    azureOpenAIApiVersion,
-    azureOpenAIDeployment,
-    azureOpenAIEndpoint,
-    claudeApiKey,
-    claudeModel,
-    geminiApiKey,
-    geminiModel,
-    grokApiKey,
-    grokModel,
-    llmProvider,
-    openAIApiKey,
-    openAIModel,
-    openRouterApiKey,
-    openRouterModel,
-  ])
+      azureOpenAIEndpoint,
+      claudeApiKey,
+      claudeModel,
+      geminiApiKey,
+      geminiModel,
+      grokApiKey,
+      grokModel,
+      llmProvider,
+      openAIApiKey,
+      openAIModel,
+      openRouterApiKey,
+      openRouterModel,
+    ]
+  )
+
   const missingApiKeyMessage = React.useMemo(() => {
     if (!missingApiKey) return ""
     return getProviderMissingConfigMessage(llmProvider).replace("Set your ", "Add your ")
   }, [llmProvider, missingApiKey])
 
+  // Intercept wheel on the whole panel so scrolling works without clicking first.
+  // Uses a non-passive listener so preventDefault() is allowed; skips textareas
+  // so the input box can still scroll independently.
   React.useEffect(() => {
-    const viewport = scrollRef.current?.closest<HTMLDivElement>(
-      "[data-slot='scroll-area-viewport']"
-    )
-    if (!viewport) return
-    scrollViewportRef.current = viewport
-
-    const updateStickiness = () => {
-      const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
-      stickToBottomRef.current = distanceFromBottom < 120
+    const panel = panelRef.current
+    if (!panel) return
+    const onWheel = (e: WheelEvent) => {
+      if ((e.target as HTMLElement).closest("textarea")) return
+      const viewport = scrollViewportRef.current
+      if (!viewport) return
+      e.preventDefault()
+      viewport.scrollTop += e.deltaY
     }
+    panel.addEventListener("wheel", onWheel, { passive: false })
+    return () => panel.removeEventListener("wheel", onWheel)
+  }, [])
 
-    updateStickiness()
-    viewport.addEventListener("scroll", updateStickiness, { passive: true })
+  // Detect whether the presets bar has hidden overflow to the right
+  React.useEffect(() => {
+    const el = presetsRef.current
+    if (!el) return
+    const check = () =>
+      setPresetsCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+    check()
+    el.addEventListener("scroll", check, { passive: true })
+    window.addEventListener("resize", check, { passive: true })
     return () => {
-      viewport.removeEventListener("scroll", updateStickiness)
+      el.removeEventListener("scroll", check)
+      window.removeEventListener("resize", check)
     }
   }, [])
 
+  // Stickiness detection — attached directly to the native scroll container
   React.useEffect(() => {
     const viewport = scrollViewportRef.current
     if (!viewport) return
+    const updateStickiness = () => {
+      stickToBottomRef.current =
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 120
+    }
+    updateStickiness()
+    viewport.addEventListener("scroll", updateStickiness, { passive: true })
+    return () => viewport.removeEventListener("scroll", updateStickiness)
+  }, [])
 
-    if (latestChunk) return
-
+  // Auto-scroll to bottom on new messages / thinking updates
+  React.useEffect(() => {
+    const viewport = scrollViewportRef.current
+    if (!viewport) return
     const lastId = messages[messages.length - 1]?.id ?? null
     const lastChanged = lastId !== lastMessageIdRef.current
     lastMessageIdRef.current = lastId
-
     const shouldAutoScroll = stickToBottomRef.current || lastChanged
     if (!shouldAutoScroll) return
-
     if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current)
     scrollRafRef.current = requestAnimationFrame(() => {
-      scrollRef.current?.scrollIntoView({ block: "end", behavior: isThinking ? "auto" : "smooth" })
+      scrollRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })
     })
   }, [currentSessionId, isThinking, latestChunk, messages])
 
-  React.useEffect(() => {
-    if (!latestChunk) return
-    const viewport = scrollViewportRef.current
-    if (!viewport) return
-
-    if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current)
-    scrollRafRef.current = requestAnimationFrame(() => {
-      viewport.scrollTo({ top: 0, behavior: "auto" })
-    })
-  }, [latestChunk])
-
+  // Track thinking / draft chunk for the inline indicator
   React.useEffect(() => {
     const draft = [...messages]
       .reverse()
@@ -148,24 +175,20 @@ export function ChatPanel() {
       lastDraftLenRef.current = 0
       return
     }
-
     if (draft.id !== lastDraftIdRef.current) {
       lastDraftIdRef.current = draft.id
       lastDraftLenRef.current = 0
       setLatestChunk("")
     }
-
     const content = draft.content ?? ""
     const prevLen = lastDraftLenRef.current
     const nextLen = content.length
-
     if (nextLen > prevLen) {
       const delta = content.slice(prevLen)
       if (delta.trim().length > 0) setLatestChunk(delta)
     } else if (nextLen < prevLen) {
       setLatestChunk(content.slice(-200))
     }
-
     lastDraftLenRef.current = nextLen
   }, [messages])
 
@@ -173,47 +196,25 @@ export function ChatPanel() {
     setHydrated(true)
   }, [])
 
-  sessions.find((session) => session.id === currentSessionId)
-  const toolsSorted = React.useMemo(
-    () =>
-      Object.entries(toolLabels).sort((a, b) =>
-        a[1].localeCompare(b[1], undefined, { sensitivity: "base" })
-      ),
-    []
-  )
-  const toolPreview = showAllTools ? toolsSorted : toolsSorted.slice(0, 24)
-  const examplePrompts = React.useMemo(
+  const capabilities = React.useMemo(
     () => [
-      {
-        title: "Web research + summary",
-        prompt:
-          "Research the latest updates about Next.js 16. Summarize the key changes, include 5 source links, and give a short migration checklist.",
-      },
-      {
-        title: "Browse a page and extract data",
-        prompt:
-          "Open https://example.com and extract the main title, the first 5 links, and any pricing info. Return as JSON.",
-      },
-      {
-        title: "Generate a LaTeX PDF",
-        prompt:
-          "Create a one-page LaTeX resume template for a frontend engineer and generate a PDF. Keep it ATS-friendly and include sections for Skills, Experience, and Projects.",
-      },
+      { label: "Web research", icon: Globe },
+      { label: "Browser automation", icon: CursorArrowRays },
+      { label: "Live tool timeline", icon: GalleryVerticalEnd },
+      { label: "Background jobs", icon: Bolt },
+      { label: "Structured output", icon: ClipboardDocumentList },
+      { label: "Replay & traces", icon: Eye },
     ],
     []
   )
-  const launchWorkflow = React.useCallback(
-    async (workflowId: string, prompt?: string) => {
-      const workflow = WORKFLOW_PRESETS.find((entry) => entry.id === workflowId)
-      if (!workflow) return
-      await sendMessage(prompt ?? workflow.prompt, [], {
-        agentType: workflow.mode,
-        responseSchema: workflow.responseSchema ?? null,
-        workflowId: workflow.id,
-      })
-    },
-    [sendMessage]
-  )
+
+  const launchWorkflow = React.useCallback((workflowId: string) => {
+    const workflow = WORKFLOW_PRESETS.find((entry) => entry.id === workflowId)
+    if (!workflow) return
+    setInputValue(workflow.prompt)
+    setTimeout(() => chatInputRef.current?.focus(), 0)
+  }, [])
+
   const queueWorkflow = React.useCallback(
     async (workflowId: string, prompt?: string) => {
       const workflow = WORKFLOW_PRESETS.find((entry) => entry.id === workflowId)
@@ -222,7 +223,6 @@ export function ChatPanel() {
         toast.error("Open a session before queueing a background workflow.")
         return
       }
-
       const response = await fetch("/api/background", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -234,12 +234,10 @@ export function ChatPanel() {
           responseSchema: workflow.responseSchema ?? null,
         }),
       }).catch(() => null)
-
       if (!response?.ok) {
         toast.error("Unable to queue the background workflow.")
         return
       }
-
       toast.success(`${workflow.title} queued in the background.`)
     },
     [currentSessionId]
@@ -248,50 +246,57 @@ export function ChatPanel() {
   if (!hydrated) {
     return (
       <div className="bg-card flex h-full flex-col overflow-hidden rounded-xl border shadow-(--shadow-panel)">
-        <div className="border-b px-4 py-3">
-          <div className="bg-muted h-4 w-32 animate-pulse rounded" />
-        </div>
         <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">
-          Loading chat…
+          Loading…
         </div>
         <div className="px-3 pt-1 pb-3 opacity-50">
-          <ChatInput onSend={() => Promise.resolve()} isLoading disabled />
+          <ChatInput
+            value=""
+            onValueChange={() => {}}
+            onSend={() => Promise.resolve()}
+            isLoading
+            disabled
+          />
         </div>
       </div>
     )
   }
 
+  // Error state
+  const lastMsg = messages[messages.length - 1]
+  const hasError = lastMsg?.role === "system"
+  const lastUserMsg = hasError ? [...messages].reverse().find((m) => m.role === "user") : null
+  const errorParsed = hasError && lastMsg ? parseLLMError(lastMsg.content ?? "") : null
+
   return (
-    <div className="bg-card flex h-full flex-col overflow-hidden rounded-xl border shadow-(--shadow-panel)">
-      <ScrollArea
-        className="no-scroll-min-width min-h-0 flex-1 px-4 py-4"
-        onWheelCapture={(event) => event.stopPropagation()}
-        onTouchMoveCapture={(event) => event.stopPropagation()}
+    <div
+      ref={panelRef}
+      className="bg-card flex h-full flex-col overflow-hidden rounded-xl border shadow-(--shadow-panel)"
+    >
+      <div
+        ref={scrollViewportRef}
+        className="[&::-webkit-scrollbar-thumb]:bg-border min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent"
       >
         <div className="flex w-full flex-col gap-3">
-          {latestChunk ? (
-            <div className="bg-primary/5 sticky top-0 z-10 mb-2 w-full rounded-lg border px-3 py-2 backdrop-blur">
-              <p className="text-primary/60 text-[10px] font-medium tracking-wider uppercase">
-                Streaming
-              </p>
-              <div className="text-sm leading-relaxed whitespace-pre-wrap">{latestChunk}</div>
-            </div>
-          ) : null}
           {messages.length === 0 ? (
-            <div className="mx-auto mt-12 w-full max-w-xl text-center">
-              <div className="mb-4 flex justify-center">
-                <div className="bg-muted/50 rounded-xl border p-3">
-                  <Sparkles className="text-muted-foreground h-5 w-5" />
+            /* ── Empty state ─────────────────────────────────── */
+            <div className="mx-auto w-full max-w-sm py-6">
+              {/* Hero row */}
+              <div className="mb-5 flex items-center gap-3">
+                <div className="bg-primary/10 shrink-0 rounded-xl p-2.5">
+                  <RekdinIcon className="text-primary h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-foreground text-sm font-bold">Rekdin</h3>
+                  <p className="text-muted-foreground text-xs">
+                    AI research &amp; automation workspace
+                  </p>
                 </div>
               </div>
-              <h3 className="text-foreground mb-1 text-sm font-semibold">Start a research task</h3>
-              <p className="text-muted-foreground mb-6 text-xs leading-relaxed">
-                Ask Rekdin to use tools (web, browser automation, files, code, PDFs). Be specific
-                about output format and constraints.
-              </p>
 
+              {/* API key warning */}
               {missingApiKeyMessage ? (
-                <div className="bg-muted/40 border-border mb-4 rounded-lg border px-4 py-3 text-left text-sm">
+                <div className="bg-muted/40 border-border mb-5 rounded-lg border px-4 py-3 text-left text-sm">
                   <div className="flex items-start gap-2">
                     <span className="bg-primary/10 text-primary mt-0.5 rounded-md p-1">
                       <Cog8Tooth className="h-4 w-4" />
@@ -306,106 +311,105 @@ export function ChatPanel() {
                 </div>
               ) : null}
 
-              <div className="bg-muted/40 rounded-lg border p-3 text-left">
-                <div className="mb-4">
-                  <p className="text-foreground text-sm font-semibold">Workflow presets</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {WORKFLOW_PRESETS.map((workflow) => (
-                      <div key={workflow.id} className="flex items-center gap-1.5">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => void launchWorkflow(workflow.id)}
-                          disabled={isLoading || isThinking}
-                        >
+              {/* Capabilities grid */}
+              <div className="mb-5">
+                <p className="text-muted-foreground mb-2 text-[11px] font-semibold tracking-wider uppercase">
+                  What it can do
+                </p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {capabilities.map((cap) => {
+                    const Icon = cap.icon
+                    return (
+                      <div
+                        key={cap.label}
+                        className="bg-muted/30 border-border/50 flex items-center gap-2 rounded-lg border px-2.5 py-2"
+                      >
+                        <Icon className="text-primary h-3.5 w-3.5 shrink-0" />
+                        <span className="text-foreground truncate text-xs font-medium">
+                          {cap.label}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Workflow presets */}
+              <div>
+                <p className="text-muted-foreground mb-2 text-[11px] font-semibold tracking-wider uppercase">
+                  Workflow presets
+                </p>
+                <div className="space-y-1.5">
+                  {WORKFLOW_PRESETS.map((workflow) => (
+                    <button
+                      key={workflow.id}
+                      type="button"
+                      disabled={isLoading || isThinking}
+                      onClick={() => void launchWorkflow(workflow.id)}
+                      className="border-border/60 bg-muted/30 hover:bg-muted/60 w-full cursor-pointer rounded-xl border p-3 text-left transition-colors disabled:pointer-events-none disabled:opacity-50"
+                    >
+                      <div className="mb-0.5 flex items-center justify-between gap-2">
+                        <span className="text-foreground text-xs font-semibold">
                           {workflow.title}
-                        </Button>
+                        </span>
                         {workflow.supportsBackground ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => void queueWorkflow(workflow.id)}
-                            disabled={isLoading || isThinking || !currentSessionId}
-                          >
-                            Queue
-                          </Button>
+                          <span className="bg-primary/10 text-primary shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold">
+                            BG
+                          </span>
                         ) : null}
                       </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-foreground text-sm font-semibold">Available tools</p>
-                    <p className="text-muted-foreground text-xs">
-                      {toolsSorted.length} tools available
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowAllTools((prev) => !prev)}
-                  >
-                    {showAllTools ? "Show fewer" : "Show all"}
-                  </Button>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {toolPreview.map(([key, label]) => (
-                    <Badge key={key} variant="secondary" title={key} className="max-w-full">
-                      <span className="truncate">{label}</span>
-                    </Badge>
+                      <p className="text-muted-foreground line-clamp-1 text-xs leading-relaxed">
+                        {workflow.description}
+                      </p>
+                    </button>
                   ))}
                 </div>
               </div>
-
-              <div className="mt-4 grid gap-3 text-left md:grid-cols-3">
-                {examplePrompts.map((item, index) => (
-                  <div key={item.title} className="bg-muted/30 rounded-lg border p-3">
-                    <p className="text-foreground mb-2 text-sm font-semibold">{item.title}</p>
-                    <pre className="text-muted-foreground mb-3 text-xs wrap-break-word whitespace-pre-wrap">
-                      {item.prompt}
-                    </pre>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="w-full"
-                      onClick={() =>
-                        void launchWorkflow(
-                          WORKFLOW_PRESETS[index]?.id ?? "workspace-edit",
-                          item.prompt
-                        )
-                      }
-                    >
-                      <ClipboardDocumentList className="mr-2 h-4 w-4" />
-                      Run preset
-                    </Button>
-                  </div>
-                ))}
-              </div>
             </div>
           ) : (
+            /* ── Message list ────────────────────────────────── */
             messages.map((message, index) => {
               const prev = messages[index - 1]
               const showHeader = !prev || prev.role !== message.role
               return <ChatMessage key={message.id} message={message} showHeader={showHeader} />
             })
           )}
+
+          {/* Thinking indicator — inline at bottom, never sticky */}
+          {latestChunk ? (
+            <div className="bg-muted/40 flex items-start gap-2.5 rounded-xl border px-3 py-2.5">
+              <span className="bg-primary mt-1.25 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
+              <div className="min-w-0 flex-1">
+                <p className="text-muted-foreground mb-0.5 text-[10px] font-semibold tracking-wider uppercase">
+                  Thinking
+                </p>
+                <p className="text-muted-foreground line-clamp-5 text-xs leading-relaxed whitespace-pre-wrap">
+                  {latestChunk}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
           <div ref={scrollRef} />
         </div>
-      </ScrollArea>
-      <div className="bg-muted/30 shrink-0 border-t px-4 py-2">
-        <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap">
+      </div>
+
+      {/* ── Workflow presets bar ───────────────────────────────── */}
+      <div className="relative shrink-0 border-t">
+        {presetsCanScrollRight && (
+          <div className="from-card pointer-events-none absolute top-0 right-0 z-10 h-full w-10 bg-linear-to-l to-transparent" />
+        )}
+        <div
+          ref={presetsRef}
+          className="flex gap-1 overflow-x-auto px-3 py-1.5 [&::-webkit-scrollbar]:h-0"
+        >
           {WORKFLOW_PRESETS.map((workflow) => (
-            <div key={workflow.id} className="flex shrink-0 items-center gap-1.5">
+            <div key={workflow.id} className="flex shrink-0 items-center">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
+                className="h-7 text-xs"
                 onClick={() => void launchWorkflow(workflow.id)}
                 disabled={isLoading || isThinking}
               >
@@ -416,6 +420,7 @@ export function ChatPanel() {
                   type="button"
                   variant="ghost"
                   size="sm"
+                  className="text-muted-foreground h-7 text-xs"
                   onClick={() => void queueWorkflow(workflow.id)}
                   disabled={isLoading || isThinking || !currentSessionId}
                 >
@@ -426,52 +431,56 @@ export function ChatPanel() {
           ))}
         </div>
       </div>
-      {(() => {
-        const lastMsg = messages[messages.length - 1]
-        const hasError = lastMsg?.role === "system"
-        const lastUserMsg = hasError ? [...messages].reverse().find((m) => m.role === "user") : null
-        if (!hasError || !lastUserMsg) return null
-        const parsed = parseLLMError(lastMsg.content ?? "")
-        return (
-          <div className="border-destructive/20 bg-destructive/5 mx-3 mb-2 rounded-lg border px-3 py-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                {parsed.code !== null && (
-                  <span className="bg-destructive/15 text-destructive shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
-                    {parsed.code}
-                  </span>
-                )}
-                <p className="text-destructive truncate text-xs font-medium">{parsed.title}</p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive h-7 shrink-0 gap-1.5 text-xs"
-                disabled={isLoading || isThinking}
-                onClick={() =>
-                  void sendMessage(lastUserMsg.content, [], {
-                    agentType: lastUserMsg.metadata?.agentType,
-                    responseSchema: null,
-                    workflowId: lastUserMsg.metadata?.workflowId,
-                  })
-                }
-              >
-                <ArrowPath className="h-3 w-3" />
-                Retry
-              </Button>
+
+      {/* ── Error banner ──────────────────────────────────────── */}
+      {hasError && lastUserMsg && errorParsed ? (
+        <div className="border-destructive/20 bg-destructive/5 mx-3 mb-2 rounded-lg border px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              {errorParsed.code !== null && (
+                <span className="bg-destructive/15 text-destructive shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                  {errorParsed.code}
+                </span>
+              )}
+              <p className="text-destructive truncate text-xs font-medium">{errorParsed.title}</p>
             </div>
-            {parsed.action && (
-              <p className="text-destructive/70 mt-1 text-[11px]">{parsed.action}</p>
-            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive h-7 shrink-0 gap-1.5 text-xs"
+              disabled={isLoading || isThinking}
+              onClick={() =>
+                void sendMessage(lastUserMsg.content, [], {
+                  agentType: lastUserMsg.metadata?.agentType,
+                  responseSchema: null,
+                  workflowId: lastUserMsg.metadata?.workflowId,
+                })
+              }
+            >
+              <ArrowPath className="h-3 w-3" />
+              Retry
+            </Button>
           </div>
-        )
-      })()}
+          {errorParsed.action && (
+            <p className="text-destructive/70 mt-1 text-[11px]">{errorParsed.action}</p>
+          )}
+        </div>
+      ) : null}
+
+      {/* ── Input ─────────────────────────────────────────────── */}
       <div
-        className="px-3 pt-1 pb-3 sm:pb-3"
+        className="px-3 pt-1 pb-3"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
       >
-        <ChatInput onSend={sendMessage} isLoading={isLoading || isThinking} disabled={false} />
+        <ChatInput
+          ref={chatInputRef}
+          value={inputValue}
+          onValueChange={setInputValue}
+          onSend={sendMessage}
+          isLoading={isLoading || isThinking}
+          disabled={false}
+        />
       </div>
     </div>
   )

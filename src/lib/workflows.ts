@@ -9,7 +9,7 @@ export const WORKFLOW_PRESETS: WorkflowPreset[] = [
     category: "research",
     supportsBackground: true,
     prompt:
-      "Create a research plan for this topic. Identify the core questions, propose concrete search queries, and define the deliverable shape before full research begins.",
+      "Create a research plan for [your topic]. Identify the core questions, propose concrete search queries, and define the deliverable shape before full research begins.",
     responseSchema: {
       type: "object",
       required: ["topic", "objective", "questions", "searchQueries", "deliverables"],
@@ -30,7 +30,7 @@ export const WORKFLOW_PRESETS: WorkflowPreset[] = [
     category: "research",
     supportsBackground: true,
     prompt:
-      "Research this topic carefully, compare sources, and produce a concise report with findings, tradeoffs, confidence notes, and citations.",
+      "Research [your topic] carefully, compare sources, and produce a concise report with findings, tradeoffs, confidence notes, and citations.",
     responseSchema: {
       type: "object",
       required: ["title", "executiveSummary", "keyFindings", "sources"],
@@ -82,7 +82,7 @@ export const WORKFLOW_PRESETS: WorkflowPreset[] = [
     category: "browser",
     supportsBackground: true,
     prompt:
-      "Use the browser to inspect the target page, extract the requested information, and verify the result before finishing.",
+      "Use the browser to inspect [URL or target page], extract the requested information, and verify the result before finishing.",
   },
   {
     id: "workspace-edit",
@@ -160,7 +160,7 @@ export const WORKFLOW_PRESETS: WorkflowPreset[] = [
     mode: "document",
     category: "document",
     prompt:
-      "Generate the requested document, produce the artifact, and verify the output path or URL before claiming success.",
+      "Generate [document type or description], produce the artifact, and verify the output path or URL before claiming success.",
   },
 ]
 

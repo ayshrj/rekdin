@@ -21,6 +21,7 @@ import { ArtifactRef } from "@/types/runtime"
 import { storeArtifact } from "./artifact-store"
 import { getBrowserSessionManager } from "./browser-session-manager"
 import { getToolExecutionContext } from "./tool-execution-context"
+import { searchPublicWeb } from "./web-search"
 import { ensureWorkspaceDirs, getWorkspaceRoot, resolveWorkspacePath } from "./workspace"
 
 const turndown = new TurndownService({ headingStyle: "atx" })
@@ -905,55 +906,11 @@ async function fetchJson<T = unknown>(url: string): Promise<T> {
 
 export const webSearchTool = tool(
   async ({ query, maxResults, domains, excludeDomains }) => {
-    const encoded = encodeURIComponent(query)
-    const url = `https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1`
-    const data = await fetchJson<{
-      Abstract?: string
-      AbstractURL?: string
-      Heading?: string
-      AbstractSource?: string
-      RelatedTopics?: Array<{ Text?: string; FirstURL?: string; Result?: string }>
-    }>(url)
-    const results: Array<Record<string, unknown>> = []
-    if (data.Abstract) {
-      results.push({
-        title: data.Heading || "Instant Answer",
-        url: data.AbstractURL,
-        snippet: data.Abstract,
-        source: data.AbstractSource || "duckduckgo.com",
-      })
-    }
-    const allowDomain = (candidate: string | undefined) => {
-      if (!candidate) return true
-      if (domains && domains.length && !domains.some((d) => candidate.includes(d))) return false
-      if (excludeDomains && excludeDomains.some((d) => candidate.includes(d))) return false
-      return true
-    }
-    data.RelatedTopics?.forEach((topic) => {
-      if (!topic.FirstURL || !topic.Text) return
-      const host = (() => {
-        try {
-          return new URL(topic.FirstURL).hostname
-        } catch {
-          return ""
-        }
-      })()
-      if (!allowDomain(host)) return
-      results.push({
-        title: topic.Result?.split(" - ")[0] ?? topic.Text,
-        url: topic.FirstURL,
-        snippet: topic.Text,
-        source: host,
-      })
+    return await searchPublicWeb(query, {
+      maxResults,
+      domains,
+      excludeDomains,
     })
-    return {
-      query,
-      results: results.slice(0, maxResults),
-      totalResults: results.length,
-      domains: domains ?? [],
-      excludeDomains: excludeDomains ?? [],
-      type: "web_search",
-    }
   },
   {
     name: "web_search",

@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Rekdin
 
-## Getting Started
+Rekdin is an AI research and automation workspace built with Next.js, React, LangChain, and Puppeteer.
 
-First, run the development server:
+It is designed to make agent work inspectable instead of opaque:
+
+- stream foreground chat turns over SSE
+- run long tasks in the background
+- persist sessions, replays, traces, artifacts, and settings
+- expose tool execution in a timeline instead of hiding it behind a single response
+- support multiple LLM providers behind one UI
+
+## Stack
+
+- Next.js 16
+- React 19
+- TypeScript
+- LangChain
+- Puppeteer / puppeteer-extra
+- Zod
+- IndexedDB on the client, JSON-backed persistence on the server
+
+## Quick Start
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Start the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+3. Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+4. Add a provider key and model in Settings before sending a message.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Useful Scripts
 
-## Learn More
+- `npm run dev`: start the local app
+- `npm test`: run Vitest
+- `npm run typecheck`: run TypeScript without emitting files
+- `npm run build`: build the production app
+- `npm run demo:verify`: run the full pre-recording validation sequence
 
-To learn more about Next.js, take a look at the following resources:
+## Demo Kit
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Use these assets when recording the project walkthrough:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [Demo kit](docs/demo/rekdin-demo-kit.md)
+- [Exact video script](docs/demo/rekdin-exact-video-script.md)
+- [Architecture diagram SVG](public/rekdin-demo-architecture.svg)
 
-## Deploy on Vercel
+The demo kit includes:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- a 12-15 minute recording script
+- a word-for-word version you can read during the recording
+- the exact live prompts to run
+- the system design walkthrough
+- tradeoffs and failure-mode talking points
+- a pre-recording checklist
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Architecture Diagram
+
+![Rekdin runtime architecture](public/rekdin-demo-architecture.svg)
+
+Open the standalone asset here if you want the raw SVG:
+
+- [public/rekdin-demo-architecture.svg](public/rekdin-demo-architecture.svg)
+
+## Project Shape
+
+- `src/app`: app shell and API routes
+- `src/components`: UI surfaces, chat, workspace, tool renderers
+- `src/contexts/chat-context.tsx`: client-side orchestration, SSE consumption, IndexedDB sync
+- `src/lib/server`: agent runtime, tool execution, persistence, exports, traces, replays
+- `src/lib/workflows.ts`: built-in workflow presets and response schemas
+
+## Notes
+
+- Provider credentials are persisted through the app settings flow rather than hardcoded into the repo.
+- Server persistence defaults to a local JSON-backed data directory under `REKDIN_DATA_DIR` or a temp folder.
+- A successful build can still print one Turbopack NFT tracing warning around runtime prompt loading; treat that as packaging debt, not a failed build.

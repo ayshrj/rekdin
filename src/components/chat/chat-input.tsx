@@ -8,15 +8,28 @@ import { Textarea } from "@/components/ui/textarea"
 import { Loader, PaperAirplane as Send, PaperClip } from "@/lib/icons"
 
 interface ChatInputProps {
+  value: string
+  onValueChange: (v: string) => void
   onSend: (content: string, attachments: File[]) => Promise<void> | void
   isLoading: boolean
   disabled?: boolean
 }
 
-export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
-  const [value, setValue] = React.useState("")
+export interface ChatInputHandle {
+  focus(): void
+}
+
+export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
+  { value, onValueChange, onSend, isLoading, disabled },
+  ref
+) {
   const [attachments, setAttachments] = React.useState<File[]>([])
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null)
+
+  React.useImperativeHandle(ref, () => ({
+    focus: () => textareaRef.current?.focus(),
+  }))
 
   const handleSend = React.useCallback(async () => {
     if (!value.trim() && attachments.length === 0) return
@@ -24,12 +37,12 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
     const nextAttachments = attachments
     try {
       await onSend(nextValue, nextAttachments)
-      setValue("")
+      onValueChange("")
       setAttachments([])
     } catch {
       // errors handled by parent hook
     }
-  }, [attachments, onSend, value])
+  }, [attachments, onSend, value, onValueChange])
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -73,8 +86,9 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
           <span className="sr-only">Attach files</span>
         </Button>
         <Textarea
+          ref={textareaRef}
           value={value}
-          onChange={(event) => setValue(event.target.value)}
+          onChange={(event) => onValueChange(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ask Rekdin to research or run commands..."
           disabled={disabled || isLoading}
@@ -109,4 +123,4 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
       <p className="text-muted-foreground/60 px-3 pb-2 text-[11px]">↵ Send · Shift+↵ New line</p>
     </div>
   )
-}
+})

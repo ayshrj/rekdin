@@ -19,6 +19,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("## Tool Policy")
     expect(prompt).toContain("## Workflow Rules")
     expect(prompt).toContain("source-grounded")
+    expect(prompt).toContain("recent or external facts")
     expect(prompt).toContain("JSON schema exactly")
     expect(prompt).toContain("Do not claim the task is complete")
   })
