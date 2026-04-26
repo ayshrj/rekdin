@@ -42,7 +42,6 @@ const highlightCommand = (command: string) => {
 
     while (remainingCmd) {
       let foundMatch = false
-
       for (const { pattern, className } of patterns) {
         const match = remainingCmd.match(pattern)
         if (match && match.index === 0) {
@@ -58,7 +57,6 @@ const highlightCommand = (command: string) => {
           break
         }
       }
-
       if (!foundMatch) {
         parts.push(
           <span key={`char-${currentIndex}`} className="text-foreground">
@@ -69,21 +67,40 @@ const highlightCommand = (command: string) => {
         currentIndex += 1
       }
     }
-
     return parts
   }
 
-  const lines = command.split("\n")
-  return lines.map((line, index) => (
+  return command.split("\n").map((line, index) => (
     <div key={index} className="command-line whitespace-nowrap">
       {tokenize(line)}
     </div>
   ))
 }
 
-export const CommandResultRenderer: React.FC<CommandResultRendererProps> = ({ part }) => {
+function CopyBtn({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* ignore */
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
+      title="Copy"
+    >
+      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+    </button>
+  )
+}
 
+export const CommandResultRenderer: React.FC<CommandResultRendererProps> = ({ part }) => {
   const command = part.command || part.toolInput?.command || ""
   const stdout = part.stdout || part.toolResult?.stdout || part.toolResult?.output || ""
   const stderr = part.stderr || part.toolResult?.stderr || part.toolResult?.error || ""
@@ -95,78 +112,71 @@ export const CommandResultRenderer: React.FC<CommandResultRendererProps> = ({ pa
 
   const isError = exitCode !== 0 && exitCode !== undefined
 
-  const copyToClipboard = async () => {
-    const textToCopy = `$ ${command}\n${stdout}${stderr ? `\n${stderr}` : ""}`
-    try {
-      await navigator.clipboard.writeText(textToCopy)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // ignore
-    }
-  }
-
   return (
-    <div className="w-full min-w-0 space-y-2">
-      <div className="border-border overflow-hidden rounded-lg border shadow-[0_8px_24px_rgba(0,0,0,0.15)]">
-        <div className="border-border bg-muted/60 flex flex-wrap items-center justify-between gap-2 border-b px-3 py-1.5">
-          <div className="flex items-center">
-            <div className="mr-3 flex shrink-0 space-x-1.5">
-              <div className="bg-tool-command/80 h-3 w-3 rounded-full shadow-sm" />
-              <div className="bg-tool-command/60 h-3 w-3 rounded-full shadow-sm" />
-              <div className="bg-tool-command/40 h-3 w-3 rounded-full shadow-sm" />
-            </div>
-            <div className="text-tool-command text-xs font-medium">
-              Terminal
-              {exitCode !== undefined ? (
-                <span
-                  className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${
-                    isError
-                      ? "border-destructive/30 bg-destructive/10 text-destructive border"
-                      : "border-tool-command/30 bg-tool-command/10 text-tool-command border"
-                  }`}
-                >
-                  exit {exitCode}
-                </span>
-              ) : null}
-            </div>
+    <div className="w-full min-w-0 overflow-hidden rounded-lg border shadow-[0_4px_16px_rgba(0,0,0,0.1)]">
+      {/* Header */}
+      <div className="bg-muted/60 flex items-center justify-between gap-2 border-b px-3 py-1.5">
+        <div className="flex items-center gap-2">
+          <div className="flex shrink-0 gap-1.5">
+            <div className="bg-tool-command/80 h-2.5 w-2.5 rounded-full" />
+            <div className="bg-tool-command/50 h-2.5 w-2.5 rounded-full" />
+            <div className="bg-tool-command/30 h-2.5 w-2.5 rounded-full" />
           </div>
-
-          <button
-            type="button"
-            onClick={copyToClipboard}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground rounded p-1.5 transition-colors"
-            title="Copy command and output"
-          >
-            {copied ? <Check size={12} /> : <Copy size={12} />}
-          </button>
+          <span className="text-tool-command text-xs font-medium">Terminal</span>
+          {exitCode !== undefined && (
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                isError
+                  ? "bg-destructive/10 text-destructive border-destructive/20 border"
+                  : "border border-emerald-500/20 bg-emerald-500/10 text-emerald-600"
+              }`}
+            >
+              exit {exitCode}
+            </span>
+          )}
         </div>
-
-        <div className="bg-card max-h-[80vh] min-w-0 overflow-auto px-3 py-2 font-mono text-sm">
-          <div className="min-w-0 overflow-x-auto">
-            {command ? (
-              <div className="flex items-start whitespace-nowrap">
-                <span className="terminal-prompt-symbol text-tool-command mr-2 font-bold select-none">
-                  $
-                </span>
-                <div className="flex-1">{highlightCommand(command)}</div>
-              </div>
-            ) : null}
-
-            {stdout ? (
-              <pre className="text-foreground mt-2 ml-3 leading-relaxed wrap-anywhere whitespace-pre-wrap">
-                {stdout}
-              </pre>
-            ) : null}
-
-            {stderr ? (
-              <pre className="text-destructive mt-2 ml-3 leading-relaxed wrap-anywhere whitespace-pre-wrap">
-                {stderr}
-              </pre>
-            ) : null}
-          </div>
-        </div>
+        <CopyBtn text={`$ ${command}\n${stdout}${stderr ? `\nSTDERR:\n${stderr}` : ""}`} />
       </div>
+
+      {/* Command */}
+      {command && (
+        <div className="bg-card overflow-x-auto border-b px-3 py-2">
+          <div className="flex items-start gap-2 font-mono text-sm">
+            <span className="text-tool-command shrink-0 font-bold select-none">$</span>
+            <div className="flex-1">{highlightCommand(command)}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Stdout */}
+      {stdout && (
+        <div className="bg-card border-b last:border-b-0">
+          <div className="border-muted flex items-center justify-between border-b border-dashed px-3 py-1">
+            <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+              Output
+            </span>
+            <CopyBtn text={stdout} />
+          </div>
+          <pre className="text-foreground/80 max-h-[60vh] overflow-auto px-3 py-2 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap">
+            {stdout}
+          </pre>
+        </div>
+      )}
+
+      {/* Stderr */}
+      {stderr && (
+        <div className="bg-destructive/5">
+          <div className="border-destructive/20 flex items-center justify-between border-b border-dashed px-3 py-1">
+            <span className="text-destructive/70 text-[10px] font-medium tracking-wide uppercase">
+              Errors
+            </span>
+            <CopyBtn text={stderr} />
+          </div>
+          <pre className="text-destructive max-h-[40vh] overflow-auto px-3 py-2 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap">
+            {stderr}
+          </pre>
+        </div>
+      )}
     </div>
   )
 }

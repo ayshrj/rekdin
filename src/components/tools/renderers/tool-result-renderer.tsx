@@ -4,6 +4,8 @@ import React from "react"
 
 export { toolLabels } from "../tool-labels"
 
+import { ArchiveRenderer } from "./archive-renderer"
+import { Base64Renderer } from "./base64-renderer"
 import {
   ClickActionRenderer,
   DataExtractionRenderer,
@@ -17,15 +19,25 @@ import { BrowserResultRenderer } from "./browser-result-renderer"
 import { CodeActRenderer } from "./code-act-renderer"
 import { CommandResultRenderer } from "./command-result-renderer"
 import { DeepResearchRenderer } from "./deep-research-renderer"
+import { ExtractTodosRenderer } from "./extract-todos-renderer"
 import { FileReadRenderer } from "./file-read-renderer"
 import { FileSearchRenderer } from "./file-search-renderer"
 import { GenericResultRenderer } from "./generic-result-renderer"
+import { GitBranchesRenderer } from "./git-branches-renderer"
+import { GitDiffRenderer } from "./git-diff-renderer"
+import { GitLogRenderer } from "./git-log-renderer"
+import { HashRenderer } from "./hash-renderer"
 import { HttpRequestRenderer } from "./http-request-renderer"
+import { ImageInfoRenderer } from "./image-info-renderer"
 import { JsonResultRenderer } from "./json-result-renderer"
+import { LinkPreviewRenderer } from "./link-preview-renderer"
 import { ListFilesRenderer } from "./list-files-renderer"
+import { NpmPackageRenderer } from "./npm-package-renderer"
 import { PdfRenderer } from "./pdf-renderer"
 import { ScriptResultRenderer } from "./script-result-renderer"
+import { TextOutputRenderer } from "./text-output-renderer"
 import { WebSearchResultRenderer } from "./web-search-result-renderer"
+import { WriteFileRenderer } from "./write-file-renderer"
 
 export interface ToolResultContentPart {
   type: string
@@ -62,6 +74,19 @@ const CONTENT_RENDERERS: Record<
   file_read: FileReadRenderer,
   list_files: ListFilesRenderer,
   file_search: FileSearchRenderer,
+  write_file: WriteFileRenderer,
+  git_diff: GitDiffRenderer,
+  git_log: GitLogRenderer,
+  git_branches: GitBranchesRenderer,
+  link_preview: LinkPreviewRenderer,
+  npm_package_info: NpmPackageRenderer,
+  extract_todos: ExtractTodosRenderer,
+  hash: HashRenderer,
+  base64_encode: Base64Renderer,
+  base64_decode: Base64Renderer,
+  archive: ArchiveRenderer,
+  text_output: TextOutputRenderer,
+  image_info: ImageInfoRenderer,
   markdown_to_pdf: PdfRenderer,
 
   browser_navigate: BrowserResultRenderer,
@@ -161,25 +186,25 @@ const TOOL_ACCENT_MAP: Record<string, string> = {
   visit_link: "border-tool-browser/25",
   file_read: "border-tool-code/25",
   list_files: "border-tool-code/25",
-  write_file: "border-tool-json/25",
+  write_file: "border-tool-command/25",
   file_replace: "border-tool-json/25",
   json_patch: "border-tool-json/25",
   yaml_patch: "border-tool-json/25",
-  archive_create: "border-tool-json/25",
-  archive_extract: "border-tool-json/25",
+  archive_create: "border-tool-command/25",
+  archive_extract: "border-tool-command/25",
   base64_encode: "border-tool-json/25",
   base64_decode: "border-tool-json/25",
   hash: "border-tool-json/25",
-  text_summarize: "border-tool-json/25",
-  text_rewrite: "border-tool-json/25",
-  extract_todos: "border-tool-json/25",
+  text_summarize: "border-tool-research/25",
+  text_rewrite: "border-tool-research/25",
+  extract_todos: "border-tool-research/25",
   image_info: "border-tool-json/25",
   image_convert: "border-tool-json/25",
-  link_preview: "border-tool-json/25",
-  npm_package_info: "border-tool-json/25",
-  git_diff_summary: "border-tool-json/25",
-  git_log_summary: "border-tool-json/25",
-  git_branches: "border-tool-json/25",
+  link_preview: "border-tool-browser/25",
+  npm_package_info: "border-tool-browser/25",
+  git_diff_summary: "border-tool-code/25",
+  git_log_summary: "border-tool-code/25",
+  git_branches: "border-tool-code/25",
   download_fetch: "border-tool-json/25",
   generic: "border-tool-generic/25",
 }
@@ -246,29 +271,29 @@ export function ToolResultRenderer({
             visit_link: "browser_result",
             file_read: "file_read",
             list_files: "list_files",
-            write_file: "json",
+            write_file: "write_file",
             file_search: "file_search",
             http_request: "http_request",
             download_fetch: "http_request",
             file_replace: "json",
             json_patch: "json",
             yaml_patch: "json",
-            archive_create: "json",
-            archive_extract: "json",
-            base64_encode: "json",
-            base64_decode: "json",
-            hash: "json",
-            text_summarize: "json",
-            text_rewrite: "json",
-            extract_todos: "json",
+            archive_create: "archive",
+            archive_extract: "archive",
+            base64_encode: "base64_encode",
+            base64_decode: "base64_decode",
+            hash: "hash",
+            text_summarize: "text_output",
+            text_rewrite: "text_output",
+            extract_todos: "extract_todos",
             markdown_to_pdf: "markdown_to_pdf",
-            image_info: "json",
+            image_info: "image_info",
             image_convert: "json",
-            link_preview: "json",
-            npm_package_info: "json",
-            git_diff_summary: "json",
-            git_log_summary: "json",
-            git_branches: "json",
+            link_preview: "link_preview",
+            npm_package_info: "npm_package_info",
+            git_diff_summary: "git_diff",
+            git_log_summary: "git_log",
+            git_branches: "git_branches",
 
             browser_navigate: "browser_navigate",
             browser_screenshot: "browser_screenshot",

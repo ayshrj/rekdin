@@ -47,21 +47,34 @@ const getLanguageFromInterpreter = (interpreter: string): string => {
     gcc: "c",
     clang: "c",
   }
-
   return languageMap[interpreter.toLowerCase()] || "text"
 }
 
-const highlightCommand = (command: string) => {
+function CopyBtn({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* ignore */
+    }
+  }
   return (
-    <div className="command-line whitespace-nowrap">
-      <span className="text-tool-command font-semibold">{command}</span>
-    </div>
+    <button
+      type="button"
+      onClick={copy}
+      className="text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
+      title="Copy"
+    >
+      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+    </button>
   )
 }
 
 export const ScriptResultRenderer: React.FC<ScriptResultRendererProps> = ({ part }) => {
   const [displayMode, setDisplayMode] = useState<"both" | "script" | "execution">("both")
-  const [copied, setCopied] = useState(false)
 
   const script = part.script || part.toolInput?.script || part.toolInput?.code || ""
   const interpreter = part.interpreter || part.toolInput?.interpreter || "python"
@@ -77,155 +90,110 @@ export const ScriptResultRenderer: React.FC<ScriptResultRendererProps> = ({ part
   const hasOutput = stdout || stderr
   const language = getLanguageFromInterpreter(interpreter)
 
-  const copyToClipboard = async () => {
-    const textToCopy = `${script}\n\n# Output:\n${stdout}${stderr ? `\n# Error:\n${stderr}` : ""}`
-    try {
-      await navigator.clipboard.writeText(textToCopy)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // ignore
-    }
-  }
+  const tabs = [
+    { id: "both" as const, label: "Both", icon: CodeBracket },
+    { id: "script" as const, label: "Script", icon: CodeBracket },
+    { id: "execution" as const, label: "Output", icon: CommandLine },
+  ]
 
   return (
-    <div className="w-full min-w-0 space-y-4">
+    <div className="w-full min-w-0 space-y-3">
+      {/* Tab bar */}
       <div className="flex justify-center">
-        <div className="inline-flex rounded-md shadow-sm" role="group">
-          <button
-            type="button"
-            onClick={() => setDisplayMode("both")}
-            className={`border-border rounded-l-lg border px-3 py-1.5 text-xs font-medium ${
-              displayMode === "both"
-                ? "bg-tool-command/10 text-tool-command"
-                : "bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-            }`}
-          >
-            <div className="flex items-center">
-              <CodeBracket size={12} className="mr-1.5" />
-              <span>Both</span>
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setDisplayMode("script")}
-            className={`border-border border-t border-b px-3 py-1.5 text-xs font-medium ${
-              displayMode === "script"
-                ? "bg-tool-command/10 text-tool-command"
-                : "bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-            }`}
-          >
-            <div className="flex items-center">
-              <CodeBracket size={12} className="mr-1.5" />
-              <span>Script</span>
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setDisplayMode("execution")}
-            className={`border-border rounded-r-lg border border-l-0 px-3 py-1.5 text-xs font-medium ${
-              displayMode === "execution"
-                ? "bg-tool-command/10 text-tool-command"
-                : "bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-            }`}
-          >
-            <div className="flex items-center">
-              <CommandLine size={12} className="mr-1.5" />
-              <span>Execution</span>
-            </div>
-          </button>
+        <div className="bg-muted/40 inline-flex gap-0.5 rounded-lg p-0.5">
+          {tabs.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setDisplayMode(id)}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                displayMode === id
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Icon className="h-3 w-3" />
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
+      {/* Script */}
       {(displayMode === "both" || displayMode === "script") && script ? (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-2"
-        >
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
           <SimpleCodeEditor
             code={script}
             language={language}
             fileName={`script.${LANGUAGE_EXTENSIONS[language] || "txt"}`}
             showLineNumbers
-            maxHeight={displayMode === "both" ? "40vh" : "80vh"}
+            maxHeight={displayMode === "both" ? "35vh" : "70vh"}
           />
         </motion.div>
       ) : null}
 
+      {/* Execution output */}
       {(displayMode === "both" || displayMode === "execution") && hasOutput ? (
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: displayMode === "both" ? 0.1 : 0 }}
+          transition={{ delay: displayMode === "both" ? 0.05 : 0 }}
+          className="overflow-hidden rounded-lg border shadow-[0_4px_16px_rgba(0,0,0,0.08)]"
         >
-          <div className="border-border overflow-hidden rounded-lg border shadow-[0_8px_24px_rgba(0,0,0,0.15)]">
-            <div className="border-border bg-muted/60 flex flex-wrap items-center justify-between gap-2 border-b px-3 py-1.5">
-              <div className="flex items-center">
-                <div className="mr-3 flex shrink-0 space-x-1.5">
-                  <div className="bg-tool-command/80 h-3 w-3 rounded-full shadow-sm" />
-                  <div className="bg-tool-command/60 h-3 w-3 rounded-full shadow-sm" />
-                  <div className="bg-tool-command/40 h-3 w-3 rounded-full shadow-sm" />
-                </div>
-                <div className="text-tool-command flex items-center gap-2 text-xs font-medium">
-                  <Play size={10} />
-                  <span>Script Execution - {interpreter}</span>
-                  {exitCode !== undefined ? (
-                    <span
-                      className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${
-                        isError
-                          ? "border-destructive/30 bg-destructive/10 text-destructive border"
-                          : "border-tool-command/30 bg-tool-command/10 text-tool-command border"
-                      }`}
-                    >
-                      exit {exitCode}
-                    </span>
-                  ) : null}
-                </div>
+          {/* Terminal header */}
+          <div className="bg-muted/60 flex items-center justify-between gap-2 border-b px-3 py-1.5">
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1.5">
+                <div className="bg-tool-command/80 h-2.5 w-2.5 rounded-full" />
+                <div className="bg-tool-command/50 h-2.5 w-2.5 rounded-full" />
+                <div className="bg-tool-command/30 h-2.5 w-2.5 rounded-full" />
               </div>
-
-              <button
-                type="button"
-                onClick={copyToClipboard}
-                className="text-muted-foreground hover:bg-muted hover:text-foreground rounded p-1.5 transition-colors"
-                title="Copy script and output"
-              >
-                {copied ? <Check size={12} /> : <Copy size={12} />}
-              </button>
+              <Play className="text-tool-command h-3 w-3" />
+              <span className="text-tool-command text-xs font-medium">{interpreter}</span>
+              {exitCode !== undefined && (
+                <span
+                  className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                    isError
+                      ? "bg-destructive/10 text-destructive border-destructive/20"
+                      : "border-emerald-500/20 bg-emerald-500/10 text-emerald-600"
+                  }`}
+                >
+                  exit {exitCode}
+                </span>
+              )}
             </div>
-
-            <div className="bg-card max-h-[80vh] min-w-0 overflow-auto p-3 font-mono text-sm">
-              <div className="space-y-1">
-                <div className="flex items-start">
-                  <span className="text-tool-command mr-2 font-bold select-none">$</span>
-                  <div className="text-foreground flex-1">
-                    {highlightCommand(`${interpreter} << 'EOF'`)}
-                  </div>
-                </div>
-
-                {stdout ? (
-                  <div className="mt-2 ml-4">
-                    <pre className="text-foreground leading-relaxed wrap-anywhere whitespace-pre-wrap">
-                      {stdout}
-                    </pre>
-                  </div>
-                ) : null}
-
-                {stderr ? (
-                  <div className="mt-2 ml-4">
-                    <pre className="text-destructive leading-relaxed wrap-anywhere whitespace-pre-wrap">
-                      {stderr}
-                    </pre>
-                  </div>
-                ) : null}
-
-                <div className="mt-2 flex items-start">
-                  <span className="text-tool-command mr-2 font-bold select-none">$</span>
-                  <span className="text-muted-foreground text-xs">EOF</span>
-                </div>
-              </div>
-            </div>
+            <CopyBtn text={`${stdout}${stderr ? `\nSTDERR:\n${stderr}` : ""}`} />
           </div>
+
+          {/* Stdout */}
+          {stdout && (
+            <div className="bg-card border-b last:border-b-0">
+              <div className="border-muted flex items-center justify-between border-b border-dashed px-3 py-1">
+                <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+                  Output
+                </span>
+                <CopyBtn text={stdout} />
+              </div>
+              <pre className="text-foreground/80 max-h-[50vh] overflow-auto px-3 py-2 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap">
+                {stdout}
+              </pre>
+            </div>
+          )}
+
+          {/* Stderr */}
+          {stderr && (
+            <div className="bg-destructive/5">
+              <div className="border-destructive/20 flex items-center justify-between border-b border-dashed px-3 py-1">
+                <span className="text-destructive/70 text-[10px] font-medium tracking-wide uppercase">
+                  Errors
+                </span>
+                <CopyBtn text={stderr} />
+              </div>
+              <pre className="text-destructive max-h-[30vh] overflow-auto px-3 py-2 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap">
+                {stderr}
+              </pre>
+            </div>
+          )}
         </motion.div>
       ) : null}
     </div>

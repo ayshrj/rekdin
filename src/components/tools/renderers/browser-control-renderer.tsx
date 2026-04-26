@@ -4,9 +4,39 @@ import { motion } from "motion/react"
 import React, { useEffect, useRef, useState } from "react"
 
 import { Image } from "@/components/ui/image"
-import { ChevronDoubleRight, CursorArrowRays as MousePointer, Eye, Type } from "@/lib/icons"
+import {
+  Check,
+  ChevronDoubleRight,
+  ClipboardDocumentList as Copy,
+  CursorArrowRays as MousePointer,
+  Eye,
+  Type,
+} from "@/lib/icons"
 
 import { BrowserShell } from "./browser-shell"
+
+function CopyActionButton({ text }: { text: string }) {
+  const [copied, setCopied] = React.useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* ignore */
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="text-muted-foreground hover:text-foreground absolute top-1.5 right-1.5 rounded p-0.5 opacity-0 transition-colors group-hover:opacity-100"
+      title="Copy"
+    >
+      {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+    </button>
+  )
+}
 import { ToolResultContentPart } from "./tool-result-renderer"
 
 interface BrowserControlRendererProps {
@@ -171,8 +201,9 @@ export const BrowserControlRenderer: React.FC<BrowserControlRendererProps> = ({ 
                 <Type className="text-tool-action mr-2" size={14} />
                 Action Command
               </div>
-              <div className="border-border bg-muted/40 overflow-x-auto rounded-md border p-2 font-mono text-xs">
+              <div className="border-border bg-muted/40 group relative overflow-x-auto rounded-md border p-2 font-mono text-xs">
                 {action}
+                <CopyActionButton text={String(action)} />
               </div>
             </div>
           ) : null}

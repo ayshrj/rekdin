@@ -2,15 +2,32 @@
 
 import React, { useState } from "react"
 
-import { CheckCircle, InformationCircle as Info } from "@/lib/icons"
-import { Check, ClipboardDocumentList as Copy, ExclamationCircle } from "@/lib/icons"
+import {
+  Check,
+  CheckCircle,
+  ClipboardDocumentList as Copy,
+  ExclamationCircle,
+  InformationCircle as Info,
+} from "@/lib/icons"
 
+import { SimpleCodeEditor } from "./simple-code-editor"
 import { ToolResultContentPart } from "./tool-result-renderer"
 
 interface GenericResultRendererProps {
   part: ToolResultContentPart
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAction?: (action: string, data: any) => void
+}
+
+function isJsonString(s: string): boolean {
+  const t = s.trimStart()
+  if (!t.startsWith("{") && !t.startsWith("[")) return false
+  try {
+    JSON.parse(s)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export const GenericResultRenderer: React.FC<GenericResultRendererProps> = ({ part }) => {
@@ -27,7 +44,8 @@ export const GenericResultRenderer: React.FC<GenericResultRendererProps> = ({ pa
   }
 
   const content = getDisplayContent()
-  const toolName = part.toolName || part.name || "Generic Tool"
+  const toolName = part.toolName || part.name || "Result"
+  const isJson = isJsonString(content)
 
   const copyToClipboard = async () => {
     try {
@@ -35,110 +53,76 @@ export const GenericResultRenderer: React.FC<GenericResultRendererProps> = ({ pa
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // ignore
+      /* ignore */
     }
   }
 
-  const getStatusIcon = () => {
-    switch (part.status) {
-      case "success":
-        return <CheckCircle className="text-primary" size={16} />
-      case "error":
-        return <ExclamationCircle className="text-destructive" size={16} />
-      default:
-        return <Info className="text-tool-generic" size={16} />
-    }
-  }
+  const statusIcon =
+    part.status === "success" ? (
+      <CheckCircle className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+    ) : part.status === "error" ? (
+      <ExclamationCircle className="text-destructive h-3.5 w-3.5 shrink-0" />
+    ) : (
+      <Info className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+    )
 
-  const getStatusColor = () => {
-    switch (part.status) {
-      case "success":
-        return "border-primary/30"
-      case "error":
-        return "border-destructive/30"
-      default:
-        return "border-tool-generic/30"
-    }
-  }
-
-  const getHeaderColor = () => {
-    switch (part.status) {
-      case "success":
-        return "bg-primary/10"
-      case "error":
-        return "bg-destructive/10"
-      default:
-        return "bg-tool-generic/10"
-    }
-  }
+  const statusBadge =
+    part.status === "success"
+      ? "bg-emerald-500/10 text-emerald-600"
+      : part.status === "error"
+        ? "bg-destructive/10 text-destructive"
+        : null
 
   return (
-    <div className="generic-result-container w-full min-w-0">
-      <div className={`overflow-hidden rounded-lg border ${getStatusColor()} shadow-sm`}>
-        <div
-          className={`${getHeaderColor()} border-border flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2`}
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            {getStatusIcon()}
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="text-foreground min-w-0 text-sm font-medium">{toolName}</span>
-              <span className="bg-tool-generic text-foreground rounded-sm px-2 py-0.5 text-xs font-medium">
-                RESULT
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {part.timestamp ? (
-              <div className="text-muted-foreground text-xs">
-                {new Date(part.timestamp).toLocaleTimeString()}
-              </div>
-            ) : null}
-            <button
-              type="button"
-              onClick={copyToClipboard}
-              className="text-muted-foreground hover:bg-muted hover:text-foreground rounded p-1.5 transition-colors"
-              title="Copy content"
-            >
-              {copied ? <Check size={14} className="text-primary" /> : <Copy size={14} />}
-            </button>
-          </div>
+    <div className="w-full min-w-0 overflow-hidden rounded-lg">
+      {/* Header */}
+      <div className="bg-muted/20 flex items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {statusIcon}
+          <span className="text-foreground truncate text-xs font-medium">{toolName}</span>
+          {statusBadge && (
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${statusBadge}`}>
+              {part.status}
+            </span>
+          )}
         </div>
-
-        <div className="bg-card max-h-[60vh] overflow-auto">
-          <div className="min-w-0 p-4">
-            <pre className="text-foreground font-mono text-sm leading-relaxed wrap-anywhere whitespace-pre-wrap">
-              {content}
-            </pre>
-          </div>
-        </div>
-
-        <div className="border-border bg-muted/40 border-t px-3 py-1">
-          <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex flex-wrap items-center gap-3">
-              <span>Type: {part.type || "generic"}</span>
-              <span>Size: {content.length} chars</span>
-              {part.status ? (
-                <span
-                  className={`rounded px-1.5 py-0.5 text-[10px] ${
-                    part.status === "success"
-                      ? "bg-primary/10 text-primary"
-                      : part.status === "error"
-                        ? "bg-destructive/10 text-destructive"
-                        : "bg-tool-generic/10 text-tool-generic"
-                  }`}
-                >
-                  {part.status}
-                </span>
-              ) : null}
-            </div>
-            <div className="flex items-center gap-2">
-              <span>UTF-8</span>
-              <span>RAW</span>
-            </div>
-          </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="text-muted-foreground text-[10px]">{content.length} chars</span>
+          {part.timestamp && (
+            <span className="text-muted-foreground text-[10px]">
+              {new Date(part.timestamp).toLocaleTimeString()}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={copyToClipboard}
+            className="text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
+            title="Copy"
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-emerald-500" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+          </button>
         </div>
       </div>
+
+      {/* Content */}
+      {isJson ? (
+        <SimpleCodeEditor
+          code={content}
+          language="json"
+          fileName="result.json"
+          showHeader={false}
+          maxHeight="60vh"
+          fontSize={12}
+        />
+      ) : (
+        <pre className="text-foreground/80 max-h-[60vh] overflow-auto px-3 py-3 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap">
+          {content}
+        </pre>
+      )}
     </div>
   )
 }
