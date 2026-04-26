@@ -72,6 +72,8 @@ const TOOL_GROUPS: Record<string, ToolGroup[]> = {
   git_log_summary: ["repo"],
   git_branches: ["repo"],
   git_diff_summary: ["repo"],
+  git_blame: ["repo"],
+  git_file_history: ["repo"],
 }
 
 const GROUPS_BY_MODE: Record<AgentMode, ToolGroup[]> = {
