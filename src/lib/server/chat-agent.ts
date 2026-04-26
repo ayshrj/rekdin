@@ -226,23 +226,34 @@ function createModel({
   })
 }
 
-function toLangChainMessage(message: ChatMessage): BaseMessage {
+function toLangChainMessages(message: ChatMessage): BaseMessage[] {
   if (message.role === "user") {
-    return new HumanMessage(formatUserContent(message.content, message.attachments))
+    return [new HumanMessage(formatUserContent(message.content, message.attachments))]
   }
   if (message.role === "assistant") {
+    const toolCalls = message.toolCalls ?? []
     const aiMsg = new AIMessage({
       content: message.content,
-      tool_calls:
-        message.toolCalls?.map((call) => ({
-          id: call.id,
-          name: call.name,
-          args: call.arguments,
-        })) ?? [],
+      tool_calls: toolCalls.map((call) => ({
+        id: call.id,
+        name: call.name,
+        args: call.arguments,
+      })),
     })
-    return aiMsg
+    // Each tool call in history must be followed by a ToolMessage with its result,
+    // otherwise OpenAI rejects the conversation with a 400.
+    const toolMessages = toolCalls
+      .filter((call) => call.result !== undefined || call.error !== undefined)
+      .map(
+        (call) =>
+          new ToolMessage({
+            tool_call_id: call.id,
+            content: toolMessageContent(call.result ?? { error: call.error ?? "unknown error" }),
+          })
+      )
+    return [aiMsg, ...toolMessages]
   }
-  return new SystemMessage(message.content)
+  return [new SystemMessage(message.content)]
 }
 
 function formatUserContent(content: string, attachments?: string[]) {
@@ -416,7 +427,7 @@ export async function runAgent({
     let llmWithTools = llm.bindTools(tools)
     const history: BaseMessage[] = [
       ...(systemPrompt ? [new SystemMessage(systemPrompt)] : []),
-      ...contextMessages.map(toLangChainMessage),
+      ...contextMessages.flatMap(toLangChainMessages),
     ]
 
     const executedTools: ToolCall[] = []
