@@ -52,21 +52,6 @@ const CODE_EXTENSIONS = new Set([
 ])
 const MARKDOWN_EXTENSIONS = new Set(["md", "mdx"])
 
-// Prism has a bug where JSON-LD content with a null/non-string @context crashes
-// via `.toLowerCase()`. Catch it and fall back to plain pre.
-class SyntaxErrorBoundary extends React.Component<
-  { children: React.ReactNode; fallback: React.ReactNode },
-  { crashed: boolean }
-> {
-  state = { crashed: false }
-  static getDerivedStateFromError() {
-    return { crashed: true }
-  }
-  render() {
-    return this.state.crashed ? this.props.fallback : this.props.children
-  }
-}
-
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = React.useState(false)
   const copy = async () => {
@@ -132,22 +117,14 @@ export const FileReadRenderer: React.FC<{
           <Markdown>{content}</Markdown>
         </div>
       ) : isCode ? (
-        <SyntaxErrorBoundary
-          fallback={
-            <pre className="text-foreground/80 max-h-[60vh] overflow-auto px-3 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
-              {content}
-            </pre>
-          }
-        >
-          <SimpleCodeEditor
-            code={content}
-            language={ext}
-            fileName={fileName}
-            showHeader={false}
-            maxHeight="60vh"
-            fontSize={12}
-          />
-        </SyntaxErrorBoundary>
+        <SimpleCodeEditor
+          code={content}
+          language={ext}
+          fileName={fileName}
+          showHeader={false}
+          maxHeight="60vh"
+          fontSize={12}
+        />
       ) : (
         /* Plain text fallback */
         <pre

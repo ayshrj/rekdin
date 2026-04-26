@@ -49,6 +49,11 @@ type OpenRouterModel = {
   contextLength?: number | null
 }
 
+type OpenAIModel = {
+  id: string
+  owned_by: string
+}
+
 type SettingsExport = {
   llmProvider: string
   openRouterApiKey: string
@@ -142,6 +147,8 @@ export function OpenRouterSettings({
   const [cloudSecretDraft, setCloudSecretDraft] = React.useState("")
   const [models, setModels] = React.useState<OpenRouterModel[]>([])
   const [isLoadingModels, setIsLoadingModels] = React.useState(false)
+  const [openAIModels, setOpenAIModels] = React.useState<OpenAIModel[]>([])
+  const [isLoadingOpenAIModels, setIsLoadingOpenAIModels] = React.useState(false)
   const [settingsTab, setSettingsTab] = React.useState<"model" | "uploads">("model")
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -222,6 +229,30 @@ export function OpenRouterSettings({
       setIsLoadingModels(false)
     }
   }, [openRouterApiKeyDraft, providerDraft])
+
+  const fetchOpenAIModels = React.useCallback(async () => {
+    if (!openAIApiKeyDraft.trim()) {
+      toast.error("Enter your OpenAI API key first")
+      return
+    }
+    try {
+      setIsLoadingOpenAIModels(true)
+      const res = await fetch("/api/openai/models", {
+        headers: { "X-OpenAI-Api-Key": openAIApiKeyDraft },
+      })
+      const data = (await res.json()) as { models?: OpenAIModel[]; error?: string }
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to load models")
+        return
+      }
+      setOpenAIModels(data.models ?? [])
+      toast.success(`Loaded ${data.models?.length ?? 0} models`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load models")
+    } finally {
+      setIsLoadingOpenAIModels(false)
+    }
+  }, [openAIApiKeyDraft])
 
   const save = React.useCallback(() => {
     updateLlmSettings({
@@ -422,51 +453,40 @@ export function OpenRouterSettings({
   const selected = models.find((m) => m.id === openRouterModelDraft)
   const activeProviderMeta = LLM_PROVIDER_METADATA[providerDraft]
   const directProviderState =
-    providerDraft === "openai"
+    providerDraft === "gemini"
       ? {
-          apiKeyId: "openai-key",
-          modelId: "openai-model",
-          apiKeyDraft: openAIApiKeyDraft,
-          setApiKeyDraft: setOpenAIApiKeyDraft,
-          modelDraft: openAIModelDraft,
-          setModelDraft: setOpenAIModelDraft,
-          showApiKey: showOpenAIKey,
-          setShowApiKey: setShowOpenAIKey,
+          apiKeyId: "gemini-key",
+          modelId: "gemini-model",
+          apiKeyDraft: geminiApiKeyDraft,
+          setApiKeyDraft: setGeminiApiKeyDraft,
+          modelDraft: geminiModelDraft,
+          setModelDraft: setGeminiModelDraft,
+          showApiKey: showGeminiKey,
+          setShowApiKey: setShowGeminiKey,
         }
-      : providerDraft === "gemini"
+      : providerDraft === "claude"
         ? {
-            apiKeyId: "gemini-key",
-            modelId: "gemini-model",
-            apiKeyDraft: geminiApiKeyDraft,
-            setApiKeyDraft: setGeminiApiKeyDraft,
-            modelDraft: geminiModelDraft,
-            setModelDraft: setGeminiModelDraft,
-            showApiKey: showGeminiKey,
-            setShowApiKey: setShowGeminiKey,
+            apiKeyId: "claude-key",
+            modelId: "claude-model",
+            apiKeyDraft: claudeApiKeyDraft,
+            setApiKeyDraft: setClaudeApiKeyDraft,
+            modelDraft: claudeModelDraft,
+            setModelDraft: setClaudeModelDraft,
+            showApiKey: showClaudeKey,
+            setShowApiKey: setShowClaudeKey,
           }
-        : providerDraft === "claude"
+        : providerDraft === "grok"
           ? {
-              apiKeyId: "claude-key",
-              modelId: "claude-model",
-              apiKeyDraft: claudeApiKeyDraft,
-              setApiKeyDraft: setClaudeApiKeyDraft,
-              modelDraft: claudeModelDraft,
-              setModelDraft: setClaudeModelDraft,
-              showApiKey: showClaudeKey,
-              setShowApiKey: setShowClaudeKey,
+              apiKeyId: "grok-key",
+              modelId: "grok-model",
+              apiKeyDraft: grokApiKeyDraft,
+              setApiKeyDraft: setGrokApiKeyDraft,
+              modelDraft: grokModelDraft,
+              setModelDraft: setGrokModelDraft,
+              showApiKey: showGrokKey,
+              setShowApiKey: setShowGrokKey,
             }
-          : providerDraft === "grok"
-            ? {
-                apiKeyId: "grok-key",
-                modelId: "grok-model",
-                apiKeyDraft: grokApiKeyDraft,
-                setApiKeyDraft: setGrokApiKeyDraft,
-                modelDraft: grokModelDraft,
-                setModelDraft: setGrokModelDraft,
-                showApiKey: showGrokKey,
-                setShowApiKey: setShowGrokKey,
-              }
-            : null
+          : null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -689,6 +709,101 @@ export function OpenRouterSettings({
                     {selected?.description ? (
                       <p className="text-muted-foreground text-xs">{selected.description}</p>
                     ) : null}
+                  </div>
+                </div>
+              </>
+            ) : providerDraft === "openai" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="openai-key">OpenAI API key</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="openai-key"
+                      type={showOpenAIKey ? "text" : "password"}
+                      placeholder="sk-..."
+                      value={openAIApiKeyDraft}
+                      onChange={(e) => setOpenAIApiKeyDraft(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowOpenAIKey((v) => !v)}
+                      aria-label={showOpenAIKey ? "Hide API key" : "Show API key"}
+                    >
+                      {showOpenAIKey ? (
+                        <EyeSlash className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Model</Label>
+                  <div className="flex w-full min-w-0 flex-col gap-y-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => void fetchOpenAIModels()}
+                      disabled={isLoadingOpenAIModels}
+                    >
+                      {isLoadingOpenAIModels ? "Fetching..." : "Fetch models"}
+                    </Button>
+
+                    <Command className="w-full max-w-full min-w-0 rounded-lg border shadow-md">
+                      <CommandInput placeholder="Search models..." />
+                      <CommandList className="max-w-full">
+                        {openAIModels.length === 0 && (
+                          <CommandEmpty>
+                            No models found. Click &quot;Fetch models&quot; to load, or paste a
+                            model id below.
+                          </CommandEmpty>
+                        )}
+                        {openAIModels.length !== 0 && (
+                          <CommandGroup heading="OpenAI models">
+                            {openAIModels.map((m) => (
+                              <CommandItem
+                                key={m.id}
+                                value={m.id}
+                                className="min-w-0"
+                                onSelect={() => setOpenAIModelDraft(m.id)}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    openAIModelDraft === m.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <div className="min-w-0">
+                                  <div className="truncate">{m.id}</div>
+                                  <div className="text-muted-foreground truncate text-xs">
+                                    {m.owned_by}
+                                  </div>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </div>
+
+                  <p className="text-muted-foreground text-xs">
+                    Model list scrolls inside the dropdown.
+                  </p>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="openai-model" className="text-muted-foreground text-xs">
+                      Or paste model id
+                    </Label>
+                    <Input
+                      id="openai-model"
+                      placeholder="gpt-4o"
+                      value={openAIModelDraft}
+                      onChange={(e) => setOpenAIModelDraft(e.target.value)}
+                    />
                   </div>
                 </div>
               </>

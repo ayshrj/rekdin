@@ -1,11 +1,25 @@
 "use client"
 
 import { useTheme } from "next-themes"
-import { useMemo, useState } from "react"
+import { Component, useMemo, useState } from "react"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism"
 
 import { Check, ClipboardDocumentList as Copy } from "@/lib/icons"
+
+// Prism JSON-LD grammar calls `.toLowerCase()` on `@context` which can be null.
+class PrismErrorBoundary extends Component<
+  { children: React.ReactNode; fallback: React.ReactNode },
+  { crashed: boolean }
+> {
+  state = { crashed: false }
+  static getDerivedStateFromError() {
+    return { crashed: true }
+  }
+  render() {
+    return this.state.crashed ? this.props.fallback : this.props.children
+  }
+}
 
 interface SimpleCodeEditorProps {
   code: string
@@ -30,7 +44,7 @@ export function SimpleCodeEditor({
   fontSize = 14,
   showHeader = true,
 }: SimpleCodeEditorProps) {
-  const { theme } = useTheme()
+  const { resolvedTheme: theme } = useTheme()
   const [copied, setCopied] = useState(false)
 
   const normalizedLanguage = useMemo(() => {
@@ -94,26 +108,41 @@ export function SimpleCodeEditor({
       ) : null}
 
       <div style={{ maxHeight }} className="overflow-auto">
-        <SyntaxHighlighter
-          language={normalizedLanguage}
-          style={isDark ? oneDark : undefined}
-          showLineNumbers={showLineNumbers}
-          customStyle={{
-            margin: 0,
-            background: "var(--color-card)",
-            color: "var(--color-card-foreground)",
-            fontSize,
-            lineHeight: 1.5,
-          }}
-          codeTagProps={{
-            style: {
-              fontFamily:
-                "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-            },
-          }}
+        <PrismErrorBoundary
+          fallback={
+            <pre
+              style={{
+                fontSize,
+                background: "var(--color-card)",
+                color: "var(--color-card-foreground)",
+              }}
+              className="m-0 p-3 font-mono leading-relaxed whitespace-pre-wrap"
+            >
+              {code ?? ""}
+            </pre>
+          }
         >
-          {code ?? ""}
-        </SyntaxHighlighter>
+          <SyntaxHighlighter
+            language={normalizedLanguage}
+            style={isDark ? oneDark : undefined}
+            showLineNumbers={showLineNumbers}
+            customStyle={{
+              margin: 0,
+              background: "var(--color-card)",
+              color: "var(--color-card-foreground)",
+              fontSize,
+              lineHeight: 1.5,
+            }}
+            codeTagProps={{
+              style: {
+                fontFamily:
+                  "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+              },
+            }}
+          >
+            {code ?? ""}
+          </SyntaxHighlighter>
+        </PrismErrorBoundary>
       </div>
     </div>
   )
