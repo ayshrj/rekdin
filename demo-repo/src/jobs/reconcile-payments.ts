@@ -15,6 +15,7 @@ export async function reconcilePayments(limit = 250) {
   let processed = 0
 
   for (const row of pending.rows) {
+    // TODO: wrap each update in a try/catch so one failed payment doesn't abort the whole batch
     await query(`
       update orders
       set status = 'paid'

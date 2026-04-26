@@ -12,6 +12,7 @@ export async function query<T = Record<string, unknown>>(sql: string) {
 }
 
 export async function searchOrders(search: string) {
+  // FIXME: string interpolation here is a SQL injection risk — switch to parameterized query
   const sql = `
     select id, customer_email, total_cents, status, created_at
     from orders
@@ -28,6 +29,8 @@ export async function createOrder(input: {
   totalCents: number
   notes?: string
 }) {
+  // FIXME: same injection risk as searchOrders — all three columns need parameterization
+  // TODO: validate that totalCents is a positive integer before hitting the DB
   const sql = `
     insert into orders (customer_email, total_cents, notes, status)
     values ('${input.customerEmail}', ${input.totalCents}, '${input.notes ?? ""}', 'pending')
