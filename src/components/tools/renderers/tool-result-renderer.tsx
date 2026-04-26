@@ -17,6 +17,7 @@ import { BrowserResultRenderer } from "./browser-result-renderer"
 import { CodeActRenderer } from "./code-act-renderer"
 import { CommandResultRenderer } from "./command-result-renderer"
 import { DeepResearchRenderer } from "./deep-research-renderer"
+import { FileReadRenderer } from "./file-read-renderer"
 import { FileSearchRenderer } from "./file-search-renderer"
 import { GenericResultRenderer } from "./generic-result-renderer"
 import { HttpRequestRenderer } from "./http-request-renderer"
@@ -57,6 +58,7 @@ const CONTENT_RENDERERS: Record<
   json: JsonResultRenderer,
   web_search: WebSearchResultRenderer,
   http_request: HttpRequestRenderer,
+  file_read: FileReadRenderer,
   file_search: FileSearchRenderer,
   markdown_to_pdf: PdfRenderer,
 
@@ -155,7 +157,7 @@ const TOOL_ACCENT_MAP: Record<string, string> = {
   python_execute: "border-tool-command/25",
   node_execute: "border-tool-command/25",
   visit_link: "border-tool-browser/25",
-  file_read: "border-tool-json/25",
+  file_read: "border-tool-code/25",
   list_files: "border-tool-json/25",
   write_file: "border-tool-json/25",
   file_replace: "border-tool-json/25",
@@ -240,7 +242,7 @@ export function ToolResultRenderer({
 
             web_search: "web_search",
             visit_link: "browser_result",
-            file_read: "json",
+            file_read: "file_read",
             list_files: "json",
             write_file: "json",
             file_search: "file_search",

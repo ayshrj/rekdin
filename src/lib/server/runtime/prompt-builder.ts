@@ -19,7 +19,7 @@ const MODE_GUIDANCE: Record<AgentMode, string> = {
   browser:
     "Treat the browser as a stateful environment. Observe before acting, prefer deterministic selectors, and verify page changes after interactions.",
   workspace:
-    "Treat the workspace as a real project. Inspect before editing, prefer low-blast-radius changes, and summarize what changed with concrete paths. When asked about a repository, identify entry points, risks, and verification steps.",
+    "Treat the workspace as the current local project repository. Inspect before editing, prefer low-blast-radius changes, and summarize what changed with concrete paths. When asked about a repository, audit the current workspace by default and do not ask for a path unless the user clearly wants a different repo.",
   document:
     "Focus on producing polished documents and exported artifacts. Validate generated outputs before claiming success.",
 }
@@ -58,6 +58,7 @@ export async function buildSystemPrompt({
   responseSchema,
 }: PromptInput): Promise<string> {
   const workspaceInstructions = await loadWorkspaceInstructions()
+  const workspaceRoot = getWorkspaceRoot()
   const sections = [
     [
       "Identity",
@@ -79,6 +80,15 @@ export async function buildSystemPrompt({
       ].join("\n"),
     ],
   ]
+
+  sections.push([
+    "Workspace Context",
+    [
+      `Current workspace root: ${workspaceRoot}`,
+      "Use this directory as the default project or repository context for file inspection and shell tools.",
+      "Do not ask the user to confirm the workspace path unless they explicitly want to inspect a different project.",
+    ].join("\n"),
+  ])
 
   if (workspaceInstructions) {
     sections.push(["Workspace Memory", workspaceInstructions])

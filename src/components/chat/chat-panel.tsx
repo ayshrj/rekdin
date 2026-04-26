@@ -48,12 +48,11 @@ export function ChatPanel() {
   } = useChat()
 
   const panelRef = React.useRef<HTMLDivElement | null>(null)
-  const scrollRef = React.useRef<HTMLDivElement | null>(null)
   const scrollViewportRef = React.useRef<HTMLDivElement | null>(null)
+  const innerContentRef = React.useRef<HTMLDivElement | null>(null)
   const presetsRef = React.useRef<HTMLDivElement | null>(null)
   const stickToBottomRef = React.useRef(true)
   const lastMessageIdRef = React.useRef<string | null>(null)
-  const scrollRafRef = React.useRef<number | null>(null)
   const [latestChunk, setLatestChunk] = React.useState("")
   const lastDraftIdRef = React.useRef<string | null>(null)
   const lastDraftLenRef = React.useRef(0)
@@ -136,7 +135,7 @@ export function ChatPanel() {
     }
   }, [])
 
-  // Stickiness detection — attached directly to the native scroll container
+  // Stickiness detection — tracks whether the user is near the bottom
   React.useEffect(() => {
     const viewport = scrollViewportRef.current
     if (!viewport) return
@@ -149,20 +148,37 @@ export function ChatPanel() {
     return () => viewport.removeEventListener("scroll", updateStickiness)
   }, [])
 
-  // Auto-scroll to bottom on new messages / thinking updates
+  // ResizeObserver: follow content growth instantly while stuck to bottom.
+  // Using instant scrollTop (no smooth) means no animation ever competes with
+  // itself — the root cause of the streaming bounce.
   React.useEffect(() => {
     const viewport = scrollViewportRef.current
-    if (!viewport) return
-    const lastId = messages[messages.length - 1]?.id ?? null
-    const lastChanged = lastId !== lastMessageIdRef.current
-    lastMessageIdRef.current = lastId
-    const shouldAutoScroll = stickToBottomRef.current || lastChanged
-    if (!shouldAutoScroll) return
-    if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current)
-    scrollRafRef.current = requestAnimationFrame(() => {
-      scrollRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })
+    const inner = innerContentRef.current
+    if (!viewport || !inner) return
+    const observer = new ResizeObserver(() => {
+      if (stickToBottomRef.current) {
+        viewport.scrollTop = viewport.scrollHeight
+      }
     })
-  }, [currentSessionId, isThinking, latestChunk, messages])
+    observer.observe(inner)
+    return () => observer.disconnect()
+  }, [])
+
+  // Scroll to bottom on session switch
+  React.useEffect(() => {
+    const viewport = scrollViewportRef.current
+    if (viewport) viewport.scrollTop = viewport.scrollHeight
+  }, [currentSessionId])
+
+  // Scroll to bottom + re-enable stickiness when a brand-new message arrives
+  React.useEffect(() => {
+    const lastId = messages[messages.length - 1]?.id ?? null
+    if (lastId === lastMessageIdRef.current) return
+    lastMessageIdRef.current = lastId
+    stickToBottomRef.current = true
+    const viewport = scrollViewportRef.current
+    if (viewport) viewport.scrollTop = viewport.scrollHeight
+  }, [messages])
 
   // Track thinking / draft chunk for the inline indicator
   React.useEffect(() => {
@@ -277,7 +293,7 @@ export function ChatPanel() {
         ref={scrollViewportRef}
         className="[&::-webkit-scrollbar-thumb]:bg-border min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent"
       >
-        <div className="flex w-full flex-col gap-3">
+        <div ref={innerContentRef} className="flex w-full flex-col gap-3">
           {messages.length === 0 ? (
             /* ── Empty state ─────────────────────────────────── */
             <div className="mx-auto w-full max-w-sm py-6">
@@ -389,8 +405,6 @@ export function ChatPanel() {
               </div>
             </div>
           ) : null}
-
-          <div ref={scrollRef} />
         </div>
       </div>
 

@@ -101,7 +101,7 @@ export const WORKFLOW_PRESETS: WorkflowPreset[] = [
     category: "code",
     supportsBackground: true,
     prompt:
-      "Inspect this repository, identify the main entry points and risky areas, and return a structured audit with priorities and next steps.",
+      "Inspect the current workspace repository. Do not ask for a repository path unless the user wants a different repo. Identify the main entry points and risky areas, then return a structured audit with priorities and next steps.",
     responseSchema: {
       type: "object",
       required: ["summary", "entryPoints", "risks", "recommendedNextSteps"],
