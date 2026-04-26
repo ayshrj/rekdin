@@ -2594,19 +2594,102 @@ export const gitBranchesTool = tool(
 )
 
 export const gitDiffSummaryTool = tool(
-  async () => {
-    const status = await runCommandUnsafe("git status --short", process.cwd(), 10000)
-    const diffStat = await runCommandUnsafe("git diff --stat", process.cwd(), 10000)
+  async ({ path: filePath, commit }) => {
+    if (commit) {
+      // Show a specific commit's changes with full diff
+      const safeCommit = commit.replace(/[^a-zA-Z0-9_.~^-]/g, "")
+      const show = await runCommandUnsafe(
+        `git show ${safeCommit} --stat --patch`,
+        process.cwd(),
+        15000
+      )
+      const firstLine = show.stdout.indexOf("\n")
+      return {
+        type: "git_diff_summary",
+        status: show.stdout.slice(0, firstLine).trim(), // commit header as status
+        diff: show.stdout.slice(firstLine + 1).trim(),
+        commit: safeCommit,
+      }
+    }
+    const pathArg = filePath ? ` -- ${filePath}` : ""
+    const status = await runCommandUnsafe("git status --short" + pathArg, process.cwd(), 10000)
+    const diff = await runCommandUnsafe("git diff" + pathArg, process.cwd(), 10000)
     return {
       type: "git_diff_summary",
       status: status.stdout.trim(),
-      diff: diffStat.stdout.trim(),
+      diff: diff.stdout.trim(),
     }
   },
   {
     name: "git_diff_summary",
-    description: "Summarize git status and diff (read-only).",
-    schema: z.object({}),
+    description:
+      "Show git status and diff for the working directory. Pass `path` to scope to a file. Pass `commit` (hash or ref) to show a specific commit's changes via git show.",
+    schema: z.object({
+      path: z.string().optional(),
+      commit: z.string().optional(),
+    }),
+  }
+)
+
+export const gitBlameTool = tool(
+  async ({ path: filePath }) => {
+    const safe = filePath.replace(/'/g, "'\"'\"'")
+    const res = await runCommandUnsafe(
+      `git blame --line-porcelain -- '${safe}'`,
+      process.cwd(),
+      15000
+    )
+    if (res.exitCode !== 0) {
+      return { type: "git_blame", path: filePath, lines: [], error: res.stderr.trim() }
+    }
+    // Parse porcelain output into structured lines
+    const lines: { hash: string; author: string; date: string; lineNo: number; text: string }[] = []
+    const chunks = res.stdout.split(/^([0-9a-f]{40}) /m).slice(1)
+    for (let i = 0; i < chunks.length; i += 2) {
+      const hash = chunks[i]?.trim().slice(0, 7) ?? ""
+      const block = chunks[i + 1] ?? ""
+      const blockLines = block.split("\n")
+      const author = blockLines.find((l) => l.startsWith("author "))?.slice(7) ?? ""
+      const epoch = blockLines.find((l) => l.startsWith("author-time "))?.slice(12) ?? ""
+      const date = epoch ? new Date(Number(epoch) * 1000).toISOString().slice(0, 10) : ""
+      const lineNoLine = blockLines.find((l) => /^\d+ \d+ \d+/.test(l)) ?? ""
+      const lineNo = Number(lineNoLine.split(" ")[1] ?? "0")
+      const text = blockLines.find((l) => l.startsWith("\t"))?.slice(1) ?? ""
+      lines.push({ hash, author, date, lineNo, text })
+    }
+    return { type: "git_blame", path: filePath, lines }
+  },
+  {
+    name: "git_blame",
+    description: "Show who last modified each line of a file (git blame).",
+    schema: z.object({ path: z.string().min(1) }),
+  }
+)
+
+export const gitFileHistoryTool = tool(
+  async ({ path: filePath, limit }) => {
+    const safe = filePath.replace(/'/g, "'\"'\"'")
+    const n = Math.min(Math.max(limit ?? 20, 1), 100)
+    const res = await runCommandUnsafe(
+      `git log --follow --oneline -n ${n} -- '${safe}'`,
+      process.cwd(),
+      10000
+    )
+    return {
+      type: "git_file_history",
+      path: filePath,
+      output: res.stdout.trim(),
+      exitCode: res.exitCode,
+    }
+  },
+  {
+    name: "git_file_history",
+    description:
+      "Show the commit history for a specific file, following renames (git log --follow).",
+    schema: z.object({
+      path: z.string().min(1),
+      limit: z.number().int().min(1).max(100).optional(),
+    }),
   }
 )
 
@@ -2835,6 +2918,8 @@ export function createToolset(context?: { headers?: HeadersInit; allowedToolName
     gitLogSummaryTool,
     gitBranchesTool,
     gitDiffSummaryTool,
+    gitBlameTool,
+    gitFileHistoryTool,
   ]
   if (!context?.allowedToolNames || context.allowedToolNames.length === 0) {
     return tools

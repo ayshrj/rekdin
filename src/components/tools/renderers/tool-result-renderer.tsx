@@ -23,6 +23,7 @@ import { ExtractTodosRenderer } from "./extract-todos-renderer"
 import { FileReadRenderer } from "./file-read-renderer"
 import { FileSearchRenderer } from "./file-search-renderer"
 import { GenericResultRenderer } from "./generic-result-renderer"
+import { GitBlameRenderer } from "./git-blame-renderer"
 import { GitBranchesRenderer } from "./git-branches-renderer"
 import { GitDiffRenderer } from "./git-diff-renderer"
 import { GitLogRenderer } from "./git-log-renderer"
@@ -78,6 +79,7 @@ const CONTENT_RENDERERS: Record<
   git_diff: GitDiffRenderer,
   git_log: GitLogRenderer,
   git_branches: GitBranchesRenderer,
+  git_blame: GitBlameRenderer,
   link_preview: LinkPreviewRenderer,
   npm_package_info: NpmPackageRenderer,
   extract_todos: ExtractTodosRenderer,
@@ -205,6 +207,8 @@ const TOOL_ACCENT_MAP: Record<string, string> = {
   git_diff_summary: "border-tool-code/25",
   git_log_summary: "border-tool-code/25",
   git_branches: "border-tool-code/25",
+  git_blame: "border-tool-code/25",
+  git_file_history: "border-tool-code/25",
   download_fetch: "border-tool-json/25",
   generic: "border-tool-generic/25",
 }
@@ -294,6 +298,8 @@ export function ToolResultRenderer({
             git_diff_summary: "git_diff",
             git_log_summary: "git_log",
             git_branches: "git_branches",
+            git_blame: "git_blame",
+            git_file_history: "git_log",
 
             browser_navigate: "browser_navigate",
             browser_screenshot: "browser_screenshot",
