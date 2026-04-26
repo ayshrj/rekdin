@@ -335,6 +335,13 @@ a:hover{text-decoration:underline}
   font-size:13px;
 }
 .tool-summary::-webkit-details-marker{display:none}
+.tool-summary::marker{font-size:0}
+.tool-summary::after{
+  content:"▾";font-size:14px;color:var(--muted);flex-shrink:0;
+  display:inline-flex;align-items:center;line-height:1;
+  transition:transform .2s ease;
+}
+details[open]>.tool-summary::after{transform:rotate(-180deg)}
 .tool-summary:hover{background:rgba(245,158,11,.12)}
 .tool-left{display:flex;align-items:center;gap:8px}
 .tool-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--amber)}

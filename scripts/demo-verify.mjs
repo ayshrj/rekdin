@@ -41,7 +41,6 @@ try {
   }
 
   console.log("\nDemo verification passed.")
-  console.log("Open docs/demo/rekdin-demo-kit.md for the recording script.")
   console.log("Open public/rekdin-demo-architecture.svg for the system-design slide.")
 } catch (error) {
   console.error("\nDemo verification failed.")

@@ -142,6 +142,7 @@ export function OpenRouterSettings({
   const [cloudSecretDraft, setCloudSecretDraft] = React.useState("")
   const [models, setModels] = React.useState<OpenRouterModel[]>([])
   const [isLoadingModels, setIsLoadingModels] = React.useState(false)
+  const [settingsTab, setSettingsTab] = React.useState<"model" | "uploads">("model")
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -166,6 +167,7 @@ export function OpenRouterSettings({
     setCloudNameDraft(cloudinaryCloudName)
     setCloudKeyDraft(cloudinaryApiKey)
     setCloudSecretDraft(cloudinaryApiSecret)
+    setSettingsTab("model")
   }, [
     open,
     llmProvider,
@@ -526,315 +528,350 @@ export function OpenRouterSettings({
           className="hidden"
         />
 
-        <div className="min-w-0 space-y-4 px-6 py-4">
-          <div className="space-y-2">
-            <Label>LLM provider</Label>
-            <Select
-              value={providerDraft}
-              onValueChange={(value) => setProviderDraft(normalizeLlmProvider(value))}
+        {/* Tab bar */}
+        <div className="flex shrink-0 border-b px-6">
+          {(["model", "uploads"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setSettingsTab(tab)}
+              className={cn(
+                "-mb-px border-b-2 px-4 py-3 text-sm font-medium capitalize transition-colors",
+                settingsTab === tab
+                  ? "border-primary text-primary"
+                  : "text-muted-foreground hover:text-foreground border-transparent"
+              )}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a provider" />
-              </SelectTrigger>
-              <SelectContent>
-                {LLM_PROVIDER_OPTIONS.map((providerId) => (
-                  <SelectItem key={providerId} value={providerId}>
-                    {LLM_PROVIDER_METADATA[providerId].label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-muted-foreground text-xs">
-              {activeProviderMeta.description} Keys are stored by the local server and reused across
-              chat turns.
-            </p>
-          </div>
+              {tab === "model" ? "Model" : "Uploads"}
+            </button>
+          ))}
+        </div>
 
-          <div className="flex items-center justify-between gap-6 rounded-lg border px-3 py-2">
-            <div className="min-w-0">
-              <Label className="text-sm">Live mode</Label>
+        {settingsTab === "model" ? (
+          <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">
+            <div className="space-y-2">
+              <Label>LLM provider</Label>
+              <Select
+                value={providerDraft}
+                onValueChange={(value) => setProviderDraft(normalizeLlmProvider(value))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LLM_PROVIDER_OPTIONS.map((providerId) => (
+                    <SelectItem key={providerId} value={providerId}>
+                      {LLM_PROVIDER_METADATA[providerId].label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-muted-foreground text-xs">
-                Stream the assistant response as it generates.
+                {activeProviderMeta.description} Keys are stored by the local server and reused
+                across chat turns.
               </p>
             </div>
-            <Switch
-              checked={liveModeDraft}
-              onCheckedChange={setLiveModeDraft}
-              aria-label="Toggle live mode"
-            />
-          </div>
 
-          {providerDraft === "openrouter" ? (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="openrouter-key">OpenRouter API key</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="openrouter-key"
-                    type={showOpenRouterKey ? "text" : "password"}
-                    placeholder="sk-or-v1-..."
-                    value={openRouterApiKeyDraft}
-                    onChange={(e) => setOpenRouterApiKeyDraft(e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setShowOpenRouterKey((v) => !v)}
-                    aria-label={showOpenRouterKey ? "Hide API key" : "Show API key"}
-                  >
-                    {showOpenRouterKey ? (
-                      <EyeSlash className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Model</Label>
-                <div className="flex w-full min-w-0 flex-col gap-y-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => void fetchModels()}
-                    disabled={isLoadingModels}
-                  >
-                    {isLoadingModels ? "Fetching..." : "Fetch models"}
-                  </Button>
-
-                  <Command className="w-full max-w-full min-w-0 rounded-lg border shadow-md">
-                    <CommandInput placeholder="Search models..." />
-                    <CommandList className="max-w-full">
-                      {models.length === 0 && (
-                        <CommandEmpty>
-                          No models found. Click &quot;Fetch models&quot; to load, or type a model
-                          id.
-                        </CommandEmpty>
-                      )}
-                      {models.length !== 0 && (
-                        <CommandGroup heading="OpenRouter models">
-                          {models.map((m) => (
-                            <CommandItem
-                              key={m.id}
-                              value={m.id}
-                              className="min-w-0"
-                              onSelect={() => {
-                                setOpenRouterModelDraft(m.id)
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  openRouterModelDraft === m.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              <div className="min-w-0">
-                                <div className="truncate">{m.id}</div>
-                                {m.contextLength ? (
-                                  <div className="text-muted-foreground truncate text-xs">
-                                    {m.name} • {m.contextLength.toLocaleString()} ctx
-                                  </div>
-                                ) : m.name ? (
-                                  <div className="text-muted-foreground truncate text-xs">
-                                    {m.name}
-                                  </div>
-                                ) : null}
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      )}
-                    </CommandList>
-                  </Command>
-                </div>
-
+            <div className="flex items-center justify-between gap-6 rounded-lg border px-3 py-2">
+              <div className="min-w-0">
+                <Label className="text-sm">Live mode</Label>
                 <p className="text-muted-foreground text-xs">
-                  Model list scrolls inside the dropdown.
+                  Stream the assistant response as it generates.
                 </p>
+              </div>
+              <Switch
+                checked={liveModeDraft}
+                onCheckedChange={setLiveModeDraft}
+                aria-label="Toggle live mode"
+              />
+            </div>
 
-                <div className="space-y-1">
-                  <Label htmlFor="openrouter-model" className="text-muted-foreground text-xs">
-                    Or paste model id
+            {providerDraft === "openrouter" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="openrouter-key">OpenRouter API key</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="openrouter-key"
+                      type={showOpenRouterKey ? "text" : "password"}
+                      placeholder="sk-or-v1-..."
+                      value={openRouterApiKeyDraft}
+                      onChange={(e) => setOpenRouterApiKeyDraft(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowOpenRouterKey((v) => !v)}
+                      aria-label={showOpenRouterKey ? "Hide API key" : "Show API key"}
+                    >
+                      {showOpenRouterKey ? (
+                        <EyeSlash className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Model</Label>
+                  <div className="flex w-full min-w-0 flex-col gap-y-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => void fetchModels()}
+                      disabled={isLoadingModels}
+                    >
+                      {isLoadingModels ? "Fetching..." : "Fetch models"}
+                    </Button>
+
+                    <Command className="w-full max-w-full min-w-0 rounded-lg border shadow-md">
+                      <CommandInput placeholder="Search models..." />
+                      <CommandList className="max-w-full">
+                        {models.length === 0 && (
+                          <CommandEmpty>
+                            No models found. Click &quot;Fetch models&quot; to load, or type a model
+                            id.
+                          </CommandEmpty>
+                        )}
+                        {models.length !== 0 && (
+                          <CommandGroup heading="OpenRouter models">
+                            {models.map((m) => (
+                              <CommandItem
+                                key={m.id}
+                                value={m.id}
+                                className="min-w-0"
+                                onSelect={() => {
+                                  setOpenRouterModelDraft(m.id)
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    openRouterModelDraft === m.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <div className="min-w-0">
+                                  <div className="truncate">{m.id}</div>
+                                  {m.contextLength ? (
+                                    <div className="text-muted-foreground truncate text-xs">
+                                      {m.name} • {m.contextLength.toLocaleString()} ctx
+                                    </div>
+                                  ) : m.name ? (
+                                    <div className="text-muted-foreground truncate text-xs">
+                                      {m.name}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </div>
+
+                  <p className="text-muted-foreground text-xs">
+                    Model list scrolls inside the dropdown.
+                  </p>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="openrouter-model" className="text-muted-foreground text-xs">
+                      Or paste model id
+                    </Label>
+                    <Input
+                      id="openrouter-model"
+                      placeholder="openai/gpt-4o-mini"
+                      value={openRouterModelDraft}
+                      onChange={(e) => setOpenRouterModelDraft(e.target.value)}
+                    />
+                    {selected?.description ? (
+                      <p className="text-muted-foreground text-xs">{selected.description}</p>
+                    ) : null}
+                  </div>
+                </div>
+              </>
+            ) : directProviderState ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor={directProviderState.apiKeyId}>
+                    {activeProviderMeta.apiKeyLabel}
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id={directProviderState.apiKeyId}
+                      type={directProviderState.showApiKey ? "text" : "password"}
+                      placeholder={activeProviderMeta.apiKeyPlaceholder}
+                      value={directProviderState.apiKeyDraft}
+                      onChange={(e) => directProviderState.setApiKeyDraft(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => directProviderState.setShowApiKey((v) => !v)}
+                      aria-label={directProviderState.showApiKey ? "Hide API key" : "Show API key"}
+                    >
+                      {directProviderState.showApiKey ? (
+                        <EyeSlash className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor={directProviderState.modelId}>
+                    {activeProviderMeta.modelLabel}
                   </Label>
                   <Input
-                    id="openrouter-model"
-                    placeholder="openai/gpt-4o-mini"
-                    value={openRouterModelDraft}
-                    onChange={(e) => setOpenRouterModelDraft(e.target.value)}
+                    id={directProviderState.modelId}
+                    placeholder={activeProviderMeta.modelPlaceholder}
+                    value={directProviderState.modelDraft}
+                    onChange={(e) => directProviderState.setModelDraft(e.target.value)}
                   />
-                  {selected?.description ? (
-                    <p className="text-muted-foreground text-xs">{selected.description}</p>
-                  ) : null}
                 </div>
-              </div>
-            </>
-          ) : directProviderState ? (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor={directProviderState.apiKeyId}>
-                  {activeProviderMeta.apiKeyLabel}
-                </Label>
-                <div className="flex gap-2">
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="azure-openai-key">Azure OpenAI API key</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="azure-openai-key"
+                      type={showAzureKey ? "text" : "password"}
+                      placeholder="..."
+                      value={azureOpenAIApiKeyDraft}
+                      onChange={(e) => setAzureOpenAIApiKeyDraft(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowAzureKey((v) => !v)}
+                      aria-label={showAzureKey ? "Hide API key" : "Show API key"}
+                    >
+                      {showAzureKey ? (
+                        <EyeSlash className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="azure-openai-endpoint">Azure OpenAI endpoint</Label>
                   <Input
-                    id={directProviderState.apiKeyId}
-                    type={directProviderState.showApiKey ? "text" : "password"}
-                    placeholder={activeProviderMeta.apiKeyPlaceholder}
-                    value={directProviderState.apiKeyDraft}
-                    onChange={(e) => directProviderState.setApiKeyDraft(e.target.value)}
+                    id="azure-openai-endpoint"
+                    placeholder="https://your-resource.openai.azure.com"
+                    value={azureOpenAIEndpointDraft}
+                    onChange={(e) => setAzureOpenAIEndpointDraft(e.target.value)}
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => directProviderState.setShowApiKey((v) => !v)}
-                    aria-label={directProviderState.showApiKey ? "Hide API key" : "Show API key"}
-                  >
-                    {directProviderState.showApiKey ? (
-                      <EyeSlash className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </Button>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor={directProviderState.modelId}>{activeProviderMeta.modelLabel}</Label>
-                <Input
-                  id={directProviderState.modelId}
-                  placeholder={activeProviderMeta.modelPlaceholder}
-                  value={directProviderState.modelDraft}
-                  onChange={(e) => directProviderState.setModelDraft(e.target.value)}
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="azure-openai-key">Azure OpenAI API key</Label>
-                <div className="flex gap-2">
+                <div className="space-y-2">
+                  <Label htmlFor="azure-openai-deployment">Deployment</Label>
                   <Input
-                    id="azure-openai-key"
-                    type={showAzureKey ? "text" : "password"}
-                    placeholder="..."
-                    value={azureOpenAIApiKeyDraft}
-                    onChange={(e) => setAzureOpenAIApiKeyDraft(e.target.value)}
+                    id="azure-openai-deployment"
+                    placeholder="your-deployment-name"
+                    value={azureOpenAIDeploymentDraft}
+                    onChange={(e) => setAzureOpenAIDeploymentDraft(e.target.value)}
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setShowAzureKey((v) => !v)}
-                    aria-label={showAzureKey ? "Hide API key" : "Show API key"}
-                  >
-                    {showAzureKey ? <EyeSlash className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="azure-openai-endpoint">Azure OpenAI endpoint</Label>
-                <Input
-                  id="azure-openai-endpoint"
-                  placeholder="https://your-resource.openai.azure.com"
-                  value={azureOpenAIEndpointDraft}
-                  onChange={(e) => setAzureOpenAIEndpointDraft(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="azure-openai-deployment">Deployment</Label>
-                <Input
-                  id="azure-openai-deployment"
-                  placeholder="your-deployment-name"
-                  value={azureOpenAIDeploymentDraft}
-                  onChange={(e) => setAzureOpenAIDeploymentDraft(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="azure-openai-api-version">API version</Label>
-                <Input
-                  id="azure-openai-api-version"
-                  placeholder="2024-02-15-preview"
-                  value={azureOpenAIApiVersionDraft}
-                  onChange={(e) => setAzureOpenAIApiVersionDraft(e.target.value)}
-                />
-              </div>
-            </>
-          )}
-
-          <div className="space-y-2 border-t pt-4">
-            <div className="text-sm font-semibold">Cloudinary uploads</div>
-            <p className="text-muted-foreground text-xs">
-              Optional. When empty, Rekdin stores uploads locally under its data directory.
-            </p>
+                <div className="space-y-2">
+                  <Label htmlFor="azure-openai-api-version">API version</Label>
+                  <Input
+                    id="azure-openai-api-version"
+                    placeholder="2024-02-15-preview"
+                    value={azureOpenAIApiVersionDraft}
+                    onChange={(e) => setAzureOpenAIApiVersionDraft(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
           </div>
+        ) : (
+          <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">
+            <div className="space-y-1">
+              <div className="text-sm font-semibold">Cloudinary uploads</div>
+              <p className="text-muted-foreground text-xs">
+                Optional. When empty, Rekdin stores uploads locally under its data directory.
+              </p>
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="cloudinary-cloud-name">CLOUDINARY_CLOUD_NAME</Label>
-            <Input
-              id="cloudinary-cloud-name"
-              placeholder="your-cloud-name"
-              value={cloudNameDraft}
-              onChange={(e) => setCloudNameDraft(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="cloudinary-api-key">CLOUDINARY_API_KEY</Label>
-            <div className="flex gap-2">
+            <div className="space-y-2">
+              <Label htmlFor="cloudinary-cloud-name">CLOUDINARY_CLOUD_NAME</Label>
               <Input
-                id="cloudinary-api-key"
-                type={showCloudinaryKey ? "text" : "password"}
-                placeholder="cloudinary-api-key"
-                value={cloudKeyDraft}
-                onChange={(e) => setCloudKeyDraft(e.target.value)}
+                id="cloudinary-cloud-name"
+                placeholder="your-cloud-name"
+                value={cloudNameDraft}
+                onChange={(e) => setCloudNameDraft(e.target.value)}
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => setShowCloudinaryKey((v) => !v)}
-                aria-label={
-                  showCloudinaryKey ? "Hide Cloudinary API key" : "Show Cloudinary API key"
-                }
-              >
-                {showCloudinaryKey ? <EyeSlash className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </Button>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="cloudinary-api-key">CLOUDINARY_API_KEY</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="cloudinary-api-key"
+                  type={showCloudinaryKey ? "text" : "password"}
+                  placeholder="cloudinary-api-key"
+                  value={cloudKeyDraft}
+                  onChange={(e) => setCloudKeyDraft(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowCloudinaryKey((v) => !v)}
+                  aria-label={
+                    showCloudinaryKey ? "Hide Cloudinary API key" : "Show Cloudinary API key"
+                  }
+                >
+                  {showCloudinaryKey ? (
+                    <EyeSlash className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="cloudinary-api-secret">CLOUDINARY_API_SECRET</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="cloudinary-api-secret"
+                  type={showCloudinarySecret ? "text" : "password"}
+                  placeholder="cloudinary-api-secret"
+                  value={cloudSecretDraft}
+                  onChange={(e) => setCloudSecretDraft(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowCloudinarySecret((v) => !v)}
+                  aria-label={
+                    showCloudinarySecret
+                      ? "Hide Cloudinary API secret"
+                      : "Show Cloudinary API secret"
+                  }
+                >
+                  {showCloudinarySecret ? (
+                    <EyeSlash className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="cloudinary-api-secret">CLOUDINARY_API_SECRET</Label>
-            <div className="flex gap-2">
-              <Input
-                id="cloudinary-api-secret"
-                type={showCloudinarySecret ? "text" : "password"}
-                placeholder="cloudinary-api-secret"
-                value={cloudSecretDraft}
-                onChange={(e) => setCloudSecretDraft(e.target.value)}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => setShowCloudinarySecret((v) => !v)}
-                aria-label={
-                  showCloudinarySecret ? "Hide Cloudinary API secret" : "Show Cloudinary API secret"
-                }
-              >
-                {showCloudinarySecret ? (
-                  <EyeSlash className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
+        )}
       </DialogShell>
     </Dialog>
   )

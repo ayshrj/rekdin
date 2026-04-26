@@ -97,15 +97,23 @@ function ConnectionBadge({ connected, label }: { connected: boolean; label: stri
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
         connected
           ? "border-green-500/20 bg-green-500/8 text-green-700 dark:text-green-400"
           : "border-destructive/20 bg-destructive/8 text-destructive"
       )}
     >
-      <span
-        className={cn("h-1.5 w-1.5 rounded-full", connected ? "bg-green-500" : "bg-destructive")}
-      />
+      <span className="relative flex h-1.5 w-1.5 shrink-0">
+        {connected && (
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-50" />
+        )}
+        <span
+          className={cn(
+            "relative inline-flex h-1.5 w-1.5 rounded-full",
+            connected ? "bg-green-500" : "bg-destructive"
+          )}
+        />
+      </span>
       {connected ? label : "Disconnected"}
     </span>
   )
@@ -150,7 +158,7 @@ function MobileNavButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-2 text-[11px] font-medium transition-colors",
+        "relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-2 text-xs font-medium transition-colors",
         active ? "text-primary" : "text-muted-foreground"
       )}
     >
@@ -217,7 +225,12 @@ function HomePageContent() {
             <span className="text-sm font-semibold tracking-tight">REKDIN</span>
           </div>
           <span className="text-muted-foreground hidden text-xs sm:block">·</span>
-          <span className="text-muted-foreground hidden text-sm sm:block">{sessionTitle}</span>
+          <span
+            className="text-muted-foreground hidden max-w-48 truncate text-sm sm:block"
+            title={sessionTitle}
+          >
+            {sessionTitle}
+          </span>
           {isThinking && (
             <span className="hidden sm:inline-flex">
               <ThinkingBadge />

@@ -20,6 +20,22 @@ import { useChat } from "@/contexts/chat-context"
 import { Loader, Plus, Search, Trash } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
+function SessionSkeleton() {
+  return (
+    <div className="space-y-0.5 px-2 py-1">
+      {[75, 55, 68, 48].map((w, i) => (
+        <div key={i} className="rounded-md px-3 py-2.5">
+          <div
+            className="bg-sidebar-accent/50 mb-1.5 h-3 animate-pulse rounded"
+            style={{ width: `${w}%` }}
+          />
+          <div className="bg-sidebar-accent/30 h-2 w-14 animate-pulse rounded" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function SessionSidebar({
   className,
   onSessionOpen,
@@ -70,66 +86,94 @@ export function SessionSidebar({
 
       {/* Sessions list */}
       <ScrollArea className="no-scroll-min-width min-h-0 flex-1 overflow-auto">
-        <div className="space-y-0.5 px-2 py-1">
-          {!hydrated ? (
-            <div className="text-sidebar-foreground/40 px-2 py-6 text-center text-xs">
-              Loading sessions…
+        {!hydrated ? (
+          <SessionSkeleton />
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+            <div className="bg-sidebar-accent/60 rounded-xl p-3">
+              <Plus className="text-sidebar-foreground/35 h-5 w-5" />
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="text-sidebar-foreground/40 px-2 py-6 text-center text-xs">
-              No sessions yet.
-            </div>
-          ) : (
-            filtered.map((session) => (
-              <div key={session.id} className="relative">
-                {session.id === currentSessionId && (
-                  <span className="bg-sidebar-primary absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-full" />
-                )}
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={async () => {
-                    await joinSession(session.id)
-                    onSessionOpen?.()
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault()
-                      void (async () => {
-                        await joinSession(session.id)
-                        onSessionOpen?.()
-                      })()
-                    }
-                  }}
-                  className={cn(
-                    "group flex w-full cursor-pointer items-center justify-between rounded-md py-2.5 pr-1.5 pl-3 text-left transition-colors",
-                    session.id === currentSessionId
-                      ? "bg-sidebar-primary/15 text-sidebar-foreground"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            <p className="text-sidebar-foreground/60 text-xs font-medium">
+              {query ? "No sessions match" : "No sessions yet"}
+            </p>
+            <p className="text-sidebar-foreground/35 text-[11px] leading-relaxed">
+              {query ? "Try a different search term" : "Create one using the button below"}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-0.5 px-2 py-1">
+            {filtered.map((session) => {
+              const firstUserMsg = session.messages?.find((m) => m.role === "user")?.content ?? ""
+              const preview =
+                typeof firstUserMsg === "string" ? firstUserMsg.replace(/\s+/g, " ").trim() : ""
+              const msgCount = session.messages?.length ?? 0
+
+              return (
+                <div key={session.id} className="relative">
+                  {session.id === currentSessionId && (
+                    <span className="bg-sidebar-primary absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-full" />
                   )}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm leading-snug font-medium">{session.title}</p>
-                    <p className="text-sidebar-foreground/45 mt-0.5 text-xs">
-                      {formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true })}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-sidebar-foreground/30 hover:text-destructive h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      setSessionToDelete(session.id)
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={async () => {
+                      await joinSession(session.id)
+                      onSessionOpen?.()
                     }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        void (async () => {
+                          await joinSession(session.id)
+                          onSessionOpen?.()
+                        })()
+                      }
+                    }}
+                    className={cn(
+                      "group flex w-full cursor-pointer items-center justify-between rounded-md py-2.5 pr-1.5 pl-3 text-left transition-colors",
+                      session.id === currentSessionId
+                        ? "bg-sidebar-primary/15 text-sidebar-foreground"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    )}
                   >
-                    <Trash className="h-3.5 w-3.5" />
-                  </Button>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm leading-snug font-medium">{session.title}</p>
+                      {preview ? (
+                        <p className="text-sidebar-foreground/40 mt-0.5 truncate text-[11px] leading-tight">
+                          {preview}
+                        </p>
+                      ) : null}
+                      <div className="text-sidebar-foreground/35 mt-1 flex items-center gap-1.5 text-[10px]">
+                        <span>
+                          {formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true })}
+                        </span>
+                        {msgCount > 0 && (
+                          <>
+                            <span>·</span>
+                            <span>
+                              {msgCount} msg{msgCount === 1 ? "" : "s"}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-sidebar-foreground/30 hover:text-destructive h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setSessionToDelete(session.id)
+                      }}
+                    >
+                      <Trash className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </ScrollArea>
 
       {/* Bottom: New session button */}

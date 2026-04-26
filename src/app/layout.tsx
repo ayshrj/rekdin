@@ -125,7 +125,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <ChatProvider>
             {children}
-            <Toaster />
+            <Toaster position="bottom-right" />
           </ChatProvider>
         </ThemeProvider>
       </body>

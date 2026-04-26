@@ -1,5 +1,0 @@
-{
-  "permissions": {
-    "allow": ["Bash(npm list:*)", "Bash(node scripts/screenshot-ui.js)"]
-  }
-}
