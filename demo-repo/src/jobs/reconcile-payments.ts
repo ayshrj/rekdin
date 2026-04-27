@@ -13,19 +13,23 @@ export async function reconcilePayments(limit = 250) {
   `)
 
   let processed = 0
+  let failed = 0
+  const errors: string[] = []
 
   for (const row of pending.rows) {
-    // TODO: wrap each update in a try/catch so one failed payment doesn't abort the whole batch
-    await query(`
-      update orders
-      set status = 'paid'
-      where id = '${row.id}'
-    `)
-    processed += 1
+    try {
+      await query(`update orders set status = 'paid' where id = $1`, [row.id])
+      processed += 1
+    } catch (err) {
+      failed += 1
+      errors.push(`order ${row.id}: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   return {
     processed,
+    failed,
     scanned: pending.rows.length,
+    errors: errors.length > 0 ? errors : undefined,
   }
 }

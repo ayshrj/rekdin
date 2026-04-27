@@ -17,11 +17,21 @@ ordersRouter.post("/", async (req, res) => {
     notes?: string
   }
 
-  console.log("creating order", payload)
+  if (!payload.customerEmail || !payload.customerEmail.includes("@")) {
+    return res.status(400).json({ error: "customerEmail is required and must be a valid email" })
+  }
+
+  if (
+    typeof payload.totalCents !== "number" ||
+    payload.totalCents <= 0 ||
+    !Number.isInteger(payload.totalCents)
+  ) {
+    return res.status(400).json({ error: "totalCents must be a positive integer" })
+  }
 
   const result = await createOrder({
-    customerEmail: payload.customerEmail ?? "",
-    totalCents: Number(payload.totalCents ?? 0),
+    customerEmail: payload.customerEmail,
+    totalCents: payload.totalCents,
     notes: payload.notes,
   })
 

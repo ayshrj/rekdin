@@ -4,24 +4,29 @@ import { config } from "./config"
 
 const pool = new Pool({
   connectionString: config.databaseUrl,
-  max: 5,
+  max: config.dbPoolMax,
+  idleTimeoutMillis: config.dbIdleTimeoutMs,
 })
 
-export async function query<T = Record<string, unknown>>(sql: string) {
-  return pool.query<T>(sql)
+export async function query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+  return pool.query<T>(sql, params)
 }
 
 export async function searchOrders(search: string) {
-  // FIXME: string interpolation here is a SQL injection risk — switch to parameterized query
-  const sql = `
-    select id, customer_email, total_cents, status, created_at
-    from orders
-    where customer_email ilike '%${search}%'
-    order by created_at desc
-    limit 50
-  `
-
-  return query(sql)
+  return query<{
+    id: string
+    customer_email: string
+    total_cents: number
+    status: string
+    created_at: string
+  }>(
+    `select id, customer_email, total_cents, status, created_at
+     from orders
+     where customer_email ilike $1
+     order by created_at desc
+     limit 50`,
+    [`%${search}%`]
+  )
 }
 
 export async function createOrder(input: {
@@ -29,7 +34,7 @@ export async function createOrder(input: {
   totalCents: number
   notes?: string
 }) {
-  // FIXME: same injection risk as searchOrders — all three columns need parameterization
+  // FIXME: switch to parameterized query — totalCents and notes still use string interpolation
   // TODO: validate that totalCents is a positive integer before hitting the DB
   const sql = `
     insert into orders (customer_email, total_cents, notes, status)

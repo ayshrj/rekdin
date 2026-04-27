@@ -22,22 +22,24 @@ export function Markdown({ children, className }: { children: string; className?
               {...props}
             />
           ),
-          img: ({ className: imgClassName, alt, src, width, height, ...props }) =>
-            typeof src === "string" && src.length > 0 ? (
+          img: ({ className: imgClassName, alt, src, width, height, ...props }) => {
+            const safeSrc = typeof src === "string" ? src.replace(/^sandbox:/, "") : src
+            return typeof safeSrc === "string" && safeSrc.length > 0 ? (
               <Image
                 className={cn(
                   "border-border my-3 h-auto max-w-full rounded-lg border shadow-sm",
                   imgClassName
                 )}
                 alt={alt ?? ""}
-                src={src}
+                src={safeSrc}
                 width={typeof width === "number" ? width : undefined}
                 height={typeof height === "number" ? height : undefined}
                 unoptimized
                 loading="lazy"
                 {...props}
               />
-            ) : null,
+            ) : null
+          },
           ul: ({ className: ulClassName, ...props }) => (
             <ul className={cn("my-2 list-disc pl-5", ulClassName)} {...props} />
           ),

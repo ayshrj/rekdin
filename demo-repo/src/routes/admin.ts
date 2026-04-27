@@ -1,15 +1,30 @@
 import { Router } from "express"
 
 import { isAdminRequest } from "../auth"
+import { config } from "../config"
 import { reconcilePayments } from "../jobs/reconcile-payments"
 
 export const adminRouter = Router()
 
+const loginAttempts = new Map<string, { count: number; resetAt: number }>()
+
 adminRouter.use((req, res, next) => {
+  const ip = req.ip ?? "unknown"
+  const now = Date.now()
+  const record = loginAttempts.get(ip)
+
+  if (record && now < record.resetAt && record.count >= config.rateLimitMaxAttempts) {
+    return res.status(429).json({ error: "Too many requests — try again later" })
+  }
+
   if (!isAdminRequest(req)) {
+    const entry = loginAttempts.get(ip) ?? { count: 0, resetAt: now + config.rateLimitWindowMs }
+    entry.count += 1
+    loginAttempts.set(ip, entry)
     return res.status(401).json({ error: "Unauthorized" })
   }
 
+  loginAttempts.delete(ip)
   next()
 })
 
@@ -19,7 +34,6 @@ adminRouter.post("/reconcile-payments", async (req, res) => {
   res.json(result)
 })
 
-// TODO: add rate limiting to all admin endpoints — currently nothing prevents brute-forcing the token
 adminRouter.get("/stats", async (_req, res) => {
   // TODO: pull queueDepth and unhealthyVendors from live data instead of hardcoding
   res.json({

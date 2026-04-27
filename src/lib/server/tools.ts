@@ -142,7 +142,7 @@ async function screenshotArtifact(
   })
 }
 
-async function screenshotDataUrl(page: Page, fullPage = true) {
+async function screenshotDataUrl(page: Page, fullPage = false) {
   const artifact = await screenshotArtifact(page, fullPage)
   return artifact.url
 }
@@ -1019,7 +1019,7 @@ export const browserGetMarkdownTool = tool(
 )
 
 export const browserScreenshotTool = tool(
-  async ({ url, fullPage }) => {
+  async ({ url }) => {
     return await withPage(async (page) => {
       const started = Date.now()
       const steps: Array<Record<string, unknown>> = []
@@ -1030,12 +1030,12 @@ export const browserScreenshotTool = tool(
         detail: "Network idle, capturing screenshot",
         at: new Date().toISOString(),
       })
-      const screenshot = await page.screenshot({ fullPage: fullPage ?? true, encoding: "base64" })
+      const screenshot = await screenshotDataUrl(page, false)
       const title = await page.title()
       return {
         url: page.url(),
         title,
-        screenshot: `data:image/png;base64,${screenshot}`,
+        screenshot,
         type: "browser_screenshot",
         duration: Date.now() - started,
         steps,
@@ -1044,8 +1044,8 @@ export const browserScreenshotTool = tool(
   },
   {
     name: "browser_screenshot",
-    description: "Capture a screenshot of a page.",
-    schema: z.object({ url: z.string().url(), fullPage: z.boolean().optional() }),
+    description: "Capture a viewport screenshot of a page.",
+    schema: z.object({ url: z.string().url() }),
   }
 )
 
