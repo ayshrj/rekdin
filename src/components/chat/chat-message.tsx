@@ -7,12 +7,17 @@ import { toolLabels } from "@/components/tools/tool-labels"
 import { Badge } from "@/components/ui/badge"
 import { Check, ClipboardDocumentList as Copy, RekdinIcon, User } from "@/lib/icons"
 import { cn } from "@/lib/utils"
-import { parseStructuredWorkflowContent } from "@/lib/workflows"
+import { getWorkflowPreset, parseStructuredWorkflowContent } from "@/lib/workflows"
 import { ChatMessage as ChatMessageType } from "@/types/chat"
 
 interface ChatMessageProps {
   message: ChatMessageType
   showHeader?: boolean
+}
+
+function looksLikeJsonDraft(content: string) {
+  const trimmed = content.trimStart()
+  return trimmed.startsWith("{") || trimmed.startsWith("[")
 }
 
 /**
@@ -23,6 +28,9 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
   const isUser = message.role === "user"
   const [copied, setCopied] = useState(false)
   const workflowId = message.metadata?.workflowId
+  const workflow = getWorkflowPreset(workflowId)
+  const isStructuredDraft =
+    !isUser && Boolean(message.metadata?.thinking) && Boolean(workflowId) && Boolean(workflow)
   const structuredContent =
     !isUser && workflowId ? parseStructuredWorkflowContent(message.content || "") : null
 
@@ -216,6 +224,25 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
     return null
   }
 
+  const renderStructuredDraft = () => {
+    if (!isStructuredDraft || !looksLikeJsonDraft(message.content || "")) return null
+
+    return (
+      <div className="bg-muted/30 rounded-xl border px-3 py-3 text-sm">
+        <div className="flex items-start gap-2.5">
+          <span className="bg-primary mt-1.5 h-2 w-2 shrink-0 animate-pulse rounded-full" />
+          <div className="min-w-0">
+            <p className="font-medium">Building structured result</p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              {workflow?.title ?? "Workflow"} is generating validated JSON. The formatted result
+              will appear here when the stream completes.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className={cn("group relative flex w-full flex-col gap-1.5", isUser && "items-end")}>
       {!isUser && (
@@ -266,7 +293,8 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
           {isUser ? (
             <p className="text-left text-sm wrap-anywhere whitespace-pre-wrap">{message.content}</p>
           ) : (
-            (renderStructured() ?? (
+            (renderStructuredDraft() ??
+            renderStructured() ?? (
               <Markdown className="max-w-none text-sm wrap-anywhere">
                 {message.content || "_(no response)_"}
               </Markdown>

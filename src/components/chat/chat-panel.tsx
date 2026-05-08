@@ -202,6 +202,11 @@ export function ChatPanel() {
       setLatestChunk("")
     }
     const content = draft.content ?? ""
+    if (draft.metadata?.workflowId && content.trimStart().startsWith("{")) {
+      setLatestChunk("Building structured workflow result...")
+      lastDraftLenRef.current = content.length
+      return
+    }
     const prevLen = lastDraftLenRef.current
     const nextLen = content.length
     if (nextLen > prevLen) {

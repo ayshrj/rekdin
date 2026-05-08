@@ -1053,7 +1053,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                 const existing = prev.find((msg) => msg.id === event.messageId)
                 if (existing) {
                   return prev.map((msg) =>
-                    msg.id === event.messageId ? { ...msg, content: event.content } : msg
+                    msg.id === event.messageId
+                      ? {
+                          ...msg,
+                          content: event.content,
+                          metadata: {
+                            ...(msg.metadata ?? {}),
+                            thinking: true,
+                            agentType: metadata?.agentType,
+                            workflowId: metadata?.workflowId,
+                          },
+                        }
+                      : msg
                   )
                 }
                 const draft: ChatMessage = {
@@ -1062,7 +1073,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                   role: "assistant",
                   content: event.content,
                   timestamp: new Date().toISOString(),
-                  metadata: { thinking: true },
+                  metadata: {
+                    thinking: true,
+                    agentType: metadata?.agentType,
+                    workflowId: metadata?.workflowId,
+                  },
                 }
                 return [...prev, draft]
               })
@@ -1077,7 +1092,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                   role: "assistant",
                   content: event.content,
                   timestamp: new Date().toISOString(),
-                  metadata: { thinking: true },
+                  metadata: {
+                    thinking: true,
+                    agentType: metadata?.agentType,
+                    workflowId: metadata?.workflowId,
+                  },
                 })
               })().catch((err) => logger.warn("Failed to persist assistant draft message", err))
               break
