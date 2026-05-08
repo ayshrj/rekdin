@@ -28,7 +28,7 @@ import {
 } from "@/lib/llm-providers"
 import { logger } from "@/lib/logger"
 import { ChatMessage, ChatSession, ToolResultEntry } from "@/types/chat"
-import { LlmProvider, ServerEventV2, ServerSettings, ToolPolicyProfile } from "@/types/runtime"
+import { LlmProvider, ServerEventV2, ServerSettings } from "@/types/runtime"
 
 type ChatContextValue = {
   sessions: ChatSession[]
@@ -71,7 +71,6 @@ type ChatContextValue = {
     attachments?: File[],
     metadata?: {
       agentType?: string
-      toolPolicy?: ToolPolicyProfile
       responseSchema?: Record<string, unknown> | null
       workflowId?: string
     }
@@ -876,7 +875,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       files: File[] = [],
       metadata?: {
         agentType?: string
-        toolPolicy?: ToolPolicyProfile
         responseSchema?: Record<string, unknown> | null
         workflowId?: string
       }
@@ -954,10 +952,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         attachments: uploadedPaths,
         timestamp: new Date().toISOString(),
         metadata:
-          metadata?.workflowId || metadata?.agentType || metadata?.toolPolicy
+          metadata?.workflowId || metadata?.agentType
             ? {
                 agentType: metadata.agentType,
-                toolPolicy: metadata.toolPolicy,
                 workflowId: metadata.workflowId,
               }
             : undefined,
@@ -1021,7 +1018,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             attachments: uploadedPaths,
             agentType: metadata?.agentType,
             agentMode: metadata?.agentType,
-            toolPolicy: metadata?.toolPolicy,
             workflowId: metadata?.workflowId,
             responseSchema: metadata?.responseSchema ?? null,
             history,

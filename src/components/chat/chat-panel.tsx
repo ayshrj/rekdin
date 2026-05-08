@@ -4,13 +4,6 @@ import * as React from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { useChat } from "@/contexts/chat-context"
 import {
   ArrowPath,
@@ -26,43 +19,13 @@ import {
 import { parseLLMError } from "@/lib/llm-errors"
 import { getProviderMissingConfigMessage, hasProviderCredentials } from "@/lib/llm-providers"
 import { WORKFLOW_PRESETS } from "@/lib/workflows"
-import type { ToolPolicyProfile } from "@/types/runtime"
 
 import { ChatInput, ChatInputHandle } from "./chat-input"
 import { ChatMessage } from "./chat-message"
 
-const TOOL_POLICY_OPTIONS: Array<{
-  value: ToolPolicyProfile
-  label: string
-  description: string
-}> = [
-  {
-    value: "read_only",
-    label: "Read only",
-    description: "Inspect without writes, commands, exports, or browser mutations.",
-  },
-  {
-    value: "balanced",
-    label: "Balanced",
-    description: "Inspect first, then allow targeted write or browser actions.",
-  },
-  {
-    value: "full_auto",
-    label: "Full auto",
-    description: "Allow the broadest toolset supported by the selected mode.",
-  },
-]
-
 /**
- * Narrows persisted message metadata back to a valid tool policy before retrying a failed request.
- */
-function isToolPolicyProfile(value: unknown): value is ToolPolicyProfile {
-  return value === "read_only" || value === "balanced" || value === "full_auto"
-}
-
-/**
- * Renders the primary chat surface, workflow launcher, background queue actions, and tool policy
- * selector that feeds `ChatContext.sendMessage`.
+ * Renders the primary chat surface, workflow launcher, and background queue actions that feed
+ * `ChatContext.sendMessage`.
  */
 export function ChatPanel() {
   const {
@@ -100,7 +63,6 @@ export function ChatPanel() {
   const [hydrated, setHydrated] = React.useState(false)
   const [presetsCanScrollRight, setPresetsCanScrollRight] = React.useState(false)
   const [inputValue, setInputValue] = React.useState("")
-  const [toolPolicy, setToolPolicy] = React.useState<ToolPolicyProfile>("balanced")
   const [selectedWorkflowId, setSelectedWorkflowId] = React.useState<string | null>(null)
   const chatInputRef = React.useRef<ChatInputHandle | null>(null)
 
@@ -290,7 +252,6 @@ export function ChatPanel() {
           sessionId: currentSessionId,
           message: prompt ?? workflow.prompt,
           agentMode: workflow.mode,
-          toolPolicy: workflow.toolPolicy ?? toolPolicy,
           workflowId: workflow.id,
           responseSchema: workflow.responseSchema ?? null,
         }),
@@ -301,7 +262,7 @@ export function ChatPanel() {
       }
       toast.success(`${workflow.title} queued in the background.`)
     },
-    [currentSessionId, toolPolicy]
+    [currentSessionId]
   )
 
   const handleInputChange = React.useCallback((nextValue: string) => {
@@ -318,13 +279,12 @@ export function ChatPanel() {
         : null
       await sendMessage(content, attachments, {
         agentType: workflow?.mode,
-        toolPolicy: workflow?.toolPolicy ?? toolPolicy,
         workflowId: workflow?.id,
         responseSchema: workflow?.responseSchema ?? null,
       })
       setSelectedWorkflowId(null)
     },
-    [selectedWorkflowId, sendMessage, toolPolicy]
+    [selectedWorkflowId, sendMessage]
   )
 
   if (!hydrated) {
@@ -535,9 +495,6 @@ export function ChatPanel() {
               onClick={() =>
                 void sendMessage(lastUserMsg.content, [], {
                   agentType: lastUserMsg.metadata?.agentType,
-                  toolPolicy: isToolPolicyProfile(lastUserMsg.metadata?.toolPolicy)
-                    ? lastUserMsg.metadata.toolPolicy
-                    : toolPolicy,
                   responseSchema: null,
                   workflowId: lastUserMsg.metadata?.workflowId,
                 })
@@ -558,32 +515,6 @@ export function ChatPanel() {
         className="px-3 pt-1 pb-3"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
       >
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">
-              Tool policy
-            </p>
-            <p className="text-muted-foreground truncate text-[11px]">
-              {TOOL_POLICY_OPTIONS.find((option) => option.value === toolPolicy)?.description}
-            </p>
-          </div>
-          <Select
-            value={toolPolicy}
-            onValueChange={(value) => setToolPolicy(value as ToolPolicyProfile)}
-            disabled={isLoading || isThinking}
-          >
-            <SelectTrigger size="sm" className="bg-background h-8 w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent side="top" align="end">
-              {TOOL_POLICY_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
         {selectedWorkflowId ? (
           <div className="bg-muted/40 text-muted-foreground mb-2 rounded-lg border px-2.5 py-1.5 text-[11px]">
             Workflow preset selected:{" "}
