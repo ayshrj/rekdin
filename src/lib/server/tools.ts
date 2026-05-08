@@ -33,6 +33,10 @@ let recaptchaInitialized = false
 let adblockerPromise: Promise<PuppeteerBlocker | null> | null = null
 let latexJsStylesPromise: Promise<string> | null = null
 
+/**
+ * Registers Puppeteer stealth behavior once for the shared browser instance.
+ * Browser tools keep running without stealth if the plugin cannot initialize.
+ */
 function ensureStealthPlugin() {
   if (stealthInitialized) return
   stealthInitialized = true
@@ -46,6 +50,9 @@ function ensureStealthPlugin() {
   }
 }
 
+/**
+ * Lazily loads the Ghostery blocker used by browser tools to reduce ads and trackers.
+ */
 function getAdblocker() {
   if (!adblockerPromise) {
     adblockerPromise = PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch).catch((err) => {
@@ -56,6 +63,9 @@ function getAdblocker() {
   return adblockerPromise
 }
 
+/**
+ * Registers the reCAPTCHA helper once. Without a solver token it only detects challenges.
+ */
 function ensureRecaptchaPlugin() {
   if (recaptchaInitialized) return
   recaptchaInitialized = true
@@ -76,6 +86,9 @@ function ensureRecaptchaPlugin() {
   }
 }
 
+/**
+ * Returns the singleton headless Puppeteer browser used by all browser tools.
+ */
 async function getBrowser() {
   if (!browserPromise) {
     ensureStealthPlugin()
@@ -88,6 +101,10 @@ async function getBrowser() {
   return browserPromise
 }
 
+/**
+ * Runs a browser action against the session-scoped page when a chat session exists.
+ * Falls back to a temporary page for tool calls outside an agent execution context.
+ */
 async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
   const browser = await getBrowser()
   const sessionId = getToolExecutionContext()?.sessionId
@@ -117,6 +134,9 @@ async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
   })
 }
 
+/**
+ * Navigates only when the current session page is not already at the requested URL.
+ */
 async function goto(
   page: Page,
   url: string,
@@ -129,6 +149,9 @@ async function goto(
   return { status: response?.status() ?? null, url: page.url() }
 }
 
+/**
+ * Stores a browser screenshot as a Rekdin artifact and returns its artifact metadata.
+ */
 async function screenshotArtifact(
   page: Page,
   fullPage = true,
@@ -142,11 +165,17 @@ async function screenshotArtifact(
   })
 }
 
+/**
+ * Captures a browser screenshot and returns the artifact URL used by tool renderers.
+ */
 async function screenshotDataUrl(page: Page, fullPage = false) {
   const artifact = await screenshotArtifact(page, fullPage)
   return artifact.url
 }
 
+/**
+ * Resolves a CSS selector to the center point used by pointer-based browser actions.
+ */
 async function centerOfSelector(page: Page, selector: string) {
   const handle = await page.$(selector)
   if (!handle) return null
@@ -155,11 +184,17 @@ async function centerOfSelector(page: Page, selector: string) {
   return { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) }
 }
 
+/**
+ * Limits large text values before sending them back to the model or UI.
+ */
 function truncateString(value: string, max = 4000) {
   if (value.length <= max) return value
   return `${value.slice(0, max)}\n\n...(truncated, ${value.length} chars total)`
 }
 
+/**
+ * Runs a shell command inside the configured Rekdin workspace boundary.
+ */
 async function runCommand(command: string, cwd?: string, timeoutMs = 30000) {
   await ensureWorkspaceDirs()
   const workingDir = cwd ? resolveWorkspacePath(cwd) : getWorkspaceRoot()
@@ -192,6 +227,10 @@ async function runCommand(command: string, cwd?: string, timeoutMs = 30000) {
   )
 }
 
+/**
+ * Runs a shell command without forcing Rekdin workspace path resolution.
+ * This is used for host-level discovery such as git and local executable checks.
+ */
 async function runCommandUnsafe(command: string, cwd?: string, timeoutMs = 30000) {
   return await new Promise<{ stdout: string; stderr: string; exitCode: number; duration: number }>(
     (resolve) => {
@@ -224,12 +263,18 @@ async function runCommandUnsafe(command: string, cwd?: string, timeoutMs = 30000
 
 const LATEX_ENGINES = ["tectonic", "pdflatex", "xelatex", "lualatex"]
 
+/**
+ * Produces a filesystem-safe PDF base filename.
+ */
 function sanitizePdfBaseName(name?: string) {
   const base = path.basename(name ?? "document").replace(/\.pdf$/i, "")
   const safe = base.replace(/[^a-zA-Z0-9._-]/g, "_")
   return safe.length > 0 ? safe : "document"
 }
 
+/**
+ * Checks whether a generated or referenced file exists.
+ */
 async function fileExists(filePath: string) {
   try {
     await stat(filePath)
@@ -239,6 +284,9 @@ async function fileExists(filePath: string) {
   }
 }
 
+/**
+ * Finds the first locally available LaTeX engine for native PDF compilation.
+ */
 async function findLatexEngine() {
   for (const engine of LATEX_ENGINES) {
     const res = await runCommandUnsafe(`${engine} --version`, undefined, 5000)
@@ -249,6 +297,9 @@ async function findLatexEngine() {
 
 type CloudinaryConfig = { cloudName: string; apiKey: string; apiSecret: string }
 
+/**
+ * Reads Cloudinary credentials from tool headers first, then server environment.
+ */
 function parseCloudinaryConfig(headers?: HeadersInit): CloudinaryConfig | null {
   const get = (key: string) => {
     if (!headers) return ""
@@ -273,12 +324,18 @@ function parseCloudinaryConfig(headers?: HeadersInit): CloudinaryConfig | null {
   return { cloudName: cloudName.trim(), apiKey: apiKey.trim(), apiSecret: apiSecret.trim() }
 }
 
+/**
+ * Reads a UTF-8 file after resolving it against the Rekdin workspace root.
+ */
 async function readWorkspaceText(filePath: string) {
   await ensureWorkspaceDirs()
   const resolved = resolveWorkspacePath(filePath)
   return await readFile(resolved, "utf-8")
 }
 
+/**
+ * Writes UTF-8 content after resolving the path against the Rekdin workspace root.
+ */
 async function writeWorkspaceText(filePath: string, content: string) {
   await ensureWorkspaceDirs()
   const resolved = resolveWorkspacePath(filePath)
@@ -286,11 +343,17 @@ async function writeWorkspaceText(filePath: string, content: string) {
   return resolved
 }
 
+/**
+ * Parses a JSON Pointer path into unescaped path segments for JSON/YAML patching.
+ */
 function parseJsonPointer(pointer: string) {
   const parts = pointer.split("/").slice(1)
   return parts.map((p) => p.replace(/~1/g, "/").replace(/~0/g, "~"))
 }
 
+/**
+ * Applies one add, replace, or remove operation to an in-memory JSON-compatible value.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyOperation(target: any, op: { op: string; path: string; value?: any }) {
   const tokens = parseJsonPointer(op.path)
@@ -337,6 +400,9 @@ function applyOperation(target: any, op: { op: string; path: string; value?: any
   throw new Error(`Unsupported op: ${op.op}`)
 }
 
+/**
+ * Applies the subset of JSON Patch operations supported by Rekdin's patch tools.
+ */
 function applyJsonPatch(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   document: any,
@@ -350,6 +416,9 @@ function applyJsonPatch(
   return target
 }
 
+/**
+ * Loads the optional YAML dependency only when a YAML patch tool call needs it.
+ */
 async function loadYamlModule() {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -366,6 +435,9 @@ async function loadYamlModule() {
   }
 }
 
+/**
+ * Converts a URL or data URL into bytes for image/document helper tools.
+ */
 async function fetchBuffer(source: string): Promise<Buffer> {
   if (/^data:/i.test(source)) {
     const base64 = source.split(",")[1] ?? ""
@@ -377,6 +449,9 @@ async function fetchBuffer(source: string): Promise<Buffer> {
   return Buffer.from(arrayBuffer)
 }
 
+/**
+ * Decodes inline data as data URL, base64, or plain UTF-8 bytes.
+ */
 function decodeDataInput(data: string): Buffer {
   if (/^data:/i.test(data)) {
     const base64 = data.split(",")[1] ?? ""
@@ -392,6 +467,9 @@ function decodeDataInput(data: string): Buffer {
   return Buffer.from(data)
 }
 
+/**
+ * Loads the optional sharp dependency only for image metadata/conversion tools.
+ */
 async function loadSharp() {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -408,6 +486,9 @@ async function loadSharp() {
   }
 }
 
+/**
+ * Escapes text before inserting it into generated export HTML.
+ */
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -417,6 +498,9 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;")
 }
 
+/**
+ * Wraps rendered markup in printable HTML used by PDF generation tools.
+ */
 function buildPrintableHtmlDocument(
   title: string,
   bodyMarkup: string,
@@ -515,6 +599,9 @@ function buildPrintableHtmlDocument(
 </html>`
 }
 
+/**
+ * Renders a minimal inline Markdown subset for PDF/export HTML generation.
+ */
 function renderInlineMarkdown(markdown: string) {
   return escapeHtml(markdown)
     .replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]+)")?\)/g, (_, alt, src, title) => {
@@ -530,6 +617,9 @@ function renderInlineMarkdown(markdown: string) {
     .replace(/\*([^*]+)\*/g, "<em>$1</em>")
 }
 
+/**
+ * Renders a deterministic Markdown subset without depending on the React renderer.
+ */
 function renderMarkdownHtml(markdown: string) {
   const normalized = markdown.replace(/\r\n/g, "\n").trim()
   if (!normalized) {
@@ -602,6 +692,9 @@ function renderMarkdownHtml(markdown: string) {
   return htmlBlocks.filter(Boolean).join("\n")
 }
 
+/**
+ * Loads latex.js CSS and rewrites relative assets to file URLs for PDF rendering.
+ */
 async function getLatexJsStyles() {
   if (!latexJsStylesPromise) {
     latexJsStylesPromise = (async () => {
@@ -629,6 +722,9 @@ async function getLatexJsStyles() {
   return latexJsStylesPromise
 }
 
+/**
+ * Renders LaTeX content to standalone HTML through latex.js.
+ */
 async function renderLatexJsHtml(texContent: string) {
   const previousWindow = global.window
   const previousDocument = global.document
@@ -658,6 +754,9 @@ async function renderLatexJsHtml(texContent: string) {
   }
 }
 
+/**
+ * Builds a readable HTML fallback when latex.js cannot render the source cleanly.
+ */
 async function buildLatexFallbackHtml(
   safeBase: string,
   texContent: string,
@@ -687,6 +786,9 @@ async function buildLatexFallbackHtml(
   }
 }
 
+/**
+ * Writes generated PDF bytes into Rekdin's artifact store.
+ */
 async function persistPdfBuffer(
   pdfBuffer: Buffer,
   safeBase: string,
@@ -713,6 +815,9 @@ async function persistPdfBuffer(
   }
 }
 
+/**
+ * Prints HTML to PDF through the session browser and optionally uploads it to Cloudinary.
+ */
 async function renderHtmlToPdf(
   html: string,
   baseName: string,
@@ -749,6 +854,9 @@ async function renderHtmlToPdf(
   }
 }
 
+/**
+ * Uploads generated PDF bytes to Cloudinary when upload credentials are configured.
+ */
 async function uploadPdfToCloudinary(
   pdf: Buffer,
   publicId: string,
@@ -789,6 +897,9 @@ async function uploadPdfToCloudinary(
   return url
 }
 
+/**
+ * Compiles LaTeX with a native engine when available, otherwise falls back to browser PDF rendering.
+ */
 async function compileLatexToPdf(
   texContent: string,
   baseName: string,
@@ -899,12 +1010,18 @@ async function compileLatexToPdf(
   }
 }
 
+/**
+ * Fetches JSON from a public API with the Rekdin user agent.
+ */
 async function fetchJson<T = unknown>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { "User-Agent": "Rekdin/NextJS" } })
   if (!res.ok) throw new Error(`Failed request (${res.status})`)
   return (await res.json()) as T
 }
 
+/**
+ * Searches the public web for current information and source candidates.
+ */
 export const webSearchTool = tool(
   async ({ query, maxResults, domains, excludeDomains }) => {
     return await searchPublicWeb(query, {
@@ -925,6 +1042,9 @@ export const webSearchTool = tool(
   }
 )
 
+/**
+ * Fetches a web page and converts its readable article content into Markdown.
+ */
 export const visitUrlTool = tool(
   async ({ url }) => {
     const response = await fetch(url, { headers: { "User-Agent": "Rekdin/NextJS" } })
@@ -949,6 +1069,9 @@ export const visitUrlTool = tool(
   }
 )
 
+/**
+ * Navigates the session browser to a URL and returns load metadata for the timeline.
+ */
 export const browserNavigateTool = tool(
   async ({ url }) => {
     const steps: Array<Record<string, unknown>> = []
@@ -980,6 +1103,9 @@ export const browserNavigateTool = tool(
   }
 )
 
+/**
+ * Loads a page in the browser and extracts readable Markdown from the rendered DOM.
+ */
 export const browserGetMarkdownTool = tool(
   async ({ url, pageNumber }) => {
     return await withPage(async (page) => {
@@ -1018,6 +1144,9 @@ export const browserGetMarkdownTool = tool(
   }
 )
 
+/**
+ * Captures a viewport screenshot after a page reaches network idle.
+ */
 export const browserScreenshotTool = tool(
   async ({ url }) => {
     return await withPage(async (page) => {
@@ -1049,6 +1178,9 @@ export const browserScreenshotTool = tool(
   }
 )
 
+/**
+ * Clicks a page element by CSS selector or coordinates and returns a screenshot.
+ */
 export const browserClickTool = tool(
   async ({ url, selector, x, y, button, clickCount }) => {
     return await withPage(async (page) => {
@@ -1101,6 +1233,9 @@ export const browserClickTool = tool(
   }
 )
 
+/**
+ * Compatibility wrapper that performs a double click through the standard click tool.
+ */
 export const browserDoubleClickTool = tool(
   async (args) => {
     return await browserClickTool.invoke({ ...args, clickCount: 2 })
@@ -1117,6 +1252,9 @@ export const browserDoubleClickTool = tool(
   }
 )
 
+/**
+ * Compatibility wrapper that performs a right click through the standard click tool.
+ */
 export const browserRightClickTool = tool(
   async (args) => {
     return await browserClickTool.invoke({ ...args, button: "right", clickCount: 1 })
@@ -1133,6 +1271,9 @@ export const browserRightClickTool = tool(
   }
 )
 
+/**
+ * Moves the browser pointer over a selector or coordinate and captures the page state.
+ */
 export const browserHoverTool = tool(
   async ({ url, selector, x, y }) => {
     return await withPage(async (page) => {
@@ -1175,6 +1316,9 @@ export const browserHoverTool = tool(
   }
 )
 
+/**
+ * Scrolls the session browser by wheel deltas and captures the resulting page state.
+ */
 export const browserScrollTool = tool(
   async ({ url, deltaY, deltaX }) => {
     return await withPage(async (page) => {
@@ -1204,6 +1348,9 @@ export const browserScrollTool = tool(
   }
 )
 
+/**
+ * Types text into a browser input, optionally clearing the field first.
+ */
 export const browserTypeTool = tool(
   async ({ url, selector, text, clear }) => {
     return await withPage(async (page) => {
@@ -1240,6 +1387,9 @@ export const browserTypeTool = tool(
   }
 )
 
+/**
+ * Fills one form field by delegating to the browser typing tool.
+ */
 export const browserFormFillTool = tool(
   async ({ url, selector, value, clear }) => {
     return await browserTypeTool.invoke({ url, selector, text: value, clear })
@@ -1256,6 +1406,9 @@ export const browserFormFillTool = tool(
   }
 )
 
+/**
+ * Fills several form fields on one page visit and returns a screenshot of the result.
+ */
 export const browserFormFillBatchTool = tool(
   async ({ url, fields }) => {
     return await withPage(async (page) => {
@@ -1301,6 +1454,9 @@ export const browserFormFillBatchTool = tool(
   }
 )
 
+/**
+ * Waits for a fixed delay after loading a page and captures the current state.
+ */
 export const browserWaitTool = tool(
   async ({ url, duration, condition }) => {
     return await withPage(async (page) => {
@@ -1332,6 +1488,9 @@ export const browserWaitTool = tool(
   }
 )
 
+/**
+ * Waits for a selector or page function to become true before capturing the state.
+ */
 export const browserWaitForTool = tool(
   async ({ url, selector, script, timeoutMs }) => {
     return await withPage(async (page) => {
@@ -1384,6 +1543,9 @@ export const browserWaitForTool = tool(
   }
 )
 
+/**
+ * Extracts text or an attribute from a selected element in the rendered page.
+ */
 export const browserExtractTool = tool(
   async ({ url, selector, attribute }) => {
     return await withPage(async (page) => {
@@ -1420,6 +1582,9 @@ export const browserExtractTool = tool(
   }
 )
 
+/**
+ * Extracts text from the whole page or from a specific selector.
+ */
 export const browserGetTextTool = tool(
   async ({ url, selector }) => {
     return await browserExtractTool.invoke({ url, selector: selector ?? "body" })
@@ -1434,6 +1599,9 @@ export const browserGetTextTool = tool(
   }
 )
 
+/**
+ * Lists links from the rendered page for navigation and extraction workflows.
+ */
 export const browserGetLinksTool = tool(
   async ({ url }) => {
     return await withPage(async (page) => {
@@ -1467,6 +1635,9 @@ export const browserGetLinksTool = tool(
   }
 )
 
+/**
+ * Lists likely clickable elements so the model can choose stable interaction targets.
+ */
 export const browserGetClickableElementsTool = tool(
   async ({ url }) => {
     return await withPage(async (page) => {
@@ -1516,6 +1687,9 @@ export const browserGetClickableElementsTool = tool(
   }
 )
 
+/**
+ * Drags from a source selector to a target selector using pointer coordinates.
+ */
 export const browserDragAndDropTool = tool(
   async ({ url, sourceSelector, targetSelector }) => {
     return await withPage(async (page) => {
@@ -1555,6 +1729,9 @@ export const browserDragAndDropTool = tool(
   }
 )
 
+/**
+ * Alias for drag-and-drop interactions used by older tool policies/renderers.
+ */
 export const browserDragTool = tool(
   async ({ url, sourceSelector, targetSelector }) => {
     return await browserDragAndDropTool.invoke({ url, sourceSelector, targetSelector })
@@ -1570,6 +1747,9 @@ export const browserDragTool = tool(
   }
 )
 
+/**
+ * Sends a single keyboard key press to the active browser page.
+ */
 export const browserKeyPressTool = tool(
   async ({ url, key }) => {
     return await withPage(async (page) => {
@@ -1596,6 +1776,9 @@ export const browserKeyPressTool = tool(
   }
 )
 
+/**
+ * Sends a multi-key browser shortcut such as Ctrl+K or Meta+A.
+ */
 export const browserHotkeyTool = tool(
   async ({ url, keys }) => {
     return await withPage(async (page) => {
@@ -1628,6 +1811,9 @@ export const browserHotkeyTool = tool(
   }
 )
 
+/**
+ * Evaluates JavaScript inside the current browser page and captures the page state.
+ */
 export const browserEvaluateTool = tool(
   async ({ url, script }) => {
     return await withPage(async (page) => {
@@ -1653,6 +1839,9 @@ export const browserEvaluateTool = tool(
   }
 )
 
+/**
+ * Searches workspace files with ripgrep, falling back to grep when rg is unavailable.
+ */
 export const fileSearchTool = tool(
   async ({ query, path: searchPath, maxResults }) => {
     await ensureWorkspaceDirs()
@@ -1712,6 +1901,9 @@ export const fileSearchTool = tool(
   }
 )
 
+/**
+ * Sends an HTTP request and returns status, headers, text, and parsed JSON when possible.
+ */
 export const httpRequestTool = tool(
   async ({ url, method, headers, body, timeoutMs }) => {
     const controller = new AbortController()
@@ -1765,6 +1957,9 @@ export const httpRequestTool = tool(
   }
 )
 
+/**
+ * Fetches a small binary resource and returns it as base64 for follow-up processing.
+ */
 export const downloadFetchTool = tool(
   async ({ url, headers, timeoutMs }) => {
     const controller = new AbortController()
@@ -1815,6 +2010,9 @@ export const downloadFetchTool = tool(
   }
 )
 
+/**
+ * Records a lightweight browser control step with a screenshot for visual timelines.
+ */
 export const browserControlTool = tool(
   async ({ url, action, thought, x, y }) => {
     return await withPage(async (page) => {
@@ -1849,6 +2047,9 @@ export const browserControlTool = tool(
   }
 )
 
+/**
+ * Compatibility wrapper for visual browser-control steps with pointer coordinates.
+ */
 export const browserVisionControlTool = tool(
   async ({ url, thought, x, y }) => {
     return await browserControlTool.invoke({ url, thought, x, y, action: "vision_control" })
@@ -1865,6 +2066,9 @@ export const browserVisionControlTool = tool(
   }
 )
 
+/**
+ * Compatibility wrapper for named browser action steps.
+ */
 export const browserActionTool = tool(
   async ({ url, action, thought }) => {
     return await browserControlTool.invoke({ url, action, thought })
@@ -1880,6 +2084,9 @@ export const browserActionTool = tool(
   }
 )
 
+/**
+ * Runs JavaScript with Node.js in a temporary file and returns process output.
+ */
 export const nodeExecuteTool = tool(
   async ({ code }) => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "Rekdin-node-"))
@@ -1903,6 +2110,9 @@ export const nodeExecuteTool = tool(
   }
 )
 
+/**
+ * Runs Python with python3 in a temporary file and returns process output.
+ */
 export const pythonExecuteTool = tool(
   async ({ code }) => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "Rekdin-python-"))
@@ -1926,6 +2136,9 @@ export const pythonExecuteTool = tool(
   }
 )
 
+/**
+ * Executes Node.js code in the CodeAct result shape expected by the UI.
+ */
 export const nodeCodeActTool = tool(
   async ({ code, filename }) => {
     const started = Date.now()
@@ -1947,6 +2160,9 @@ export const nodeCodeActTool = tool(
   }
 )
 
+/**
+ * Executes Python code in the CodeAct result shape expected by the UI.
+ */
 export const pythonCodeActTool = tool(
   async ({ code, filename }) => {
     const started = Date.now()
@@ -1968,6 +2184,9 @@ export const pythonCodeActTool = tool(
   }
 )
 
+/**
+ * Executes shell code in the CodeAct result shape expected by the UI.
+ */
 export const shellCodeActTool = tool(
   async ({ code, filename }) => {
     const started = Date.now()
@@ -1991,6 +2210,9 @@ export const shellCodeActTool = tool(
   }
 )
 
+/**
+ * Compatibility alias for workspace shell execution.
+ */
 export const shellExecuteTool = tool(
   async ({ command, cwd, timeout }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2011,6 +2233,9 @@ export const shellExecuteTool = tool(
   }
 )
 
+/**
+ * Performs find-and-replace edits in a workspace text file.
+ */
 export const fileReplaceTool = tool(
   async ({ path: filePath, find, replace, regex, ignoreCase, maxReplacements }) => {
     const content = await readWorkspaceText(filePath)
@@ -2065,6 +2290,9 @@ export const fileReplaceTool = tool(
   }
 )
 
+/**
+ * Applies add, remove, and replace JSON Patch operations to a workspace JSON file.
+ */
 export const jsonPatchTool = tool(
   async ({ path: filePath, operations }) => {
     const raw = await readWorkspaceText(filePath)
@@ -2094,6 +2322,9 @@ export const jsonPatchTool = tool(
   }
 )
 
+/**
+ * Applies add, remove, and replace patch operations to a workspace YAML file.
+ */
 export const yamlPatchTool = tool(
   async ({ path: filePath, operations }) => {
     const yamlMod = await loadYamlModule()
@@ -2128,6 +2359,9 @@ export const yamlPatchTool = tool(
   }
 )
 
+/**
+ * Creates a zip artifact from workspace files or directories.
+ */
 export const archiveCreateTool = tool(
   async ({ paths, archiveName }) => {
     await ensureWorkspaceDirs()
@@ -2203,6 +2437,9 @@ export const archiveCreateTool = tool(
   }
 )
 
+/**
+ * Extracts a zip archive into the workspace with path and size limits.
+ */
 export const archiveExtractTool = tool(
   async ({ data, outputDir }) => {
     try {
@@ -2246,6 +2483,9 @@ export const archiveExtractTool = tool(
   }
 )
 
+/**
+ * Encodes plain text as base64.
+ */
 export const base64EncodeTool = tool(
   async ({ text }) => {
     const encoded = Buffer.from(text, "utf-8").toString("base64")
@@ -2258,6 +2498,9 @@ export const base64EncodeTool = tool(
   }
 )
 
+/**
+ * Decodes base64 text as UTF-8.
+ */
 export const base64DecodeTool = tool(
   async ({ encoded }) => {
     const decoded = Buffer.from(encoded, "base64").toString("utf-8")
@@ -2270,6 +2513,9 @@ export const base64DecodeTool = tool(
   }
 )
 
+/**
+ * Computes a cryptographic hash for inline text or a workspace file.
+ */
 export const hashTool = tool(
   async ({ input, algorithm, path: filePath }) => {
     let data = input
@@ -2296,6 +2542,9 @@ export const hashTool = tool(
   }
 )
 
+/**
+ * Produces a deterministic short summary by returning the first chunk of text.
+ */
 export const textSummarizeTool = tool(
   async ({ text, path: filePath }) => {
     if (!text && filePath) {
@@ -2312,6 +2561,9 @@ export const textSummarizeTool = tool(
   }
 )
 
+/**
+ * Rewrites text into a simple bullet-list format.
+ */
 export const textRewriteTool = tool(
   async ({ text, path: filePath, style }) => {
     if (!text && filePath) {
@@ -2372,6 +2624,9 @@ const TODO_SCAN_EXTENSIONS = new Set([
 ])
 const TODO_KEYWORD_RE = /\b(TODO|FIXME|HACK|XXX|BUG|NOTE)\b/i
 
+/**
+ * Finds TODO-style markers in one text buffer.
+ */
 function scanTextForTodos(content: string, relFile?: string) {
   return content.split(/\r?\n/).flatMap((line, i) => {
     const match = line.match(TODO_KEYWORD_RE)
@@ -2380,6 +2635,9 @@ function scanTextForTodos(content: string, relFile?: string) {
   })
 }
 
+/**
+ * Recursively scans supported workspace files for TODO-style markers.
+ */
 async function walkDirForTodos(
   dirPath: string,
   baseDir: string
@@ -2401,6 +2659,9 @@ async function walkDirForTodos(
   return results
 }
 
+/**
+ * Extracts TODO, FIXME, HACK, XXX, BUG, and NOTE markers from text, files, or folders.
+ */
 export const extractTodosTool = tool(
   async ({ text, path: inputPath }) => {
     await ensureWorkspaceDirs()
@@ -2427,6 +2688,9 @@ export const extractTodosTool = tool(
   }
 )
 
+/**
+ * Creates a Markdown-to-PDF tool with request-specific Cloudinary credentials.
+ */
 function createMarkdownToPdfTool(context?: { headers?: HeadersInit }) {
   const cloudinaryConfig = parseCloudinaryConfig(context?.headers)
   return tool(
@@ -2448,6 +2712,9 @@ function createMarkdownToPdfTool(context?: { headers?: HeadersInit }) {
   )
 }
 
+/**
+ * Reads basic image metadata such as width, height, format, and byte size.
+ */
 export const imageInfoTool = tool(
   async ({ source }) => {
     const sharp = await loadSharp()
@@ -2474,6 +2741,9 @@ export const imageInfoTool = tool(
   }
 )
 
+/**
+ * Converts an image to PNG, JPEG, or WebP and stores the result as an artifact.
+ */
 export const imageConvertTool = tool(
   async ({ source, format }) => {
     const sharp = await loadSharp()
@@ -2506,6 +2776,9 @@ export const imageConvertTool = tool(
   }
 )
 
+/**
+ * Fetches Open Graph and meta tag data for a URL preview.
+ */
 export const linkPreviewTool = tool(
   async ({ url }) => {
     const res = await fetch(url, { headers: { "User-Agent": "Rekdin/NextJS" } })
@@ -2534,6 +2807,9 @@ export const linkPreviewTool = tool(
   }
 )
 
+/**
+ * Looks up npm registry metadata and recent download counts for a package.
+ */
 export const npmPackageInfoTool = tool(
   async ({ name }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2563,6 +2839,9 @@ export const npmPackageInfoTool = tool(
   }
 )
 
+/**
+ * Returns recent git commits in compact one-line form.
+ */
 export const gitLogSummaryTool = tool(
   async ({ limit }) => {
     const count = Math.min(Math.max(limit ?? 10, 1), 50)
@@ -2581,6 +2860,9 @@ export const gitLogSummaryTool = tool(
   }
 )
 
+/**
+ * Lists local and remote git branches for repository inspection.
+ */
 export const gitBranchesTool = tool(
   async () => {
     const res = await runCommandUnsafe("git branch --all", process.cwd(), 10000)
@@ -2593,6 +2875,9 @@ export const gitBranchesTool = tool(
   }
 )
 
+/**
+ * Returns git status and diff, or the patch for a specific commit/ref.
+ */
 export const gitDiffSummaryTool = tool(
   async ({ path: filePath, commit }) => {
     if (commit) {
@@ -2631,6 +2916,9 @@ export const gitDiffSummaryTool = tool(
   }
 )
 
+/**
+ * Parses git blame porcelain output into structured per-line authorship data.
+ */
 export const gitBlameTool = tool(
   async ({ path: filePath }) => {
     const safe = filePath.replace(/'/g, "'\"'\"'")
@@ -2666,6 +2954,9 @@ export const gitBlameTool = tool(
   }
 )
 
+/**
+ * Shows the commit history for a file, following renames.
+ */
 export const gitFileHistoryTool = tool(
   async ({ path: filePath, limit }) => {
     const safe = filePath.replace(/'/g, "'\"'\"'")
@@ -2693,6 +2984,9 @@ export const gitFileHistoryTool = tool(
   }
 )
 
+/**
+ * Creates a LaTeX-to-PDF tool with request-specific Cloudinary credentials.
+ */
 function createGenerateLatexPdfTool(context?: { headers?: HeadersInit }) {
   const cloudinaryConfig = parseCloudinaryConfig(context?.headers)
   return tool(
@@ -2712,6 +3006,9 @@ function createGenerateLatexPdfTool(context?: { headers?: HeadersInit }) {
   )
 }
 
+/**
+ * Reads a UTF-8 text file from the workspace.
+ */
 export const readFileTool = tool(
   async ({ path: filePath }) => {
     await ensureWorkspaceDirs()
@@ -2726,6 +3023,9 @@ export const readFileTool = tool(
   }
 )
 
+/**
+ * Lists files and directories inside the workspace, optionally recursively.
+ */
 export const listFilesTool = tool(
   async ({ path: dirPath, recursive }) => {
     await ensureWorkspaceDirs()
@@ -2765,6 +3065,9 @@ export const listFilesTool = tool(
   }
 )
 
+/**
+ * Writes UTF-8 text to a workspace file and returns a diff when replacing content.
+ */
 export const writeFileTool = tool(
   async ({ path: filePath, content }) => {
     await ensureWorkspaceDirs()
@@ -2793,6 +3096,9 @@ export const writeFileTool = tool(
   }
 )
 
+/**
+ * Executes a shell command inside the workspace and returns stdout, stderr, and exit code.
+ */
 export const executeCommandTool = tool(
   async ({ command, cwd, timeout }) => {
     await ensureWorkspaceDirs()
@@ -2841,6 +3147,9 @@ export const executeCommandTool = tool(
   }
 )
 
+/**
+ * Builds the full LangChain tool list and filters it through an optional allowlist.
+ */
 export function createToolset(context?: { headers?: HeadersInit; allowedToolNames?: string[] }) {
   const generateLatexPdfTool = createGenerateLatexPdfTool(context)
   const markdownToPdfTool = createMarkdownToPdfTool(context)
@@ -2928,4 +3237,7 @@ export function createToolset(context?: { headers?: HeadersInit; allowedToolName
   return tools.filter((tool) => allowed.has(tool.name))
 }
 
+/**
+ * Default unfiltered toolset used by callers that do not pass request-specific context.
+ */
 export const toolset = createToolset()
