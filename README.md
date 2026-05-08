@@ -53,6 +53,7 @@ Use these assets when recording the project walkthrough:
 - [Demo kit](docs/demo/rekdin-demo-kit.md)
 - [Exact video script](docs/demo/rekdin-exact-video-script.md)
 - [Architecture diagram SVG](public/rekdin-demo-architecture.svg)
+- [Complete flow walkthrough](docs/rekdin-complete-flow.md)
 
 The demo kit includes:
 
@@ -62,6 +63,19 @@ The demo kit includes:
 - the system design walkthrough
 - tradeoffs and failure-mode talking points
 - a pre-recording checklist
+
+## Code Mastery Kit
+
+Use these assets if you want to study the full codebase in a guided order:
+
+- [Code mastery index](docs/mastery/README.md)
+- [Session 1: Repo Map and Core Types](docs/mastery/session-01-repo-map-and-core-types.md)
+- [Session 2: App Shell and Client State Flow](docs/mastery/session-02-app-shell-and-client-state-flow.md)
+- [Session 3: API Boundary and Request Lifecycle](docs/mastery/session-03-api-boundary-and-request-lifecycle.md)
+- [Session 4: Agent Runtime and Model Orchestration](docs/mastery/session-04-agent-runtime-and-model-orchestration.md)
+- [Session 5: Tool System Deep Dive](docs/mastery/session-05-tool-system-deep-dive.md)
+- [Session 6: Persistence, Background Jobs, and Observability](docs/mastery/session-06-persistence-background-jobs-and-observability.md)
+- [Session 7: UI Surfaces, Renderers, and Interview Readiness](docs/mastery/session-07-ui-surfaces-renderers-and-interview-readiness.md)
 
 ## Architecture Diagram
 

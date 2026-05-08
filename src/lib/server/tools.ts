@@ -2845,7 +2845,7 @@ export const npmPackageInfoTool = tool(
 export const gitLogSummaryTool = tool(
   async ({ limit }) => {
     const count = Math.min(Math.max(limit ?? 10, 1), 50)
-    const res = await runCommandUnsafe(`git log -${count} --oneline`, process.cwd(), 10000)
+    const res = await runCommandUnsafe(`git log -${count} --oneline`, getWorkspaceRoot(), 10000)
     return {
       type: "git_log_summary",
       limit: count,
@@ -2865,7 +2865,7 @@ export const gitLogSummaryTool = tool(
  */
 export const gitBranchesTool = tool(
   async () => {
-    const res = await runCommandUnsafe("git branch --all", process.cwd(), 10000)
+    const res = await runCommandUnsafe("git branch --all", getWorkspaceRoot(), 10000)
     return { type: "git_branches", output: res.stdout.trim(), exitCode: res.exitCode }
   },
   {
@@ -2885,7 +2885,7 @@ export const gitDiffSummaryTool = tool(
       const safeCommit = commit.replace(/[^a-zA-Z0-9_.~^-]/g, "")
       const show = await runCommandUnsafe(
         `git show ${safeCommit} --stat --patch`,
-        process.cwd(),
+        getWorkspaceRoot(),
         15000
       )
       const firstLine = show.stdout.indexOf("\n")
@@ -2896,9 +2896,13 @@ export const gitDiffSummaryTool = tool(
         commit: safeCommit,
       }
     }
-    const pathArg = filePath ? ` -- ${filePath}` : ""
-    const status = await runCommandUnsafe("git status --short" + pathArg, process.cwd(), 10000)
-    const diff = await runCommandUnsafe("git diff" + pathArg, process.cwd(), 10000)
+    const safePath = filePath
+      ? path.relative(getWorkspaceRoot(), resolveWorkspacePath(filePath))
+      : ""
+    const escapedPath = safePath.replace(/'/g, "'\"'\"'")
+    const pathArg = escapedPath ? ` -- '${escapedPath}'` : ""
+    const status = await runCommandUnsafe("git status --short" + pathArg, getWorkspaceRoot(), 10000)
+    const diff = await runCommandUnsafe("git diff" + pathArg, getWorkspaceRoot(), 10000)
     return {
       type: "git_diff_summary",
       status: status.stdout.trim(),
@@ -2921,10 +2925,12 @@ export const gitDiffSummaryTool = tool(
  */
 export const gitBlameTool = tool(
   async ({ path: filePath }) => {
-    const safe = filePath.replace(/'/g, "'\"'\"'")
+    const safe = path
+      .relative(getWorkspaceRoot(), resolveWorkspacePath(filePath))
+      .replace(/'/g, "'\"'\"'")
     const res = await runCommandUnsafe(
       `git blame --line-porcelain -- '${safe}'`,
-      process.cwd(),
+      getWorkspaceRoot(),
       15000
     )
     if (res.exitCode !== 0) {
@@ -2959,11 +2965,13 @@ export const gitBlameTool = tool(
  */
 export const gitFileHistoryTool = tool(
   async ({ path: filePath, limit }) => {
-    const safe = filePath.replace(/'/g, "'\"'\"'")
+    const safe = path
+      .relative(getWorkspaceRoot(), resolveWorkspacePath(filePath))
+      .replace(/'/g, "'\"'\"'")
     const n = Math.min(Math.max(limit ?? 20, 1), 100)
     const res = await runCommandUnsafe(
       `git log --follow --oneline -n ${n} -- '${safe}'`,
-      process.cwd(),
+      getWorkspaceRoot(),
       10000
     )
     return {
