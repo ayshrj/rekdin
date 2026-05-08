@@ -19,6 +19,10 @@ export interface ChatInputHandle {
   focus(): void
 }
 
+/**
+ * Controlled prompt composer with attachment support and an imperative focus handle for workflow
+ * preset launches.
+ */
 export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
   { value, onValueChange, onSend, isLoading, disabled },
   ref

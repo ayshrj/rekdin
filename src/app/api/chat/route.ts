@@ -36,6 +36,13 @@ const requestSchema = z.object({
   history: z.array(messageSchema).optional(),
 })
 
+/**
+ * Handles the foreground chat path.
+ *
+ * This route is the main server boundary for Rekdin: it validates the browser request, persists the
+ * user message before model work begins, streams `ServerEventV2` updates over SSE, records replay
+ * events for UI inspection, and writes a trace for later debugging.
+ */
 export async function POST(req: Request) {
   let body: unknown
   try {
@@ -79,7 +86,10 @@ export async function POST(req: Request) {
           attachments,
           sessionId,
           timestamp: new Date().toISOString(),
-          metadata: workflowId ? { workflowId } : undefined,
+          metadata:
+            workflowId || resolvedMode || toolPolicy
+              ? { agentType: resolvedMode, toolPolicy, workflowId }
+              : undefined,
         }
 
   await sessionStore.saveMessage(sessionId, userMessage)
@@ -149,6 +159,7 @@ export async function POST(req: Request) {
         metadata: {
           tokens: agentResult.usageTokens,
           agentType: agentResult.mode,
+          toolPolicy: agentResult.toolPolicy,
           model: agentResult.model,
           workflowId: workflowId ?? undefined,
         },

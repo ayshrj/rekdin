@@ -3,6 +3,9 @@ import { access, mkdir } from "fs/promises"
 import os from "os"
 import path from "path"
 
+/**
+ * Derives a stable temp data directory per checked-out workspace when REKDIN_DATA_DIR is not set.
+ */
 function getDefaultDataDir() {
   const hash = crypto.createHash("sha1").update(process.cwd()).digest("hex").slice(0, 10)
   return path.join(os.tmpdir(), `rekdin-data-${hash}`)
@@ -23,6 +26,9 @@ const SETTINGS_FILE = path.join(DATA_DIR, "settings.json")
 const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json")
 const BACKGROUND_JOBS_FILE = path.join(DATA_DIR, "background-jobs.json")
 
+/**
+ * Tests whether a resolved path stays inside the configured workspace boundary.
+ */
 function isWithinDirectory(baseDir: string, target: string) {
   const relative = path.relative(baseDir, target)
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
@@ -36,6 +42,9 @@ async function ensureDir(dir: string) {
   }
 }
 
+/**
+ * Creates all server-side data directories used for uploads, PDFs, artifacts, replay, and traces.
+ */
 export async function ensureWorkspaceDirs() {
   await ensureDir(DATA_DIR)
   await ensureDir(UPLOADS_DIR)
@@ -86,6 +95,9 @@ export function getReplayFilePath(sessionId: string) {
   return path.join(REPLAYS_DIR, `${safeId}.json`)
 }
 
+/**
+ * Resolves user/model supplied workspace paths while preventing path traversal outside the project.
+ */
 export function resolveWorkspacePath(requestedPath: string) {
   const normalized = path.normalize(requestedPath).replace(/^(\.\.(\/|\\|$))+/g, "")
   const target = path.resolve(WORKSPACE_ROOT, normalized)

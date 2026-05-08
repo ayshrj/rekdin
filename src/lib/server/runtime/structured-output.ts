@@ -1,5 +1,8 @@
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
 
+/**
+ * Recursively validates the subset of JSON Schema used by workflow response contracts.
+ */
 function validateNode(
   value: unknown,
   schema: Record<string, unknown>,
@@ -56,6 +59,10 @@ function validateNode(
   }
 }
 
+/**
+ * Parses and validates an assistant reply against an optional workflow response schema.
+ * No schema means free-form chat output is accepted.
+ */
 export function validateStructuredOutput(raw: string, schema?: Record<string, unknown> | null) {
   if (!schema) {
     return { valid: true as const, parsed: null, errors: [] as string[] }

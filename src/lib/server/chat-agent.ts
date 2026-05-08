@@ -56,11 +56,18 @@ const GEMINI_UNSUPPORTED_TOOL_NAMES = new Set([
   "yaml_patch",
 ])
 
+/**
+ * Truncates large strings before they are sent back to the model or persisted as tool output.
+ */
 function truncateString(value: string, max = MAX_STRING_CHARS) {
   if (value.length <= max) return value
   return `${value.slice(0, max)}\n\n...(truncated, ${value.length} chars total)`
 }
 
+/**
+ * Reduces arbitrary tool payloads into model-safe JSON by limiting size, nesting, arrays, keys, and
+ * embedded binary/image data.
+ */
 function sanitizeToolPayload(value: unknown, depth = 0): unknown {
   if (depth > MAX_DEPTH) return "[truncated: max depth]"
 
@@ -123,6 +130,9 @@ function sanitizeToolPayload(value: unknown, depth = 0): unknown {
   return String(value)
 }
 
+/**
+ * Serializes a tool result into the compact ToolMessage content required by provider chat APIs.
+ */
 function toolMessageContent(result: unknown) {
   const sanitized = sanitizeToolPayload(result)
   let content = JSON.stringify(sanitized)
@@ -132,6 +142,10 @@ function toolMessageContent(result: unknown) {
   return content
 }
 
+/**
+ * Creates the provider-specific LangChain chat model from normalized provider settings.
+ * Missing credentials fail early with user-facing setup errors.
+ */
 function createModel({
   provider,
   origin,
@@ -226,6 +240,10 @@ function createModel({
   })
 }
 
+/**
+ * Converts persisted Rekdin messages into LangChain messages, including matching ToolMessages for
+ * assistant tool calls so providers accept historical tool-call context.
+ */
 function toLangChainMessages(message: ChatMessage): BaseMessage[] {
   if (message.role === "user") {
     return [new HumanMessage(formatUserContent(message.content, message.attachments))]
@@ -256,6 +274,9 @@ function toLangChainMessages(message: ChatMessage): BaseMessage[] {
   return [new SystemMessage(message.content)]
 }
 
+/**
+ * Appends attachment hints to user content so the model knows whether to use file or network tools.
+ */
 function formatUserContent(content: string, attachments?: string[]) {
   if (!attachments || attachments.length === 0) return content
   const note = attachments.map((path) => `- ${path}`).join("\n")
@@ -288,6 +309,9 @@ export interface AgentRunResult {
   retryCount: number
 }
 
+/**
+ * Identifies transient provider failures that are worth retrying inside a single agent turn.
+ */
 function isRetryableModelError(error: unknown) {
   const message = error instanceof Error ? error.message.toLowerCase() : ""
   return (
@@ -299,6 +323,10 @@ function isRetryableModelError(error: unknown) {
   )
 }
 
+/**
+ * Streams one model response, aggregates chunks into a final message, and throttles visible text
+ * deltas so the UI does not flicker while tool calls are still forming.
+ */
 async function streamModelMessage(
   llmWithTools: {
     stream: (
@@ -368,6 +396,13 @@ async function streamModelMessage(
   return aggregated
 }
 
+/**
+ * Runs the LangChain model/tool loop for one turn.
+ *
+ * The loop binds the allowed toolset, streams model output, executes requested tools, feeds tool
+ * results back as ToolMessages, handles provider fallbacks/retries, and returns the final assistant
+ * text plus the executed tool timeline.
+ */
 export async function runAgent({
   sessionId,
   contextMessages,

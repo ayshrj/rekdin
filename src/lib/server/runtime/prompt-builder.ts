@@ -33,6 +33,10 @@ const TOOL_POLICY_GUIDANCE: Record<ToolPolicyProfile, string> = {
     "You may use the full toolset, but still prefer the lowest-risk action first and verify every meaningful side effect.",
 }
 
+/**
+ * Loads optional repo-local operating instructions that should become part of the system prompt.
+ * Missing files are ignored so normal chat startup is not coupled to workspace configuration.
+ */
 async function loadWorkspaceInstructions() {
   await ensureWorkspaceDirs()
   const workspaceRoot = getWorkspaceRoot()
@@ -52,6 +56,11 @@ async function loadWorkspaceInstructions() {
   return ""
 }
 
+/**
+ * Builds the system prompt for one agent turn from mode, tool policy, workspace context, and any
+ * workflow response schema. The prompt is behavioral guidance; actual tool access is still enforced
+ * by `resolveAllowedToolNames`.
+ */
 export async function buildSystemPrompt({
   mode,
   toolPolicy,

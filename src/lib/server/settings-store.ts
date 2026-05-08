@@ -32,6 +32,9 @@ const DEFAULT_SETTINGS: ServerSettings = {
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET ?? "",
 }
 
+/**
+ * Merges partial persisted settings with safe defaults and canonical provider names/models.
+ */
 function normalizeSettings(raw?: Partial<ServerSettings> | null): ServerSettings {
   return {
     ...DEFAULT_SETTINGS,
@@ -96,6 +99,9 @@ declare global {
   var __REKDIN_SETTINGS_STORE: SettingsStore | undefined
 }
 
+/**
+ * Returns the singleton JSON-backed settings store shared by settings routes and runtime startup.
+ */
 export function getSettingsStore() {
   if (!globalThis.__REKDIN_SETTINGS_STORE) {
     globalThis.__REKDIN_SETTINGS_STORE = new SettingsStore()
@@ -103,6 +109,9 @@ export function getSettingsStore() {
   return globalThis.__REKDIN_SETTINGS_STORE
 }
 
+/**
+ * Extracts only model/provider credential fields needed by the agent runtime.
+ */
 export async function getProviderSettings(): Promise<ProviderSettings> {
   const settings = await getSettingsStore().load()
   return {
@@ -124,6 +133,9 @@ export async function getProviderSettings(): Promise<ProviderSettings> {
   }
 }
 
+/**
+ * Checks whether the currently selected provider has the credentials/model values required to run.
+ */
 export function hasProviderCredentials(settings: ServerSettings) {
   return providerHasCredentials(settings.llmProvider, settings)
 }

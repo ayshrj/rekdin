@@ -34,6 +34,7 @@ export interface WorkflowPreset {
   description: string
   prompt: string
   mode: AgentMode
+  toolPolicy?: ToolPolicyProfile
   responseSchema?: Record<string, unknown> | null
   category?: "research" | "browser" | "workspace" | "document" | "code"
   supportsBackground?: boolean

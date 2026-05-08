@@ -15,6 +15,10 @@ interface ChatMessageProps {
   showHeader?: boolean
 }
 
+/**
+ * Renders a persisted chat message, including workflow-aware structured output blocks for selected
+ * assistant responses.
+ */
 export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
   const isUser = message.role === "user"
   const [copied, setCopied] = useState(false)

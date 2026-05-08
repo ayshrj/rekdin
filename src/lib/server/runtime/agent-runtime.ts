@@ -10,6 +10,10 @@ import { verifyToolCalls } from "./verification"
 const MAX_CONTEXT_CHARS = 32_000
 const MAX_CONTEXT_MESSAGES = 60
 
+/**
+ * Converts user/workflow-provided mode strings into the supported runtime modes.
+ * Unknown values intentionally fall back to general mode instead of failing a request.
+ */
 function normalizeAgentMode(value?: string | null): AgentMode {
   const normalized = (value ?? "").trim().toLowerCase()
   if (
@@ -23,6 +27,10 @@ function normalizeAgentMode(value?: string | null): AgentMode {
   return "general"
 }
 
+/**
+ * Normalizes policy aliases from UI/API callers into the canonical tool policy profiles.
+ * Unknown values default to balanced so malformed input does not accidentally grant more access.
+ */
 function normalizeToolPolicy(value?: string | null): ToolPolicyProfile {
   const normalized = (value ?? "").trim().toLowerCase()
   if (normalized === "read_only" || normalized === "read-only" || normalized === "readonly") {
@@ -34,6 +42,10 @@ function normalizeToolPolicy(value?: string | null): ToolPolicyProfile {
   return "balanced"
 }
 
+/**
+ * Keeps the most recent useful conversation context within the model budget and inserts a system
+ * note when older context was compacted away.
+ */
 function trimHistory(messages: ChatMessage[]) {
   let totalChars = 0
   const selected: ChatMessage[] = []
@@ -62,6 +74,9 @@ function trimHistory(messages: ChatMessage[]) {
   return trimmed
 }
 
+/**
+ * Builds request headers passed into tool factories for optional integrations such as Cloudinary.
+ */
 function createToolHeaders(settings: {
   cloudinaryCloudName: string
   cloudinaryApiKey: string
@@ -100,6 +115,13 @@ export interface ChatTurnResult extends AgentRunResult {
   workflowId?: string
 }
 
+/**
+ * Orchestrates one governed agent turn.
+ *
+ * This is the bridge between API routes/background jobs and the lower-level LangChain loop: it
+ * normalizes mode/policy, builds the prompt, filters tools, retries invalid structured output once,
+ * verifies side effects, and returns trace-ready metadata.
+ */
 export async function runChatTurn({
   sessionId,
   contextMessages,

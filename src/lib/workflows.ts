@@ -1,5 +1,10 @@
 import { WorkflowPreset } from "@/types/runtime"
 
+/**
+ * Product-level workflow definitions used by the UI and runtime.
+ * Each preset packages mode, optional policy, prompt text, background support, and optional
+ * structured output requirements without creating a dedicated route for every workflow.
+ */
 export const WORKFLOW_PRESETS: WorkflowPreset[] = [
   {
     id: "research-plan",
@@ -164,11 +169,18 @@ export const WORKFLOW_PRESETS: WorkflowPreset[] = [
   },
 ]
 
+/**
+ * Looks up a workflow preset by id while allowing callers to pass missing route/query values.
+ */
 export function getWorkflowPreset(workflowId?: string | null) {
   if (!workflowId) return null
   return WORKFLOW_PRESETS.find((workflow) => workflow.id === workflowId) ?? null
 }
 
+/**
+ * Parses assistant content as structured workflow JSON when possible, returning null for normal
+ * prose or invalid JSON so renderers can safely fall back.
+ */
 export function parseStructuredWorkflowContent(content: string) {
   const trimmed = content.trim()
   if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null

@@ -1,9 +1,16 @@
 import { ServerEventV2 } from "@/types/runtime"
 
+/**
+ * Encodes a typed server event as an SSE `data:` frame.
+ */
 function encodeEvent(payload: ServerEventV2) {
   return new TextEncoder().encode(`data: ${JSON.stringify(payload)}\n\n`)
 }
 
+/**
+ * Wraps an async producer in a heartbeat-enabled SSE stream and guarantees a terminal idle/done
+ * event even when the producer throws.
+ */
 export function createEventStream(
   responder: (send: (payload: ServerEventV2) => void) => Promise<void>,
   heartbeatMs = 10_000

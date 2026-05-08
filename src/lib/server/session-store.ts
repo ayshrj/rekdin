@@ -5,6 +5,9 @@ import { ChatMessage, ChatSession } from "@/types/chat"
 import { readJsonFile, withFileWriteLock, writeJsonFileAtomic } from "./json-store"
 import { ensureWorkspaceDirs, getSessionsFilePath } from "./workspace"
 
+/**
+ * Returns a shallow-safe copy so callers cannot mutate the in-memory session cache directly.
+ */
 function cloneSession(session: ChatSession): ChatSession {
   return {
     ...session,
@@ -19,6 +22,9 @@ function sortSessions(sessions: ChatSession[]) {
   )
 }
 
+/**
+ * Recomputes derived session metadata from messages before persisting server-side session state.
+ */
 function recomputeMetadata(session: ChatSession): ChatSession {
   const messages = session.messages ?? []
   return {
@@ -94,6 +100,10 @@ class SessionStore {
     return cloneSession(normalized)
   }
 
+  /**
+   * Upserts a message into a session, creating the session if the first request arrives before an
+   * explicit session record exists.
+   */
   async saveMessage(sessionId: string, message: ChatMessage, title = "New Conversation") {
     const sessions = await this.loadSessionsFromDisk()
     const existing = sessions.find((item) => item.id === sessionId)
@@ -152,6 +162,9 @@ declare global {
   var __SESSION_STORE: SessionStore | undefined
 }
 
+/**
+ * Returns the singleton JSON-backed session store used by API routes during local development.
+ */
 export function getSessionStore() {
   if (!globalThis.__SESSION_STORE) {
     globalThis.__SESSION_STORE = new SessionStore()

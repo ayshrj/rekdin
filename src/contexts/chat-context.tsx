@@ -28,7 +28,7 @@ import {
 } from "@/lib/llm-providers"
 import { logger } from "@/lib/logger"
 import { ChatMessage, ChatSession, ToolResultEntry } from "@/types/chat"
-import { LlmProvider, ServerEventV2, ServerSettings } from "@/types/runtime"
+import { LlmProvider, ServerEventV2, ServerSettings, ToolPolicyProfile } from "@/types/runtime"
 
 type ChatContextValue = {
   sessions: ChatSession[]
@@ -71,6 +71,7 @@ type ChatContextValue = {
     attachments?: File[],
     metadata?: {
       agentType?: string
+      toolPolicy?: ToolPolicyProfile
       responseSchema?: Record<string, unknown> | null
       workflowId?: string
     }
@@ -107,6 +108,9 @@ type LlmSettings = {
   liveModeEnabled: boolean
 }
 
+/**
+ * Loads persisted server settings so the browser mirrors the active provider/runtime config.
+ */
 async function fetchServerSettings(): Promise<ServerSettings> {
   const response = await fetch("/api/settings", { cache: "no-store" })
   const data = (await response.json().catch(() => null)) as { settings?: ServerSettings } | null
@@ -116,6 +120,9 @@ async function fetchServerSettings(): Promise<ServerSettings> {
   return data.settings
 }
 
+/**
+ * Persists changed runtime settings to the server-side JSON store.
+ */
 async function saveServerSettings(next: Partial<ServerSettings>) {
   const response = await fetch("/api/settings", {
     method: "PUT",
@@ -155,6 +162,9 @@ function collectCloudinaryUrlsFromValue(value: unknown, urls: Set<string>) {
   }
 }
 
+/**
+ * Extracts uploaded Cloudinary asset URLs referenced by messages/tool results for cleanup.
+ */
 function collectCloudinaryUrls(messages: ChatMessage[], toolResults: ToolResultEntry[] = []) {
   const urls = new Set<string>()
   messages.forEach((message) => {
@@ -171,6 +181,9 @@ function collectCloudinaryUrls(messages: ChatMessage[], toolResults: ToolResultE
   return Array.from(urls)
 }
 
+/**
+ * Converts streamed tool-call records into the workspace panel's IndexedDB-friendly result shape.
+ */
 function toToolResultEntry(toolCall: Record<string, unknown>, fallbackTimestamp?: string) {
   const id = typeof toolCall.id === "string" ? toolCall.id : crypto.randomUUID()
   const toolName =
@@ -208,6 +221,9 @@ function toToolResultEntry(toolCall: Record<string, unknown>, fallbackTimestamp?
   }
 }
 
+/**
+ * Rebuilds the tool result list from persisted assistant messages when hydrating a session.
+ */
 function extractToolResults(messages: ChatMessage[]) {
   const results: ToolResultEntry[] = []
   messages.forEach((message) => {
@@ -222,6 +238,9 @@ function extractToolResults(messages: ChatMessage[]) {
   return results
 }
 
+/**
+ * Limits client-provided history before sending it to `/api/chat` to reduce request size.
+ */
 function trimHistory(messages: ChatMessage[], maxChars = 20000, maxMessages = 50): ChatMessage[] {
   let total = 0
   const selected: ChatMessage[] = []
@@ -251,6 +270,9 @@ function trimHistory(messages: ChatMessage[], maxChars = 20000, maxMessages = 50
   return trimmed
 }
 
+/**
+ * Uploads selected attachments through the Rekdin upload route and returns paths/URLs for tools.
+ */
 async function uploadFiles(files: File[]) {
   if (!files || files.length === 0) return []
   const formData = new FormData()
@@ -261,6 +283,10 @@ async function uploadFiles(files: File[]) {
   return data.files
 }
 
+/**
+ * Owns browser-side chat orchestration: session hydration, settings sync, optimistic messages,
+ * attachment uploads, SSE consumption, tool result mirroring, and IndexedDB persistence.
+ */
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [sessions, setSessions] = React.useState<ChatSession[]>([])
   const [currentSessionId, setCurrentSessionId] = React.useState<string | null>(null)
@@ -850,6 +876,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       files: File[] = [],
       metadata?: {
         agentType?: string
+        toolPolicy?: ToolPolicyProfile
         responseSchema?: Record<string, unknown> | null
         workflowId?: string
       }
@@ -926,7 +953,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         content: trimmed,
         attachments: uploadedPaths,
         timestamp: new Date().toISOString(),
-        metadata: metadata?.workflowId ? { workflowId: metadata.workflowId } : undefined,
+        metadata:
+          metadata?.workflowId || metadata?.agentType || metadata?.toolPolicy
+            ? {
+                agentType: metadata.agentType,
+                toolPolicy: metadata.toolPolicy,
+                workflowId: metadata.workflowId,
+              }
+            : undefined,
       }
 
       const existingMessages = messagesBySession[targetSession] ?? []
@@ -987,6 +1021,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             attachments: uploadedPaths,
             agentType: metadata?.agentType,
             agentMode: metadata?.agentType,
+            toolPolicy: metadata?.toolPolicy,
             workflowId: metadata?.workflowId,
             responseSchema: metadata?.responseSchema ?? null,
             history,
@@ -1316,6 +1351,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
 }
 
+/**
+ * Parses `ServerEventV2` frames from a fetch response body and dispatches each event to the caller.
+ */
 async function readEventStream(
   response: Response,
   onEvent: (data: ServerEventV2 | LegacyServerEvent) => void | Promise<void>
@@ -1355,12 +1393,18 @@ async function readEventStream(
   }
 }
 
+/**
+ * Provides the chat context and fails fast when used outside `ChatProvider`.
+ */
 export function useChat() {
   const ctx = React.useContext(ChatContext)
   if (!ctx) throw new Error("useChat must be used within ChatProvider")
   return ctx
 }
 
+/**
+ * Convenience hook for consumers that only need the current session's tool timeline.
+ */
 export function useToolResults() {
   const ctx = useChat()
   return { toolResults: ctx.toolResults }

@@ -37,6 +37,7 @@ export interface ChatMessage {
     thinking?: boolean
     agentType?: string
     model?: string
+    toolPolicy?: string
     workflowId?: string
     backgroundJobId?: string
     errorCode?: number | null

@@ -20,6 +20,11 @@ type RunBackgroundJobInput = {
   responseSchema?: Record<string, unknown> | null
 }
 
+/**
+ * Persists a queued background workflow and schedules its runner without blocking the HTTP request.
+ * The stored job captures the normalized mode/policy so the workspace UI can show status
+ * immediately.
+ */
 export async function enqueueBackgroundJob(input: RunBackgroundJobInput) {
   const job = await getBackgroundJobStore().create({
     sessionId: input.sessionId,
@@ -46,6 +51,10 @@ export async function enqueueBackgroundJob(input: RunBackgroundJobInput) {
   return job
 }
 
+/**
+ * Executes one queued workflow through the same governed runtime as foreground chat, then records
+ * the resulting assistant message, replay events, trace, and final job status.
+ */
 async function runBackgroundJob(jobId: string, input: RunBackgroundJobInput) {
   const jobStore = getBackgroundJobStore()
   const replayStore = getReplayStore()

@@ -133,6 +133,9 @@ function extractFirstString(value: unknown): string | null {
   return null
 }
 
+/**
+ * Builds a concise timeline label for a tool-start replay event.
+ */
 function summarizeToolStart(toolName: string, toolCall: Record<string, unknown>) {
   const args =
     toolCall.arguments && typeof toolCall.arguments === "object"
@@ -205,6 +208,9 @@ function summarizeToolStart(toolName: string, toolCall: Record<string, unknown>)
   }
 }
 
+/**
+ * Builds a concise timeline label for a completed tool result without rendering the full payload.
+ */
 function summarizeToolResult(toolName: string, toolCall: Record<string, unknown>) {
   const status = String(toolCall.status ?? "success")
   const result =
@@ -323,6 +329,10 @@ function summarizeAssistantOutcome(message?: string | null) {
   }
 }
 
+/**
+ * Renders Rekdin's inspection surface: live tool results, background jobs, replay events, traces,
+ * and export controls for the active chat session.
+ */
 export function WorkspacePanel() {
   const { toolResults } = useToolResults()
   const { currentSessionId, messages } = useChat()

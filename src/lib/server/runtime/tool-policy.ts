@@ -154,6 +154,11 @@ const READ_ONLY_BLOCKLIST = new Set([
   "image_convert",
 ])
 
+/**
+ * Computes the hard tool allow-list for a turn by intersecting the selected agent mode with the
+ * selected tool policy profile. Prompt guidance can ask the model to be careful, but this function
+ * is the actual permission boundary for which tools the model receives.
+ */
 export function resolveAllowedToolNames(mode: AgentMode, profile: ToolPolicyProfile): string[] {
   const modeGroups = new Set(GROUPS_BY_MODE[mode])
   const profileGroups = new Set(GROUPS_BY_PROFILE[profile])

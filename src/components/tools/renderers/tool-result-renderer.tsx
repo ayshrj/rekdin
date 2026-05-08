@@ -213,6 +213,10 @@ const TOOL_ACCENT_MAP: Record<string, string> = {
   generic: "border-tool-generic/25",
 }
 
+/**
+ * Routes raw tool result payloads to specialized renderers so the workspace panel can display
+ * browser, file, command, git, network, and artifact outputs in a readable form.
+ */
 export function ToolResultRenderer({
   content,
   onAction,
