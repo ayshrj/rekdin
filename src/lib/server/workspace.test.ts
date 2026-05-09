@@ -2,7 +2,6 @@ import path from "path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 const ORIGINAL_DATA_DIR = process.env.REKDIN_DATA_DIR
-const ORIGINAL_WORKSPACE_ROOT = process.env.REKDIN_WORKSPACE_ROOT
 
 async function loadWorkspaceModule() {
   vi.resetModules()
@@ -16,17 +15,10 @@ describe("workspace paths", () => {
     } else {
       process.env.REKDIN_DATA_DIR = ORIGINAL_DATA_DIR
     }
-
-    if (ORIGINAL_WORKSPACE_ROOT === undefined) {
-      delete process.env.REKDIN_WORKSPACE_ROOT
-    } else {
-      process.env.REKDIN_WORKSPACE_ROOT = ORIGINAL_WORKSPACE_ROOT
-    }
   })
 
   it("defaults the workspace root to the current project and keeps uploads in the data dir", async () => {
     delete process.env.REKDIN_DATA_DIR
-    delete process.env.REKDIN_WORKSPACE_ROOT
 
     const workspace = await loadWorkspaceModule()
     const dataDir = path.dirname(workspace.getArtifactsDir())
@@ -36,14 +28,31 @@ describe("workspace paths", () => {
     expect(workspace.getPdfsDir()).toBe(path.join(dataDir, "pdfs"))
   })
 
-  it("honors an explicit workspace root override", async () => {
-    process.env.REKDIN_WORKSPACE_ROOT = "/tmp/rekdin-custom-root"
-
+  it("honors a runtime workspace root selection", async () => {
     const workspace = await loadWorkspaceModule()
+    workspace.setWorkspaceRoot("/tmp/rekdin-custom-root")
 
     expect(workspace.getWorkspaceRoot()).toBe(path.resolve("/tmp/rekdin-custom-root"))
     expect(workspace.resolveWorkspacePath("src/index.ts")).toBe(
       path.resolve("/tmp/rekdin-custom-root", "src/index.ts")
     )
+  })
+
+  it("prefers the per-turn workspace root while resolving tool paths", async () => {
+    vi.resetModules()
+    const workspace = await import("./workspace")
+    const { runWithToolExecutionContext } = await import("./tool-execution-context")
+    const selectedWorkspace = path.resolve("/tmp/rekdin-selected-root")
+
+    workspace.setWorkspaceRoot("/tmp/rekdin-app-root")
+
+    await runWithToolExecutionContext({ workspaceRoot: selectedWorkspace }, async () => {
+      expect(workspace.getWorkspaceRoot()).toBe(selectedWorkspace)
+      expect(workspace.resolveWorkspacePath("demo.md")).toBe(
+        path.join(selectedWorkspace, "demo.md")
+      )
+    })
+
+    expect(workspace.getWorkspaceRoot()).toBe(path.resolve("/tmp/rekdin-app-root"))
   })
 })

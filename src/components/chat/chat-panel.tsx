@@ -3,7 +3,9 @@
 import * as React from "react"
 import { toast } from "sonner"
 
+import { Markdown } from "@/components/markdown"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogClose, DialogShell } from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -12,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useChat } from "@/contexts/chat-context"
+import { buildWorkflowPrompt, parseSlashCommand, renderSlashCommandHelp } from "@/lib/commands"
 import {
   ArrowPath,
   Bolt,
@@ -25,8 +28,8 @@ import {
 } from "@/lib/icons"
 import { parseLLMError } from "@/lib/llm-errors"
 import { getProviderMissingConfigMessage, hasProviderCredentials } from "@/lib/llm-providers"
-import { WORKFLOW_PRESETS } from "@/lib/workflows"
-import type { ToolPolicyProfile } from "@/types/runtime"
+import { getAllWorkflowPresets } from "@/lib/workflows"
+import type { ToolApprovalRequest, ToolPolicyProfile } from "@/types/runtime"
 
 import { ChatInput, ChatInputHandle } from "./chat-input"
 import { ChatMessage } from "./chat-message"
@@ -57,6 +60,114 @@ function isToolPolicyProfile(value: unknown): value is ToolPolicyProfile {
   return value === "read_only" || value === "balanced" || value === "full_auto"
 }
 
+function formatApprovalValue(value: unknown) {
+  if (typeof value === "string") return value
+  if (typeof value === "number" || typeof value === "boolean") return String(value)
+  if (value == null) return ""
+  return JSON.stringify(value, null, 2)
+}
+
+function formatApprovalLabel(key: string) {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function ToolApprovalComposer({
+  approval,
+  onApprove,
+  onReject,
+}: {
+  approval: ToolApprovalRequest
+  onApprove: () => void
+  onReject: () => void
+}) {
+  const args = approval.arguments
+  const primaryKeys = ["path", "filePath", "command", "url", "query", "selector"]
+  const contentKeys = ["content", "markdown", "text", "replacement"]
+  const primaryEntries = primaryKeys
+    .filter((key) => args[key] !== undefined)
+    .map((key) => [key, args[key]] as const)
+  const contentEntry = contentKeys
+    .map((key) => [key, args[key]] as const)
+    .find(([, value]) => typeof value === "string" && value.length > 0)
+  const hiddenKeys = new Set([...primaryKeys, ...contentKeys])
+  const secondaryEntries = Object.entries(args).filter(([key]) => !hiddenKeys.has(key))
+
+  return (
+    <div className="bg-background ring-border/50 rounded-xl border shadow-(--shadow-float) ring-1">
+      <div className="border-b px-3 py-2.5">
+        <p className="text-foreground text-xs font-semibold">Approve tool execution</p>
+        <p className="text-muted-foreground mt-0.5 text-[11px]">
+          Rekdin wants to run{" "}
+          <span className="text-foreground font-mono font-semibold">{approval.toolName}</span>.
+          {approval.reason ? ` ${approval.reason}` : ""}
+        </p>
+      </div>
+
+      <div className="max-h-80 space-y-3 overflow-y-auto p-3">
+        {primaryEntries.length > 0 ? (
+          <div className="grid gap-2">
+            {primaryEntries.map(([key, value]) => (
+              <div key={key} className="bg-muted/30 rounded-lg border px-3 py-2">
+                <p className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">
+                  {formatApprovalLabel(key)}
+                </p>
+                <p className="text-foreground mt-1 font-mono text-xs break-all">
+                  {formatApprovalValue(value)}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {contentEntry ? (
+          <div className="overflow-hidden rounded-lg border">
+            <div className="bg-muted/30 border-b px-3 py-2">
+              <p className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">
+                {formatApprovalLabel(contentEntry[0])} preview
+              </p>
+            </div>
+            <Markdown className="text-foreground max-h-64 overflow-auto p-3 text-xs">
+              {String(contentEntry[1])}
+            </Markdown>
+          </div>
+        ) : null}
+
+        {secondaryEntries.length > 0 ? (
+          <div className="overflow-hidden rounded-lg border">
+            <div className="bg-muted/30 border-b px-3 py-2">
+              <p className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">
+                Additional details
+              </p>
+            </div>
+            <div className="divide-y">
+              {secondaryEntries.map(([key, value]) => (
+                <div key={key} className="grid gap-1 px-3 py-2">
+                  <p className="text-muted-foreground text-xs">{formatApprovalLabel(key)}</p>
+                  <p className="text-foreground text-xs break-words">
+                    {formatApprovalValue(value)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="bg-muted/30 flex items-center justify-end gap-2 border-t px-3 py-2">
+        <Button type="button" variant="outline" size="sm" onClick={onReject}>
+          Reject
+        </Button>
+        <Button type="button" size="sm" onClick={onApprove}>
+          Approve
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 /**
  * Renders the primary chat surface, workflow launcher, background queue actions, and tool policy
  * selector that feed `ChatContext.sendMessage`.
@@ -67,7 +178,11 @@ export function ChatPanel() {
     isLoading,
     isThinking,
     sendMessage,
+    createSession,
     currentSessionId,
+    pendingToolApproval,
+    resolveToolApproval,
+    customWorkflows,
     llmProvider,
     openRouterApiKey,
     openRouterModel,
@@ -83,6 +198,7 @@ export function ChatPanel() {
     azureOpenAIEndpoint,
     azureOpenAIApiVersion,
     azureOpenAIDeployment,
+    workspaceRoot,
   } = useChat()
 
   const panelRef = React.useRef<HTMLDivElement | null>(null)
@@ -99,6 +215,7 @@ export function ChatPanel() {
   const [inputValue, setInputValue] = React.useState("")
   const [toolPolicy, setToolPolicy] = React.useState<ToolPolicyProfile>("balanced")
   const [selectedWorkflowId, setSelectedWorkflowId] = React.useState<string | null>(null)
+  const [showCommandHelp, setShowCommandHelp] = React.useState(false)
   const chatInputRef = React.useRef<ChatInputHandle | null>(null)
 
   const missingApiKey = React.useMemo(
@@ -136,6 +253,11 @@ export function ChatPanel() {
       openRouterApiKey,
       openRouterModel,
     ]
+  )
+
+  const workflowPresets = React.useMemo(
+    () => getAllWorkflowPresets(customWorkflows),
+    [customWorkflows]
   )
 
   const missingApiKeyMessage = React.useMemo(() => {
@@ -269,17 +391,20 @@ export function ChatPanel() {
     []
   )
 
-  const launchWorkflow = React.useCallback((workflowId: string) => {
-    const workflow = WORKFLOW_PRESETS.find((entry) => entry.id === workflowId)
-    if (!workflow) return
-    setSelectedWorkflowId(workflow.id)
-    setInputValue(workflow.prompt)
-    setTimeout(() => chatInputRef.current?.focus(), 0)
-  }, [])
+  const launchWorkflow = React.useCallback(
+    (workflowId: string) => {
+      const workflow = workflowPresets.find((entry) => entry.id === workflowId)
+      if (!workflow) return
+      setSelectedWorkflowId(workflow.id)
+      setInputValue(workflow.prompt)
+      setTimeout(() => chatInputRef.current?.focus(), 0)
+    },
+    [workflowPresets]
+  )
 
   const queueWorkflow = React.useCallback(
     async (workflowId: string, prompt?: string) => {
-      const workflow = WORKFLOW_PRESETS.find((entry) => entry.id === workflowId)
+      const workflow = workflowPresets.find((entry) => entry.id === workflowId)
       if (!workflow) return
       if (!currentSessionId) {
         toast.error("Open a session before queueing a background workflow.")
@@ -303,7 +428,7 @@ export function ChatPanel() {
       }
       toast.success(`${workflow.title} queued in the background.`)
     },
-    [currentSessionId, toolPolicy]
+    [currentSessionId, toolPolicy, workflowPresets]
   )
 
   const handleInputChange = React.useCallback((nextValue: string) => {
@@ -315,8 +440,55 @@ export function ChatPanel() {
 
   const handleSend = React.useCallback(
     async (content: string, attachments: File[]) => {
+      const slashCommand = parseSlashCommand(content)
+      if (slashCommand) {
+        const { command, args } = slashCommand
+        if (command.handlerType === "workflow" && command.workflowId) {
+          const workflow = workflowPresets.find((entry) => entry.id === command.workflowId)
+          if (!workflow) {
+            toast.error(`Workflow not found for ${command.usage}`)
+            return
+          }
+          const prompt = buildWorkflowPrompt(workflow, args)
+          if (command.backgroundPreferred && workflow.supportsBackground && currentSessionId) {
+            await queueWorkflow(workflow.id, prompt)
+            return
+          }
+          await sendMessage(prompt, attachments, {
+            agentType: workflow.mode,
+            toolPolicy: workflow.toolPolicy ?? toolPolicy,
+            workflowId: workflow.id,
+            responseSchema: workflow.responseSchema ?? null,
+          })
+          return
+        }
+        if (command.id === "workspace" || command.id === "settings") {
+          window.dispatchEvent(
+            new CustomEvent("rekdin:open-settings", {
+              detail: { tab: command.id === "workspace" ? "workspace" : "model" },
+            })
+          )
+          return
+        }
+        if (command.id === "export") {
+          if (!currentSessionId) {
+            toast.error("Open a session before exporting.")
+            return
+          }
+          window.open(`/api/sessions/${currentSessionId}/export`, "_blank", "noopener,noreferrer")
+          return
+        }
+        if (command.id === "clear") {
+          await createSession()
+          return
+        }
+        if (command.id === "help") {
+          setShowCommandHelp(true)
+          return
+        }
+      }
       const workflow = selectedWorkflowId
-        ? WORKFLOW_PRESETS.find((entry) => entry.id === selectedWorkflowId)
+        ? workflowPresets.find((entry) => entry.id === selectedWorkflowId)
         : null
       await sendMessage(content, attachments, {
         agentType: workflow?.mode,
@@ -326,7 +498,15 @@ export function ChatPanel() {
       })
       setSelectedWorkflowId(null)
     },
-    [selectedWorkflowId, sendMessage, toolPolicy]
+    [
+      createSession,
+      currentSessionId,
+      queueWorkflow,
+      selectedWorkflowId,
+      sendMessage,
+      toolPolicy,
+      workflowPresets,
+    ]
   )
 
   if (!hydrated) {
@@ -426,7 +606,7 @@ export function ChatPanel() {
                   Workflow presets
                 </p>
                 <div className="space-y-1.5">
-                  {WORKFLOW_PRESETS.map((workflow) => (
+                  {workflowPresets.map((workflow) => (
                     <button
                       key={workflow.id}
                       type="button"
@@ -487,7 +667,7 @@ export function ChatPanel() {
           ref={presetsRef}
           className="flex gap-1 overflow-x-auto px-3 py-1.5 [&::-webkit-scrollbar]:h-0"
         >
-          {WORKFLOW_PRESETS.map((workflow) => (
+          {workflowPresets.map((workflow) => (
             <div key={workflow.id} className="flex shrink-0 items-center">
               <Button
                 type="button"
@@ -586,23 +766,54 @@ export function ChatPanel() {
             </SelectContent>
           </Select>
         </div>
+        <div className="bg-muted/30 text-muted-foreground mb-2 rounded-lg border px-2.5 py-1.5 text-[11px]">
+          Workspace:{" "}
+          <span className="text-foreground font-medium break-all">
+            {workspaceRoot || "Default app root"}
+          </span>
+        </div>
         {selectedWorkflowId ? (
           <div className="bg-muted/40 text-muted-foreground mb-2 rounded-lg border px-2.5 py-1.5 text-[11px]">
             Workflow preset selected:{" "}
             <span className="text-foreground font-medium">
-              {WORKFLOW_PRESETS.find((workflow) => workflow.id === selectedWorkflowId)?.title}
+              {workflowPresets.find((workflow) => workflow.id === selectedWorkflowId)?.title}
             </span>
           </div>
         ) : null}
-        <ChatInput
-          ref={chatInputRef}
-          value={inputValue}
-          onValueChange={handleInputChange}
-          onSend={handleSend}
-          isLoading={isLoading || isThinking}
-          disabled={false}
-        />
+        {pendingToolApproval ? (
+          <ToolApprovalComposer
+            approval={pendingToolApproval}
+            onApprove={() => resolveToolApproval(true)}
+            onReject={() => resolveToolApproval(false)}
+          />
+        ) : (
+          <ChatInput
+            ref={chatInputRef}
+            value={inputValue}
+            onValueChange={handleInputChange}
+            onSend={handleSend}
+            isLoading={isLoading || isThinking}
+            disabled={false}
+          />
+        )}
       </div>
+      <Dialog open={showCommandHelp} onOpenChange={setShowCommandHelp}>
+        <DialogShell
+          title="Slash commands"
+          description="Type / in the composer to search commands, then press Enter or Tab to insert."
+          footer={
+            <DialogClose asChild>
+              <Button type="button">Close</Button>
+            </DialogClose>
+          }
+        >
+          <div className="px-6 py-4">
+            <pre className="bg-muted/40 text-foreground overflow-x-auto rounded-xl border p-3 font-mono text-xs leading-6 whitespace-pre-wrap">
+              {renderSlashCommandHelp()}
+            </pre>
+          </div>
+        </DialogShell>
+      </Dialog>
     </div>
   )
 }

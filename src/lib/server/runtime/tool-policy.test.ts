@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { resolveAllowedToolNames } from "./tool-policy"
+import { requiresToolApproval, resolveAllowedToolNames } from "./tool-policy"
 
 describe("resolveAllowedToolNames", () => {
   it("blocks destructive tools in read-only mode", () => {
@@ -33,5 +33,13 @@ describe("resolveAllowedToolNames", () => {
     expect(workspaceTools).not.toContain("node_code_act")
     expect(workspaceTools).not.toContain("python_code_act")
     expect(workspaceTools).not.toContain("shell_code_act")
+  })
+
+  it("requires approval for risky balanced tools and host-level full-auto tools", () => {
+    expect(requiresToolApproval("write_file", "balanced")).toBe(true)
+    expect(requiresToolApproval("browser_form_input_fill", "balanced")).toBe(true)
+    expect(requiresToolApproval("file_read", "balanced")).toBe(false)
+    expect(requiresToolApproval("write_file", "full_auto")).toBe(false)
+    expect(requiresToolApproval("execute_command", "full_auto")).toBe(true)
   })
 })

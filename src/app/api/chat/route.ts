@@ -6,6 +6,7 @@ import { getProviderModel, normalizeLlmProvider } from "@/lib/llm-providers"
 import { getReplayStore } from "@/lib/server/replay-store"
 import { runChatTurn } from "@/lib/server/runtime/agent-runtime"
 import { createEventStream } from "@/lib/server/runtime/events"
+import { createToolApprovalRequest } from "@/lib/server/runtime/tool-approval-broker"
 import { getSessionStore } from "@/lib/server/session-store"
 import { getProviderSettings, getSettingsStore } from "@/lib/server/settings-store"
 import { getTraceStore } from "@/lib/server/trace-store"
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
   const replayStore = getReplayStore()
   const sessionStore = getSessionStore()
   const settings = await getSettingsStore().load()
-  const providerSettings = await getProviderSettings()
+  const providerSettings = await getProviderSettings(settings)
   const resolvedMode = agentMode ?? agentType
 
   const lastHistoryMessage = history[history.length - 1]
@@ -110,6 +111,7 @@ export async function POST(req: Request) {
         sessionId,
         contextMessages,
         providerSettings,
+        workspaceRoot: settings.workspaceRoot,
         cloudinaryCloudName: settings.cloudinaryCloudName,
         cloudinaryApiKey: settings.cloudinaryApiKey,
         cloudinaryApiSecret: settings.cloudinaryApiSecret,
@@ -127,6 +129,22 @@ export async function POST(req: Request) {
           send({ version: 2, type: "status", phase: "running_tools" })
           await replayStore.record(sessionId, "tool_call", { toolCall })
           send({ version: 2, type: "tool_started", toolCall })
+        },
+        onApprovalRequired: async (approvalInput) => {
+          const { request, decision } = createToolApprovalRequest(approvalInput)
+          await replayStore.record(sessionId, "tool_call", {
+            approval: request,
+            status: "approval_required",
+          })
+          send({ version: 2, type: "approval_required", approval: request })
+          const approved = await decision
+          const warning = approved
+            ? `Approved tool execution: ${request.toolName}`
+            : `Rejected or expired tool execution: ${request.toolName}`
+          warnings.push(warning)
+          await replayStore.record(sessionId, "assistant_message", { warning })
+          send({ version: 2, type: "warning", warning })
+          return approved
         },
         onToolResult: async (toolCall) => {
           const serialized = JSON.parse(JSON.stringify(toolCall)) as Record<string, unknown>

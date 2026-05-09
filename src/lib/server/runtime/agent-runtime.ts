@@ -1,7 +1,10 @@
+import path from "path"
+
 import { ChatMessage } from "@/types/chat"
 import { AgentMode, ProviderSettings, ToolPolicyProfile } from "@/types/runtime"
 
 import { type AgentRunResult, runAgent } from "../chat-agent"
+import { getWorkspaceRoot } from "../workspace"
 import { buildSystemPrompt } from "./prompt-builder"
 import { validateStructuredOutput } from "./structured-output"
 import { resolveAllowedToolNames } from "./tool-policy"
@@ -74,6 +77,31 @@ function trimHistory(messages: ChatMessage[]) {
   return trimmed
 }
 
+function withCurrentWorkspaceContext(messages: ChatMessage[], workspaceRoot = getWorkspaceRoot()) {
+  const resolvedWorkspaceRoot = path.resolve(workspaceRoot)
+  const latestUserIndex = messages.findLastIndex((message) => message.role === "user")
+  const workspaceMessage: ChatMessage = {
+    id: `system_workspace_${Date.now()}`,
+    sessionId: messages[0]?.sessionId ?? "",
+    role: "system",
+    content: [
+      `Current workspace root: ${resolvedWorkspaceRoot}`,
+      "This is the authoritative workspace for this turn. Ignore older assistant messages that mention a different workspace path.",
+    ].join("\n"),
+    timestamp: new Date().toISOString(),
+  }
+
+  if (latestUserIndex === -1) {
+    return [...messages, workspaceMessage]
+  }
+
+  return [
+    ...messages.slice(0, latestUserIndex),
+    workspaceMessage,
+    ...messages.slice(latestUserIndex),
+  ]
+}
+
 /**
  * Builds request headers passed into tool factories for optional integrations such as Cloudinary.
  */
@@ -95,6 +123,7 @@ type RunChatTurnOptions = {
   sessionId: string
   contextMessages: ChatMessage[]
   providerSettings: ProviderSettings
+  workspaceRoot?: string
   cloudinaryCloudName: string
   cloudinaryApiKey: string
   cloudinaryApiSecret: string
@@ -105,6 +134,7 @@ type RunChatTurnOptions = {
   responseSchema?: Record<string, unknown> | null
   onToolStart?: Parameters<typeof runAgent>[0]["onToolStart"]
   onToolResult?: Parameters<typeof runAgent>[0]["onToolResult"]
+  onApprovalRequired?: Parameters<typeof runAgent>[0]["onApprovalRequired"]
   onChunk?: Parameters<typeof runAgent>[0]["onChunk"]
   onWarning?: Parameters<typeof runAgent>[0]["onWarning"]
 }
@@ -126,6 +156,7 @@ export async function runChatTurn({
   sessionId,
   contextMessages,
   providerSettings,
+  workspaceRoot,
   cloudinaryCloudName,
   cloudinaryApiKey,
   cloudinaryApiSecret,
@@ -136,6 +167,7 @@ export async function runChatTurn({
   responseSchema,
   onToolStart,
   onToolResult,
+  onApprovalRequired,
   onChunk,
   onWarning,
 }: RunChatTurnOptions): Promise<ChatTurnResult> {
@@ -144,9 +176,10 @@ export async function runChatTurn({
   const baseSystemPrompt = await buildSystemPrompt({
     mode,
     toolPolicy,
+    workspaceRoot,
     responseSchema,
   })
-  const preparedMessages = trimHistory(contextMessages)
+  const preparedMessages = withCurrentWorkspaceContext(trimHistory(contextMessages), workspaceRoot)
   const allowedToolNames = resolveAllowedToolNames(mode, toolPolicy)
   let retryPrompt = baseSystemPrompt
   let agentResult: AgentRunResult | null = null
@@ -156,6 +189,7 @@ export async function runChatTurn({
       contextMessages: preparedMessages,
       systemPrompt: retryPrompt,
       providerSettings,
+      workspaceRoot,
       origin,
       toolHeaders: createToolHeaders({
         cloudinaryCloudName,
@@ -163,8 +197,10 @@ export async function runChatTurn({
         cloudinaryApiSecret,
       }),
       allowedToolNames,
+      toolPolicy,
       onToolStart,
       onToolResult,
+      onApprovalRequired,
       onChunk,
       onWarning,
     })
@@ -203,4 +239,4 @@ export async function runChatTurn({
   }
 }
 
-export { normalizeAgentMode, normalizeToolPolicy }
+export { normalizeAgentMode, normalizeToolPolicy, withCurrentWorkspaceContext }

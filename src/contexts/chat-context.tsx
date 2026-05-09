@@ -28,7 +28,14 @@ import {
 } from "@/lib/llm-providers"
 import { logger } from "@/lib/logger"
 import { ChatMessage, ChatSession, ToolResultEntry } from "@/types/chat"
-import { LlmProvider, ServerEventV2, ServerSettings, ToolPolicyProfile } from "@/types/runtime"
+import {
+  LlmProvider,
+  ServerEventV2,
+  ServerSettings,
+  ToolApprovalRequest,
+  ToolPolicyProfile,
+  WorkflowPreset,
+} from "@/types/runtime"
 
 type ChatContextValue = {
   sessions: ChatSession[]
@@ -54,10 +61,16 @@ type ChatContextValue = {
   azureOpenAIApiVersion: string
   azureOpenAIDeployment: string
   liveModeEnabled: boolean
+  workspaceRoot: string
+  customWorkflows: WorkflowPreset[]
   cloudinaryCloudName: string
   cloudinaryApiKey: string
   cloudinaryApiSecret: string
+  pendingToolApproval: ToolApprovalRequest | null
+  resolveToolApproval: (approved: boolean) => void
   updateLlmSettings: (next: Partial<LlmSettings>) => void
+  updateWorkspaceSettings: (next: { workspaceRoot?: string }) => void
+  updateCustomWorkflows: (customWorkflows: WorkflowPreset[]) => void
   updateCloudinarySettings: (next: {
     cloudName?: string
     apiKey?: string
@@ -86,6 +99,11 @@ type LegacyServerEvent =
   | { type: "message_complete"; message: ChatMessage; tempId?: string }
   | { type: "tool_result"; toolCall: Record<string, unknown> }
   | { type: "error"; error: string }
+
+type PendingToolApproval = {
+  approval: ToolApprovalRequest
+  resolve: (approved: boolean) => void
+}
 
 const ChatContext = React.createContext<ChatContextValue | undefined>(undefined)
 
@@ -308,6 +326,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [azureOpenAIApiVersion, setAzureOpenAIApiVersion] = React.useState("2024-02-15-preview")
   const [azureOpenAIDeployment, setAzureOpenAIDeployment] = React.useState("")
   const [liveModeEnabled, setLiveModeEnabled] = React.useState(true)
+  const [workspaceRoot, setWorkspaceRoot] = React.useState("")
+  const [customWorkflows, setCustomWorkflows] = React.useState<WorkflowPreset[]>([])
   const [cloudinaryCloudName, setCloudinaryCloudName] = React.useState("")
   const [cloudinaryApiKey, setCloudinaryApiKey] = React.useState("")
   const [cloudinaryApiSecret, setCloudinaryApiSecret] = React.useState("")
@@ -318,11 +338,32 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = React.useState(false)
   const [isThinking, setIsThinking] = React.useState(false)
   const [connected, setConnected] = React.useState(false)
+  const [pendingToolApproval, setPendingToolApproval] = React.useState<PendingToolApproval | null>(
+    null
+  )
   const bootstrappedRef = React.useRef(false)
   const settingsHydratedRef = React.useRef(false)
   const uploadedDataUrlsRef = React.useRef(new Map<string, string>())
   const pendingUploadsRef = React.useRef(new Map<string, Promise<string>>())
   const draftPersistRef = React.useRef(new Map<string, number>())
+
+  const requestToolApproval = React.useCallback((approval: ToolApprovalRequest) => {
+    return new Promise<boolean>((resolve) => {
+      setPendingToolApproval({ approval, resolve })
+    })
+  }, [])
+
+  const resolvePendingToolApproval = React.useCallback(
+    (approved: boolean) => {
+      const pending = pendingToolApproval
+      if (!pending) return
+      pending.resolve(approved)
+      setPendingToolApproval(null)
+    },
+    [pendingToolApproval]
+  )
+
+  const pendingApprovalRequest = pendingToolApproval?.approval ?? null
 
   const mergeToolResults = React.useCallback(
     (current: ToolResultEntry[], incoming: ToolResultEntry[]) => {
@@ -565,6 +606,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setCloudinaryCloudName(serverSettings.cloudinaryCloudName || "")
         setCloudinaryApiKey(serverSettings.cloudinaryApiKey || "")
         setCloudinaryApiSecret(serverSettings.cloudinaryApiSecret || "")
+        setWorkspaceRoot(serverSettings.workspaceRoot || "")
+        setCustomWorkflows(serverSettings.customWorkflows ?? [])
 
         const localSettings = await loadLocalSettings()
         if (typeof localSettings.currentSessionId === "string") {
@@ -766,6 +809,38 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     },
     []
   )
+
+  const updateWorkspaceSettings = React.useCallback(
+    (next: { workspaceRoot?: string }) => {
+      if (typeof next.workspaceRoot === "string") {
+        const previous = workspaceRoot
+        const value = next.workspaceRoot.trim()
+        setWorkspaceRoot(value)
+        void saveServerSettings({ workspaceRoot: value })
+          .then((settings) => {
+            setWorkspaceRoot(settings.workspaceRoot || "")
+          })
+          .catch((err) => {
+            setWorkspaceRoot(previous)
+            logger.error("Failed to save workspace settings to server", err)
+            toast.error(err instanceof Error ? err.message : "Unable to save workspace settings")
+          })
+      }
+    },
+    [workspaceRoot]
+  )
+
+  const updateCustomWorkflows = React.useCallback((nextWorkflows: WorkflowPreset[]) => {
+    setCustomWorkflows(nextWorkflows)
+    void saveServerSettings({ customWorkflows: nextWorkflows })
+      .then((settings) => {
+        setCustomWorkflows(settings.customWorkflows ?? [])
+      })
+      .catch((err) => {
+        logger.error("Failed to save custom workflows to server", err)
+        toast.error("Unable to save custom workflows")
+      })
+  }, [])
 
   const joinSession = React.useCallback(
     async (sessionId: string) => {
@@ -1180,6 +1255,21 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
               void replaceToolResult(targetSession, entry)
               break
             }
+            case "approval_required": {
+              const approval = event.approval
+              const approved = await requestToolApproval(approval)
+              await fetch(`/api/tool-approvals/${approval.id}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ approved }),
+              }).catch((error) => {
+                logger.warn("Failed to send tool approval decision", error)
+              })
+              toast[approved ? "success" : "warning"](
+                approved ? `Approved ${approval.toolName}` : `Rejected ${approval.toolName}`
+              )
+              break
+            }
             case "tool_finished":
             case "tool_result":
               {
@@ -1281,6 +1371,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       openAIModel,
       openRouterApiKey,
       openRouterModel,
+      requestToolApproval,
       azureOpenAIApiKey,
       azureOpenAIEndpoint,
       azureOpenAIApiVersion,
@@ -1319,10 +1410,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       azureOpenAIApiVersion,
       azureOpenAIDeployment,
       liveModeEnabled,
+      workspaceRoot,
+      customWorkflows,
       cloudinaryCloudName,
       cloudinaryApiKey,
       cloudinaryApiSecret,
+      pendingToolApproval: pendingApprovalRequest,
+      resolveToolApproval: resolvePendingToolApproval,
       updateLlmSettings,
+      updateWorkspaceSettings,
+      updateCustomWorkflows,
       updateCloudinarySettings,
       createSession,
       joinSession,
@@ -1341,6 +1438,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       cloudinaryApiKey,
       cloudinaryApiSecret,
       cloudinaryCloudName,
+      customWorkflows,
+      workspaceRoot,
       deleteSession,
       isLoading,
       isThinking,
@@ -1357,13 +1456,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       openAIModel,
       openRouterApiKey,
       openRouterModel,
+      pendingApprovalRequest,
       liveModeEnabled,
+      resolvePendingToolApproval,
       refreshSessions,
       sendMessage,
       sessions,
       toolResults,
       updateCloudinarySettings,
+      updateCustomWorkflows,
       updateLlmSettings,
+      updateWorkspaceSettings,
     ]
   )
 

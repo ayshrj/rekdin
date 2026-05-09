@@ -1,3 +1,4 @@
+import path from "path"
 import { describe, expect, it } from "vitest"
 
 import { buildSystemPrompt } from "./prompt-builder"
@@ -29,10 +30,22 @@ describe("buildSystemPrompt", () => {
     const prompt = await buildSystemPrompt({
       mode: "workspace",
       toolPolicy: "balanced",
+      workspaceRoot: process.cwd(),
     })
 
     expect(prompt).toContain("current local project repository")
     expect(prompt).toContain(`Current workspace root: ${process.cwd()}`)
     expect(prompt).toContain("Do not ask the user to confirm the workspace path")
+  })
+
+  it("uses the explicit selected workspace when provided", async () => {
+    const selectedWorkspace = path.resolve("/tmp/rekdin-selected-workspace")
+    const prompt = await buildSystemPrompt({
+      mode: "workspace",
+      toolPolicy: "balanced",
+      workspaceRoot: selectedWorkspace,
+    })
+
+    expect(prompt).toContain(`Current workspace root: ${selectedWorkspace}`)
   })
 })

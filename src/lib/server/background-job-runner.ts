@@ -60,8 +60,8 @@ async function runBackgroundJob(jobId: string, input: RunBackgroundJobInput) {
   const replayStore = getReplayStore()
   const sessionStore = getSessionStore()
   const traceStore = getTraceStore()
-  const providerSettings = await getProviderSettings()
   const settings = await getSettingsStore().load()
+  const providerSettings = await getProviderSettings(settings)
   const startedAt = new Date().toISOString()
 
   await jobStore.update(jobId, { status: "running", startedAt })
@@ -92,6 +92,7 @@ async function runBackgroundJob(jobId: string, input: RunBackgroundJobInput) {
       sessionId: input.sessionId,
       contextMessages: [userMessage],
       providerSettings,
+      workspaceRoot: settings.workspaceRoot,
       cloudinaryCloudName: settings.cloudinaryCloudName,
       cloudinaryApiKey: settings.cloudinaryApiKey,
       cloudinaryApiSecret: settings.cloudinaryApiSecret,
@@ -111,6 +112,16 @@ async function runBackgroundJob(jobId: string, input: RunBackgroundJobInput) {
           toolCall,
           backgroundJobId: jobId,
         })
+      },
+      onApprovalRequired: async (approval) => {
+        const warning = `Background job blocked approval-required tool: ${approval.toolName}`
+        warnings.push(warning)
+        await replayStore.record(input.sessionId, "assistant_message", {
+          warning,
+          approval,
+          backgroundJobId: jobId,
+        })
+        return false
       },
       onToolResult: async (toolCall) => {
         await replayStore.record(input.sessionId, "tool_result", {

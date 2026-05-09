@@ -6,7 +6,6 @@ import { promisify } from "util"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 const execFileAsync = promisify(execFile)
-const ORIGINAL_WORKSPACE_ROOT = process.env.REKDIN_WORKSPACE_ROOT
 
 async function git(args: string[], cwd: string) {
   await execFileAsync("git", args, {
@@ -23,15 +22,10 @@ async function git(args: string[], cwd: string) {
 
 describe("git tools", () => {
   afterEach(() => {
-    if (ORIGINAL_WORKSPACE_ROOT === undefined) {
-      delete process.env.REKDIN_WORKSPACE_ROOT
-    } else {
-      process.env.REKDIN_WORKSPACE_ROOT = ORIGINAL_WORKSPACE_ROOT
-    }
     vi.resetModules()
   })
 
-  it("runs git diff against REKDIN_WORKSPACE_ROOT instead of process.cwd()", async () => {
+  it("runs git diff against the selected workspace root instead of process.cwd()", async () => {
     const repo = await mkdtemp(path.join(os.tmpdir(), "rekdin-git-tools-"))
     await git(["init"], repo)
     await writeFile(path.join(repo, "tracked.txt"), "before\n", "utf-8")
@@ -39,9 +33,10 @@ describe("git tools", () => {
     await git(["commit", "-m", "initial"], repo)
     await writeFile(path.join(repo, "tracked.txt"), "after\n", "utf-8")
 
-    process.env.REKDIN_WORKSPACE_ROOT = repo
     vi.resetModules()
 
+    const { setWorkspaceRoot } = await import("./workspace")
+    setWorkspaceRoot(repo)
     const { gitDiffSummaryTool } = await import("./tools")
     const result = (await gitDiffSummaryTool.invoke({})) as {
       status: string

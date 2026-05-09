@@ -3,6 +3,7 @@
 import * as React from "react"
 import { toast } from "sonner"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -23,11 +24,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { useChat } from "@/contexts/chat-context"
 import {
   ArrowDownTray,
   ArrowUpTray,
   Check,
+  ChevronRight,
   Cog8Tooth as Settings,
   Eye,
   EyeSlash,
@@ -41,6 +44,8 @@ import {
   normalizeLlmProvider,
 } from "@/lib/llm-providers"
 import { cn } from "@/lib/utils"
+import { CUSTOM_WORKFLOW_SCHEMA_PRESETS, WORKFLOW_PRESETS } from "@/lib/workflows"
+import type { AgentMode, ToolPolicyProfile, WorkflowPreset } from "@/types/runtime"
 
 type OpenRouterModel = {
   id: string
@@ -52,6 +57,20 @@ type OpenRouterModel = {
 type OpenAIModel = {
   id: string
   owned_by: string
+}
+
+type WorkspaceDirectory = {
+  name: string
+  path: string
+  hidden: boolean
+}
+
+type WorkspaceBrowseResponse = {
+  currentPath: string
+  parentPath: string | null
+  defaultPath: string
+  directories: WorkspaceDirectory[]
+  error?: string
 }
 
 type SettingsExport = {
@@ -71,9 +90,23 @@ type SettingsExport = {
   azureOpenAIApiVersion: string
   azureOpenAIDeployment: string
   liveModeEnabled: boolean
+  workspaceRoot: string
+  customWorkflows?: WorkflowPreset[]
   cloudinaryCloudName: string
   cloudinaryApiKey: string
   cloudinaryApiSecret: string
+}
+
+const AGENT_MODE_OPTIONS: AgentMode[] = ["general", "research", "browser", "workspace", "document"]
+const TOOL_POLICY_OPTIONS: ToolPolicyProfile[] = ["read_only", "balanced", "full_auto"]
+
+function slugifyWorkflowId(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64)
 }
 
 export function OpenRouterSettings({
@@ -108,10 +141,14 @@ export function OpenRouterSettings({
     azureOpenAIApiVersion,
     azureOpenAIDeployment,
     liveModeEnabled,
+    workspaceRoot,
+    customWorkflows,
     cloudinaryCloudName,
     cloudinaryApiKey,
     cloudinaryApiSecret,
     updateLlmSettings,
+    updateWorkspaceSettings,
+    updateCustomWorkflows,
     updateCloudinarySettings,
   } = useChat()
   const [open, setOpen] = React.useState(false)
@@ -142,6 +179,7 @@ export function OpenRouterSettings({
   const [azureOpenAIApiVersionDraft, setAzureOpenAIApiVersionDraft] = React.useState("")
   const [azureOpenAIDeploymentDraft, setAzureOpenAIDeploymentDraft] = React.useState("")
   const [liveModeDraft, setLiveModeDraft] = React.useState(true)
+  const [workspaceRootDraft, setWorkspaceRootDraft] = React.useState("")
   const [cloudNameDraft, setCloudNameDraft] = React.useState("")
   const [cloudKeyDraft, setCloudKeyDraft] = React.useState("")
   const [cloudSecretDraft, setCloudSecretDraft] = React.useState("")
@@ -149,7 +187,23 @@ export function OpenRouterSettings({
   const [isLoadingModels, setIsLoadingModels] = React.useState(false)
   const [openAIModels, setOpenAIModels] = React.useState<OpenAIModel[]>([])
   const [isLoadingOpenAIModels, setIsLoadingOpenAIModels] = React.useState(false)
-  const [settingsTab, setSettingsTab] = React.useState<"model" | "uploads">("model")
+  const [settingsTab, setSettingsTab] = React.useState<
+    "model" | "workspace" | "workflows" | "uploads"
+  >("model")
+  const [workspaceBrowserPath, setWorkspaceBrowserPath] = React.useState("")
+  const [workspaceDefaultPath, setWorkspaceDefaultPath] = React.useState("")
+  const [workspaceParentPath, setWorkspaceParentPath] = React.useState<string | null>(null)
+  const [workspaceDirectories, setWorkspaceDirectories] = React.useState<WorkspaceDirectory[]>([])
+  const [isLoadingWorkspace, setIsLoadingWorkspace] = React.useState(false)
+  const [customWorkflowsDraft, setCustomWorkflowsDraft] = React.useState<WorkflowPreset[]>([])
+  const [workflowTitleDraft, setWorkflowTitleDraft] = React.useState("")
+  const [workflowDescriptionDraft, setWorkflowDescriptionDraft] = React.useState("")
+  const [workflowPromptDraft, setWorkflowPromptDraft] = React.useState("")
+  const [workflowModeDraft, setWorkflowModeDraft] = React.useState<AgentMode>("general")
+  const [workflowPolicyDraft, setWorkflowPolicyDraft] =
+    React.useState<ToolPolicyProfile>("balanced")
+  const [workflowBackgroundDraft, setWorkflowBackgroundDraft] = React.useState(false)
+  const [workflowSchemaPresetDraft, setWorkflowSchemaPresetDraft] = React.useState("none")
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -171,10 +225,11 @@ export function OpenRouterSettings({
     setAzureOpenAIApiVersionDraft(azureOpenAIApiVersion)
     setAzureOpenAIDeploymentDraft(azureOpenAIDeployment)
     setLiveModeDraft(liveModeEnabled)
+    setWorkspaceRootDraft(workspaceRoot)
+    setCustomWorkflowsDraft(customWorkflows)
     setCloudNameDraft(cloudinaryCloudName)
     setCloudKeyDraft(cloudinaryApiKey)
     setCloudSecretDraft(cloudinaryApiSecret)
-    setSettingsTab("model")
   }, [
     open,
     llmProvider,
@@ -193,10 +248,29 @@ export function OpenRouterSettings({
     azureOpenAIApiVersion,
     azureOpenAIDeployment,
     liveModeEnabled,
+    workspaceRoot,
+    customWorkflows,
     cloudinaryCloudName,
     cloudinaryApiKey,
     cloudinaryApiSecret,
   ])
+
+  React.useEffect(() => {
+    const onOpenSettings = (event: Event) => {
+      const detail = (event as CustomEvent<{ tab?: typeof settingsTab }>).detail
+      setOpen(true)
+      if (
+        detail?.tab === "model" ||
+        detail?.tab === "workspace" ||
+        detail?.tab === "workflows" ||
+        detail?.tab === "uploads"
+      ) {
+        setSettingsTab(detail.tab)
+      }
+    }
+    window.addEventListener("rekdin:open-settings", onOpenSettings)
+    return () => window.removeEventListener("rekdin:open-settings", onOpenSettings)
+  }, [])
 
   const fetchModels = React.useCallback(async () => {
     if (providerDraft !== "openrouter") {
@@ -254,6 +328,32 @@ export function OpenRouterSettings({
     }
   }, [openAIApiKeyDraft])
 
+  const browseWorkspace = React.useCallback(async (targetPath?: string) => {
+    try {
+      setIsLoadingWorkspace(true)
+      const params = targetPath ? `?path=${encodeURIComponent(targetPath)}` : ""
+      const res = await fetch(`/api/workspace/browse${params}`, { cache: "no-store" })
+      const data = (await res.json()) as WorkspaceBrowseResponse
+      if (!res.ok) {
+        toast.error(data.error ?? "Unable to browse workspace folders")
+        return
+      }
+      setWorkspaceBrowserPath(data.currentPath)
+      setWorkspaceDefaultPath(data.defaultPath)
+      setWorkspaceParentPath(data.parentPath)
+      setWorkspaceDirectories(data.directories ?? [])
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to browse workspace folders")
+    } finally {
+      setIsLoadingWorkspace(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (!open || settingsTab !== "workspace") return
+    void browseWorkspace(workspaceRootDraft || workspaceRoot || undefined)
+  }, [browseWorkspace, open, settingsTab, workspaceRoot])
+
   const save = React.useCallback(() => {
     updateLlmSettings({
       provider: providerDraft,
@@ -278,6 +378,10 @@ export function OpenRouterSettings({
       apiKey: cloudKeyDraft,
       apiSecret: cloudSecretDraft,
     })
+    updateWorkspaceSettings({
+      workspaceRoot: workspaceRootDraft,
+    })
+    updateCustomWorkflows(customWorkflowsDraft)
     toast.success("Settings saved")
     setOpen(false)
   }, [
@@ -297,10 +401,14 @@ export function OpenRouterSettings({
     azureOpenAIApiVersionDraft,
     azureOpenAIDeploymentDraft,
     liveModeDraft,
+    workspaceRootDraft,
+    customWorkflowsDraft,
     cloudNameDraft,
     cloudKeyDraft,
     cloudSecretDraft,
     updateLlmSettings,
+    updateWorkspaceSettings,
+    updateCustomWorkflows,
     updateCloudinarySettings,
   ])
 
@@ -321,6 +429,8 @@ export function OpenRouterSettings({
     setAzureOpenAIApiVersionDraft("2024-02-15-preview")
     setAzureOpenAIDeploymentDraft("")
     setLiveModeDraft(true)
+    setWorkspaceRootDraft("")
+    setCustomWorkflowsDraft([])
     setCloudNameDraft("")
     setCloudKeyDraft("")
     setCloudSecretDraft("")
@@ -343,8 +453,10 @@ export function OpenRouterSettings({
       liveModeEnabled: true,
     })
     updateCloudinarySettings({ cloudName: "", apiKey: "", apiSecret: "" })
+    updateWorkspaceSettings({ workspaceRoot: "" })
+    updateCustomWorkflows([])
     toast.success("Cleared saved settings")
-  }, [updateCloudinarySettings, updateLlmSettings])
+  }, [updateCloudinarySettings, updateCustomWorkflows, updateLlmSettings, updateWorkspaceSettings])
 
   const exportSettings = React.useCallback(() => {
     const settings: SettingsExport = {
@@ -364,6 +476,8 @@ export function OpenRouterSettings({
       azureOpenAIApiVersion: azureOpenAIApiVersionDraft,
       azureOpenAIDeployment: azureOpenAIDeploymentDraft,
       liveModeEnabled: liveModeDraft,
+      workspaceRoot: workspaceRootDraft,
+      customWorkflows: customWorkflowsDraft,
       cloudinaryCloudName: cloudNameDraft,
       cloudinaryApiKey: cloudKeyDraft,
       cloudinaryApiSecret: cloudSecretDraft,
@@ -397,6 +511,8 @@ export function OpenRouterSettings({
     azureOpenAIApiVersionDraft,
     azureOpenAIDeploymentDraft,
     liveModeDraft,
+    workspaceRootDraft,
+    customWorkflowsDraft,
     cloudNameDraft,
     cloudKeyDraft,
     cloudSecretDraft,
@@ -428,6 +544,8 @@ export function OpenRouterSettings({
         setAzureOpenAIApiVersionDraft(settings.azureOpenAIApiVersion || "")
         setAzureOpenAIDeploymentDraft(settings.azureOpenAIDeployment || "")
         setLiveModeDraft(settings.liveModeEnabled ?? true)
+        setWorkspaceRootDraft(settings.workspaceRoot || "")
+        setCustomWorkflowsDraft(settings.customWorkflows ?? [])
         setCloudNameDraft(settings.cloudinaryCloudName || "")
         setCloudKeyDraft(settings.cloudinaryApiKey || "")
         setCloudSecretDraft(settings.cloudinaryApiSecret || "")
@@ -448,6 +566,62 @@ export function OpenRouterSettings({
 
   const triggerImport = React.useCallback(() => {
     fileInputRef.current?.click()
+  }, [])
+
+  const addCustomWorkflow = React.useCallback(() => {
+    const title = workflowTitleDraft.trim()
+    const prompt = workflowPromptDraft.trim()
+    if (!title || !prompt) {
+      toast.error("Custom workflows need a title and prompt.")
+      return
+    }
+    const id = slugifyWorkflowId(title)
+    const reservedIds = new Set([
+      ...WORKFLOW_PRESETS.map((workflow) => workflow.id),
+      ...customWorkflowsDraft.map((workflow) => workflow.id),
+    ])
+    if (!id || reservedIds.has(id)) {
+      toast.error("Use a unique workflow title.")
+      return
+    }
+    const schemaPreset = CUSTOM_WORKFLOW_SCHEMA_PRESETS.find(
+      (preset) => preset.id === workflowSchemaPresetDraft
+    )
+    setCustomWorkflowsDraft((prev) => [
+      ...prev,
+      {
+        id,
+        title,
+        description: workflowDescriptionDraft.trim() || "Custom workflow",
+        prompt,
+        mode: workflowModeDraft,
+        toolPolicy: workflowPolicyDraft,
+        responseSchema: schemaPreset?.responseSchema ?? null,
+        category: workflowModeDraft === "research" ? "research" : "workspace",
+        supportsBackground: workflowBackgroundDraft,
+        custom: true,
+      },
+    ])
+    setWorkflowTitleDraft("")
+    setWorkflowDescriptionDraft("")
+    setWorkflowPromptDraft("")
+    setWorkflowModeDraft("general")
+    setWorkflowPolicyDraft("balanced")
+    setWorkflowBackgroundDraft(false)
+    setWorkflowSchemaPresetDraft("none")
+  }, [
+    customWorkflowsDraft,
+    workflowBackgroundDraft,
+    workflowDescriptionDraft,
+    workflowModeDraft,
+    workflowPolicyDraft,
+    workflowPromptDraft,
+    workflowSchemaPresetDraft,
+    workflowTitleDraft,
+  ])
+
+  const removeCustomWorkflow = React.useCallback((workflowId: string) => {
+    setCustomWorkflowsDraft((prev) => prev.filter((workflow) => workflow.id !== workflowId))
   }, [])
 
   const selected = models.find((m) => m.id === openRouterModelDraft)
@@ -550,7 +724,7 @@ export function OpenRouterSettings({
 
         {/* Tab bar */}
         <div className="flex shrink-0 border-b px-6">
-          {(["model", "uploads"] as const).map((tab) => (
+          {(["model", "workspace", "workflows", "uploads"] as const).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -562,7 +736,13 @@ export function OpenRouterSettings({
                   : "text-muted-foreground hover:text-foreground border-transparent"
               )}
             >
-              {tab === "model" ? "Model" : "Uploads"}
+              {tab === "model"
+                ? "Model"
+                : tab === "workspace"
+                  ? "Workspace"
+                  : tab === "workflows"
+                    ? "Workflows"
+                    : "Uploads"}
             </button>
           ))}
         </div>
@@ -908,6 +1088,277 @@ export function OpenRouterSettings({
                 </div>
               </>
             )}
+          </div>
+        ) : settingsTab === "workspace" ? (
+          <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">
+            <div className="rounded-lg border px-3 py-3">
+              <Label className="text-sm">Selected workspace</Label>
+              <p className="text-muted-foreground mt-1 text-xs break-all">
+                {workspaceRootDraft || "Default app root"}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="workspace-root">Workspace root</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="workspace-root"
+                  placeholder={workspaceRoot || "Default app root"}
+                  value={workspaceRootDraft}
+                  onChange={(event) => setWorkspaceRootDraft(event.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void browseWorkspace(workspaceRootDraft || undefined)}
+                >
+                  Open
+                </Button>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Rekdin tools, repo audit, file access, and git helpers use this directory as their
+                project boundary. Leave empty to use the app root.
+              </p>
+            </div>
+
+            <div className="rounded-xl border">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Folder browser</p>
+                  <p className="text-muted-foreground truncate text-xs">
+                    {workspaceBrowserPath || workspaceDefaultPath || "Loading..."}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isLoadingWorkspace || !workspaceParentPath}
+                    onClick={() => workspaceParentPath && void browseWorkspace(workspaceParentPath)}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={isLoadingWorkspace}
+                    onClick={() => void browseWorkspace(workspaceDefaultPath || undefined)}
+                  >
+                    Repo root
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={!workspaceBrowserPath}
+                    onClick={() => setWorkspaceRootDraft(workspaceBrowserPath)}
+                  >
+                    Select
+                  </Button>
+                </div>
+              </div>
+
+              <div className="max-h-64 overflow-y-auto p-2">
+                {isLoadingWorkspace ? (
+                  <div className="text-muted-foreground px-2 py-6 text-center text-sm">
+                    Loading folders...
+                  </div>
+                ) : workspaceDirectories.length === 0 ? (
+                  <div className="text-muted-foreground px-2 py-6 text-center text-sm">
+                    No child folders found.
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {workspaceDirectories.map((directory) => (
+                      <button
+                        key={directory.path}
+                        type="button"
+                        className="hover:bg-muted/70 flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors"
+                        onClick={() => void browseWorkspace(directory.path)}
+                      >
+                        <span className="min-w-0 truncate">
+                          {directory.name}
+                          {directory.hidden ? (
+                            <span className="text-muted-foreground ml-2 text-xs">hidden</span>
+                          ) : null}
+                        </span>
+                        <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setWorkspaceRootDraft("")
+                  void browseWorkspace(workspaceDefaultPath || undefined)
+                }}
+              >
+                Use app root
+              </Button>
+            </div>
+          </div>
+        ) : settingsTab === "workflows" ? (
+          <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">
+            <div className="space-y-1">
+              <div className="text-sm font-semibold">Custom workflow presets</div>
+              <p className="text-muted-foreground text-xs">
+                Saved workflows appear beside the built-in presets and reuse Rekdin mode, policy,
+                background, and structured-output controls.
+              </p>
+            </div>
+
+            <div className="space-y-2 rounded-xl border p-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="workflow-title">Title</Label>
+                  <Input
+                    id="workflow-title"
+                    placeholder="Security Review"
+                    value={workflowTitleDraft}
+                    onChange={(event) => setWorkflowTitleDraft(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="workflow-description">Description</Label>
+                  <Input
+                    id="workflow-description"
+                    placeholder="Review auth, secrets, and risky routes"
+                    value={workflowDescriptionDraft}
+                    onChange={(event) => setWorkflowDescriptionDraft(event.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="workflow-prompt">Prompt template</Label>
+                <Textarea
+                  id="workflow-prompt"
+                  value={workflowPromptDraft}
+                  onChange={(event) => setWorkflowPromptDraft(event.target.value)}
+                  placeholder="Inspect the selected workspace for security risks. Return findings, severity, evidence, and next steps."
+                  className="min-h-24"
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Agent mode</Label>
+                  <Select
+                    value={workflowModeDraft}
+                    onValueChange={(value) => setWorkflowModeDraft(value as AgentMode)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AGENT_MODE_OPTIONS.map((mode) => (
+                        <SelectItem key={mode} value={mode}>
+                          {mode}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Tool policy</Label>
+                  <Select
+                    value={workflowPolicyDraft}
+                    onValueChange={(value) => setWorkflowPolicyDraft(value as ToolPolicyProfile)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TOOL_POLICY_OPTIONS.map((policy) => (
+                        <SelectItem key={policy} value={policy}>
+                          {policy}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Response shape</Label>
+                  <Select
+                    value={workflowSchemaPresetDraft}
+                    onValueChange={setWorkflowSchemaPresetDraft}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CUSTOM_WORKFLOW_SCHEMA_PRESETS.map((preset) => (
+                        <SelectItem key={preset.id} value={preset.id}>
+                          {preset.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+                  <div>
+                    <Label className="text-sm">Background capable</Label>
+                    <p className="text-muted-foreground text-xs">Allow queueing this workflow.</p>
+                  </div>
+                  <Switch
+                    checked={workflowBackgroundDraft}
+                    onCheckedChange={setWorkflowBackgroundDraft}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button type="button" onClick={addCustomWorkflow}>
+                  Add workflow
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {customWorkflowsDraft.length === 0 ? (
+                <div className="text-muted-foreground rounded-xl border px-3 py-6 text-center text-sm">
+                  No custom workflows yet.
+                </div>
+              ) : (
+                customWorkflowsDraft.map((workflow) => (
+                  <div key={workflow.id} className="rounded-xl border p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold">{workflow.title}</p>
+                          <Badge variant="secondary">{workflow.mode}</Badge>
+                          {workflow.toolPolicy ? (
+                            <Badge variant="outline">{workflow.toolPolicy}</Badge>
+                          ) : null}
+                        </div>
+                        <p className="text-muted-foreground mt-1 text-xs">{workflow.description}</p>
+                        <p className="text-muted-foreground mt-2 line-clamp-2 text-xs">
+                          {workflow.prompt}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeCustomWorkflow(workflow.id)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         ) : (
           <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">

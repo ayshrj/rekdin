@@ -22,14 +22,21 @@ import {
   normalizeLlmProvider,
 } from "@/lib/llm-providers"
 import { ChatMessage, ToolCall } from "@/types/chat"
-import { LlmProvider, ProviderSettings } from "@/types/runtime"
+import { LlmProvider, ProviderSettings, ToolPolicyProfile } from "@/types/runtime"
 
+import { getToolApprovalReason, requiresToolApproval } from "./runtime/tool-policy"
 import { runWithToolExecutionContext } from "./tool-execution-context"
 import { createToolset } from "./tools"
 
 type AgentEventHandlers = {
   onToolStart?: (tool: Partial<ToolCall> & { id: string }) => void | Promise<void>
   onToolResult?: (tool: ToolCall) => void | Promise<void>
+  onApprovalRequired?: (approval: {
+    sessionId: string
+    toolName: string
+    arguments: Record<string, unknown>
+    reason: string
+  }) => boolean | Promise<boolean>
   onChunk?: (chunk: string) => void | Promise<void>
   onWarning?: (warning: string) => void | Promise<void>
 }
@@ -292,13 +299,15 @@ function formatUserContent(content: string, attachments?: string[]) {
 }
 
 export interface AgentRunOptions extends AgentEventHandlers {
-  sessionId?: string
+  sessionId: string
   contextMessages: ChatMessage[]
   systemPrompt?: string
   providerSettings: ProviderSettings
+  workspaceRoot?: string
   origin?: string
   toolHeaders?: HeadersInit
   allowedToolNames?: string[]
+  toolPolicy?: ToolPolicyProfile
 }
 
 export interface AgentRunResult {
@@ -408,15 +417,18 @@ export async function runAgent({
   contextMessages,
   systemPrompt,
   providerSettings,
+  workspaceRoot,
   origin,
   toolHeaders,
   allowedToolNames,
+  toolPolicy,
   onToolStart,
   onToolResult,
+  onApprovalRequired,
   onChunk,
   onWarning,
 }: AgentRunOptions): Promise<AgentRunResult> {
-  return runWithToolExecutionContext({ sessionId }, async () => {
+  return runWithToolExecutionContext({ sessionId, workspaceRoot }, async () => {
     const providerId = normalizeLlmProvider(providerSettings.provider)
     const tools: StructuredToolInterface[] = createToolset({
       headers: toolHeaders,
@@ -518,14 +530,16 @@ export async function runAgent({
       if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
         history.push(aiMessage)
         for (const call of aiMessage.tool_calls) {
-          const tool = tools.find((t) => t.name === call.name)
+          const toolName = call.name
+          if (!toolName) continue
+          const tool = tools.find((t) => t.name === toolName)
           if (!tool) continue
           const started = Date.now()
           const toolCallId =
             call.id ?? `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
           await onToolStart?.({
             id: toolCallId,
-            name: call.name,
+            name: toolName,
             arguments: call.args,
             timestamp: new Date().toISOString(),
             status: "running",
@@ -534,6 +548,20 @@ export async function runAgent({
           let result: unknown
           let error: string | undefined
           try {
+            if (toolPolicy && requiresToolApproval(toolName, toolPolicy)) {
+              const approved = await onApprovalRequired?.({
+                sessionId,
+                toolName,
+                arguments:
+                  call.args && typeof call.args === "object"
+                    ? (call.args as Record<string, unknown>)
+                    : { value: call.args },
+                reason: getToolApprovalReason(toolName, toolPolicy),
+              })
+              if (!approved) {
+                throw new Error(`Tool execution rejected by approval gate: ${toolName}`)
+              }
+            }
             result = await tool.invoke(call.args)
           } catch (err) {
             status = "error"
@@ -542,7 +570,7 @@ export async function runAgent({
           }
           const record: ToolCall = {
             id: toolCallId,
-            name: call.name,
+            name: toolName,
             arguments: call.args,
             result:
               typeof result === "object" ? (result as Record<string, unknown>) : { output: result },

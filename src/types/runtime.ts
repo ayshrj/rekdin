@@ -8,7 +8,9 @@ export type ToolPolicyProfile = "read_only" | "balanced" | "full_auto"
 
 export interface ServerSettings extends ProviderCredentialFields {
   currentSessionId?: string | null
+  workspaceRoot: string
   llmProvider: LlmProvider
+  customWorkflows: WorkflowPreset[]
   liveModeEnabled: boolean
   cloudinaryCloudName: string
   cloudinaryApiKey: string
@@ -38,6 +40,17 @@ export interface WorkflowPreset {
   responseSchema?: Record<string, unknown> | null
   category?: "research" | "browser" | "workspace" | "document" | "code"
   supportsBackground?: boolean
+  custom?: boolean
+}
+
+export interface ToolApprovalRequest {
+  id: string
+  sessionId: string
+  toolName: string
+  arguments: Record<string, unknown>
+  reason: string
+  createdAt: string
+  expiresAt: string
 }
 
 export interface ChatTurnRequest {
@@ -102,6 +115,7 @@ export type ServerEventV2 =
   | (BaseServerEvent & { type: "assistant_final"; message: ChatMessage; tempId?: string })
   | (BaseServerEvent & { type: "tool_started"; toolCall: Partial<ToolCall> & { id: string } })
   | (BaseServerEvent & { type: "tool_finished"; toolCall: ToolCall })
+  | (BaseServerEvent & { type: "approval_required"; approval: ToolApprovalRequest })
   | (BaseServerEvent & { type: "warning"; warning: string })
   | (BaseServerEvent & { type: "error"; error: string })
   | (BaseServerEvent & { type: "heartbeat"; at: string })

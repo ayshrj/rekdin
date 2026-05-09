@@ -154,6 +154,38 @@ const READ_ONLY_BLOCKLIST = new Set([
   "image_convert",
 ])
 
+const BALANCED_APPROVAL_TOOLS = new Set([
+  "file_replace",
+  "json_patch",
+  "yaml_patch",
+  "archive_create",
+  "archive_extract",
+  "write_file",
+  "browser_control",
+  "browser_vision_control",
+  "browser_action",
+  "browser_click",
+  "browser_double_click",
+  "browser_right_click",
+  "browser_type",
+  "browser_form_input_fill",
+  "browser_form_fill_batch",
+  "browser_drag_and_drop",
+  "browser_drag",
+  "browser_key_press",
+  "browser_hotkey",
+  "browser_evaluate",
+  "node_execute",
+  "python_execute",
+  "node_codeact",
+  "python_codeact",
+  "shell_codeact",
+  "shell_execute",
+  "execute_command",
+])
+
+const FULL_AUTO_APPROVAL_TOOLS = new Set(["shell_execute", "execute_command", "shell_codeact"])
+
 /**
  * Computes the hard tool allow-list for a turn by intersecting the selected agent mode with the
  * selected tool policy profile. Prompt guidance can ask the model to be careful, but this function
@@ -170,4 +202,17 @@ export function resolveAllowedToolNames(mode: AgentMode, profile: ToolPolicyProf
       return groups.some((group) => modeGroups.has(group) && profileGroups.has(group))
     })
     .map(([toolName]) => toolName)
+}
+
+export function requiresToolApproval(toolName: string, profile: ToolPolicyProfile) {
+  if (profile === "read_only") return false
+  if (profile === "balanced") return BALANCED_APPROVAL_TOOLS.has(toolName)
+  return FULL_AUTO_APPROVAL_TOOLS.has(toolName)
+}
+
+export function getToolApprovalReason(toolName: string, profile: ToolPolicyProfile) {
+  if (profile === "balanced") {
+    return `${toolName} can mutate files, browser state, or the local environment in balanced mode.`
+  }
+  return `${toolName} can run host-level commands and needs explicit approval even in full auto mode.`
 }

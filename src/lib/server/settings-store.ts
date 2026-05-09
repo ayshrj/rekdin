@@ -4,14 +4,27 @@ import {
   hasProviderCredentials as providerHasCredentials,
   normalizeLlmProvider,
 } from "@/lib/llm-providers"
-import { ProviderSettings, ServerSettings } from "@/types/runtime"
+import {
+  AgentMode,
+  ProviderSettings,
+  ServerSettings,
+  ToolPolicyProfile,
+  WorkflowPreset,
+} from "@/types/runtime"
 
 import { readJsonFile, withFileWriteLock, writeJsonFileAtomic } from "./json-store"
-import { ensureWorkspaceDirs, getSettingsFilePath } from "./workspace"
+import {
+  ensureWorkspaceDirs,
+  getDefaultWorkspaceRoot,
+  getSettingsFilePath,
+  setWorkspaceRoot,
+} from "./workspace"
 
 const DEFAULT_SETTINGS: ServerSettings = {
   currentSessionId: null,
+  workspaceRoot: getDefaultWorkspaceRoot(),
   llmProvider: "openrouter",
+  customWorkflows: [],
   openRouterModel: OPENROUTER_MODEL,
   openRouterApiKey: "",
   openAIModel: "gpt-4o-mini",
@@ -32,6 +45,62 @@ const DEFAULT_SETTINGS: ServerSettings = {
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET ?? "",
 }
 
+const VALID_MODES = new Set(["general", "research", "browser", "workspace", "document"])
+const VALID_POLICIES = new Set(["read_only", "balanced", "full_auto"])
+const VALID_CATEGORIES = new Set(["research", "browser", "workspace", "document", "code"])
+
+function isAgentMode(value: unknown): value is AgentMode {
+  return typeof value === "string" && VALID_MODES.has(value)
+}
+
+function isToolPolicy(value: unknown): value is ToolPolicyProfile {
+  return typeof value === "string" && VALID_POLICIES.has(value)
+}
+
+function isWorkflowCategory(value: unknown): value is NonNullable<WorkflowPreset["category"]> {
+  return typeof value === "string" && VALID_CATEGORIES.has(value)
+}
+
+function slugifyWorkflowId(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64)
+}
+
+function normalizeCustomWorkflows(value: unknown): WorkflowPreset[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const workflows: WorkflowPreset[] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue
+    const raw = entry as Partial<WorkflowPreset>
+    const id = slugifyWorkflowId(String(raw.id || raw.title || ""))
+    const title = String(raw.title || "").trim()
+    const prompt = String(raw.prompt || "").trim()
+    if (!id || !title || !prompt || seen.has(id)) continue
+    seen.add(id)
+    workflows.push({
+      id,
+      title: title.slice(0, 80),
+      description: String(raw.description || "")
+        .trim()
+        .slice(0, 240),
+      prompt: prompt.slice(0, 10_000),
+      mode: isAgentMode(raw.mode) ? raw.mode : "general",
+      toolPolicy: isToolPolicy(raw.toolPolicy) ? raw.toolPolicy : undefined,
+      responseSchema:
+        raw.responseSchema && typeof raw.responseSchema === "object" ? raw.responseSchema : null,
+      category: isWorkflowCategory(raw.category) ? raw.category : "workspace",
+      supportsBackground: Boolean(raw.supportsBackground),
+      custom: true,
+    })
+  }
+  return workflows
+}
+
 /**
  * Merges partial persisted settings with safe defaults and canonical provider names/models.
  */
@@ -43,7 +112,9 @@ function normalizeSettings(raw?: Partial<ServerSettings> | null): ServerSettings
       typeof raw?.currentSessionId === "string" || raw?.currentSessionId === null
         ? raw.currentSessionId
         : DEFAULT_SETTINGS.currentSessionId,
+    workspaceRoot: setWorkspaceRoot(raw?.workspaceRoot?.trim() || DEFAULT_SETTINGS.workspaceRoot),
     llmProvider: normalizeLlmProvider(raw?.llmProvider),
+    customWorkflows: normalizeCustomWorkflows(raw?.customWorkflows),
     openRouterModel: raw?.openRouterModel?.trim() || DEFAULT_SETTINGS.openRouterModel,
     openRouterApiKey: raw?.openRouterApiKey?.trim() || DEFAULT_SETTINGS.openRouterApiKey,
     openAIModel: raw?.openAIModel?.trim() || DEFAULT_SETTINGS.openAIModel,
@@ -74,7 +145,6 @@ class SettingsStore {
   private cache: ServerSettings | null = null
 
   async load(): Promise<ServerSettings> {
-    if (this.cache) return { ...this.cache }
     await ensureWorkspaceDirs()
     const settings = normalizeSettings(
       await readJsonFile<Partial<ServerSettings>>(getSettingsFilePath(), DEFAULT_SETTINGS)
@@ -86,9 +156,10 @@ class SettingsStore {
   async save(partial: Partial<ServerSettings>): Promise<ServerSettings> {
     const filePath = getSettingsFilePath()
     return withFileWriteLock(filePath, async () => {
-      const current = this.cache ?? (await this.load())
+      const current = await this.load()
       const next = normalizeSettings({ ...current, ...partial })
       await writeJsonFileAtomic(filePath, next)
+      setWorkspaceRoot(next.workspaceRoot)
       this.cache = next
       return { ...next }
     })
@@ -112,8 +183,10 @@ export function getSettingsStore() {
 /**
  * Extracts only model/provider credential fields needed by the agent runtime.
  */
-export async function getProviderSettings(): Promise<ProviderSettings> {
-  const settings = await getSettingsStore().load()
+export async function getProviderSettings(
+  loadedSettings?: ServerSettings
+): Promise<ProviderSettings> {
+  const settings = loadedSettings ?? (await getSettingsStore().load())
   return {
     provider: settings.llmProvider,
     openRouterModel: settings.openRouterModel,

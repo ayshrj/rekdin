@@ -1,3 +1,4 @@
+import { stat } from "fs/promises"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
@@ -6,9 +7,24 @@ import { ServerSettings } from "@/types/runtime"
 
 export const runtime = "nodejs"
 
+const workflowSchema = z.object({
+  id: z.string().optional(),
+  title: z.string(),
+  description: z.string().optional(),
+  prompt: z.string(),
+  mode: z.string(),
+  toolPolicy: z.string().optional(),
+  responseSchema: z.record(z.string(), z.unknown()).nullable().optional(),
+  category: z.string().optional(),
+  supportsBackground: z.boolean().optional(),
+  custom: z.boolean().optional(),
+})
+
 const requestSchema = z.object({
   currentSessionId: z.string().nullable().optional(),
+  workspaceRoot: z.string().optional(),
   llmProvider: z.string().optional(),
+  customWorkflows: z.array(workflowSchema).optional(),
   openRouterModel: z.string().optional(),
   openRouterApiKey: z.string().optional(),
   openAIModel: z.string().optional(),
@@ -39,6 +55,16 @@ export async function PUT(req: Request) {
   const parsed = requestSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
+  }
+
+  if (typeof parsed.data.workspaceRoot === "string" && parsed.data.workspaceRoot.trim()) {
+    const workspaceStat = await stat(parsed.data.workspaceRoot.trim()).catch(() => null)
+    if (!workspaceStat?.isDirectory()) {
+      return NextResponse.json(
+        { error: "Workspace root must be an existing directory" },
+        { status: 400 }
+      )
+    }
   }
 
   const next = await getSettingsStore().save({

@@ -3,6 +3,8 @@ import { access, mkdir } from "fs/promises"
 import os from "os"
 import path from "path"
 
+import { getToolExecutionContext } from "./tool-execution-context"
+
 /**
  * Derives a stable temp data directory per checked-out workspace when REKDIN_DATA_DIR is not set.
  */
@@ -14,9 +16,8 @@ function getDefaultDataDir() {
 const DATA_DIR = process.env.REKDIN_DATA_DIR?.trim()
   ? path.resolve(process.env.REKDIN_DATA_DIR.trim())
   : getDefaultDataDir()
-const WORKSPACE_ROOT = process.env.REKDIN_WORKSPACE_ROOT?.trim()
-  ? path.resolve(process.env.REKDIN_WORKSPACE_ROOT.trim())
-  : process.cwd()
+const DEFAULT_WORKSPACE_ROOT = process.cwd()
+let activeWorkspaceRoot = DEFAULT_WORKSPACE_ROOT
 const UPLOADS_DIR = path.join(DATA_DIR, "uploads")
 const PDFS_DIR = path.join(DATA_DIR, "pdfs")
 const ARTIFACTS_DIR = path.join(DATA_DIR, "artifacts")
@@ -55,7 +56,22 @@ export async function ensureWorkspaceDirs() {
 }
 
 export function getWorkspaceRoot() {
-  return WORKSPACE_ROOT
+  return getEffectiveWorkspaceRoot()
+}
+
+export function getDefaultWorkspaceRoot() {
+  return DEFAULT_WORKSPACE_ROOT
+}
+
+export function setWorkspaceRoot(root: string) {
+  const trimmed = root.trim()
+  activeWorkspaceRoot = trimmed ? path.resolve(trimmed) : DEFAULT_WORKSPACE_ROOT
+  return activeWorkspaceRoot
+}
+
+function getEffectiveWorkspaceRoot() {
+  const contextRoot = getToolExecutionContext()?.workspaceRoot?.trim()
+  return contextRoot ? path.resolve(contextRoot) : activeWorkspaceRoot
 }
 
 export function getUploadsDir() {
@@ -99,9 +115,10 @@ export function getReplayFilePath(sessionId: string) {
  * Resolves user/model supplied workspace paths while preventing path traversal outside the project.
  */
 export function resolveWorkspacePath(requestedPath: string) {
+  const workspaceRoot = getEffectiveWorkspaceRoot()
   const normalized = path.normalize(requestedPath).replace(/^(\.\.(\/|\\|$))+/g, "")
-  const target = path.resolve(WORKSPACE_ROOT, normalized)
-  if (!isWithinDirectory(WORKSPACE_ROOT, target)) {
+  const target = path.resolve(workspaceRoot, normalized)
+  if (!isWithinDirectory(workspaceRoot, target)) {
     throw new Error("Path escapes workspace boundaries")
   }
   return target

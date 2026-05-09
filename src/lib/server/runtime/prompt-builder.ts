@@ -8,6 +8,7 @@ import { ensureWorkspaceDirs, getWorkspaceRoot } from "../workspace"
 type PromptInput = {
   mode: AgentMode
   toolPolicy: ToolPolicyProfile
+  workspaceRoot?: string
   responseSchema?: Record<string, unknown> | null
 }
 
@@ -37,9 +38,8 @@ const TOOL_POLICY_GUIDANCE: Record<ToolPolicyProfile, string> = {
  * Loads optional repo-local operating instructions that should become part of the system prompt.
  * Missing files are ignored so normal chat startup is not coupled to workspace configuration.
  */
-async function loadWorkspaceInstructions() {
+async function loadWorkspaceInstructions(workspaceRoot: string) {
   await ensureWorkspaceDirs()
-  const workspaceRoot = getWorkspaceRoot()
   const candidates = ["REKDIN.md", ".rekdin.md", "REKDIN.instructions.md"]
 
   for (const candidate of candidates) {
@@ -64,10 +64,13 @@ async function loadWorkspaceInstructions() {
 export async function buildSystemPrompt({
   mode,
   toolPolicy,
+  workspaceRoot: inputWorkspaceRoot,
   responseSchema,
 }: PromptInput): Promise<string> {
-  const workspaceInstructions = await loadWorkspaceInstructions()
-  const workspaceRoot = getWorkspaceRoot()
+  const workspaceRoot = inputWorkspaceRoot?.trim()
+    ? path.resolve(inputWorkspaceRoot)
+    : getWorkspaceRoot()
+  const workspaceInstructions = await loadWorkspaceInstructions(workspaceRoot)
   const sections = [
     [
       "Identity",

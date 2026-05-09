@@ -169,12 +169,47 @@ export const WORKFLOW_PRESETS: WorkflowPreset[] = [
   },
 ]
 
+export const CUSTOM_WORKFLOW_SCHEMA_PRESETS = [
+  { id: "none", label: "No structured schema", responseSchema: null },
+  {
+    id: "research-report",
+    label: "Research report",
+    responseSchema: WORKFLOW_PRESETS.find((workflow) => workflow.id === "research-report")
+      ?.responseSchema,
+  },
+  {
+    id: "repo-audit",
+    label: "Repo audit",
+    responseSchema: WORKFLOW_PRESETS.find((workflow) => workflow.id === "repo-audit")
+      ?.responseSchema,
+  },
+  {
+    id: "diff-review",
+    label: "Diff review",
+    responseSchema: WORKFLOW_PRESETS.find((workflow) => workflow.id === "diff-review")
+      ?.responseSchema,
+  },
+] as const
+
+export function getAllWorkflowPresets(customWorkflows: WorkflowPreset[] = []) {
+  const reservedIds = new Set(WORKFLOW_PRESETS.map((workflow) => workflow.id))
+  const custom = customWorkflows
+    .filter((workflow) => workflow.id && !reservedIds.has(workflow.id))
+    .map((workflow) => ({ ...workflow, custom: true }))
+  return [...WORKFLOW_PRESETS, ...custom]
+}
+
 /**
  * Looks up a workflow preset by id while allowing callers to pass missing route/query values.
  */
-export function getWorkflowPreset(workflowId?: string | null) {
+export function getWorkflowPreset(
+  workflowId?: string | null,
+  customWorkflows: WorkflowPreset[] = []
+) {
   if (!workflowId) return null
-  return WORKFLOW_PRESETS.find((workflow) => workflow.id === workflowId) ?? null
+  return (
+    getAllWorkflowPresets(customWorkflows).find((workflow) => workflow.id === workflowId) ?? null
+  )
 }
 
 /**
