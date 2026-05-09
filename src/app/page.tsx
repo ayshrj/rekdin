@@ -97,10 +97,10 @@ function ConnectionBadge({ connected, label }: { connected: boolean; label: stri
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+        "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase transition-colors",
         connected
-          ? "border-green-500/20 bg-green-500/8 text-green-700 dark:text-green-400"
-          : "border-destructive/20 bg-destructive/8 text-destructive"
+          ? "border-status-success/30 bg-status-success/10 text-status-success"
+          : "border-destructive/25 bg-destructive/10 text-destructive"
       )}
     >
       <span className="relative flex h-1.5 w-1.5 shrink-0">
@@ -110,7 +110,7 @@ function ConnectionBadge({ connected, label }: { connected: boolean; label: stri
         <span
           className={cn(
             "relative inline-flex h-1.5 w-1.5 rounded-full",
-            connected ? "bg-green-500" : "bg-destructive"
+            connected ? "bg-status-success" : "bg-destructive"
           )}
         />
       </span>
@@ -121,9 +121,9 @@ function ConnectionBadge({ connected, label }: { connected: boolean; label: stri
 
 function ThinkingBadge() {
   return (
-    <span className="bg-primary/10 text-primary inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium">
+    <span className="border-primary/25 bg-primary/10 text-primary inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase">
       <span className="bg-primary h-1.5 w-1.5 animate-pulse rounded-full" />
-      Thinking
+      Agent thinking
     </span>
   )
 }
@@ -158,13 +158,13 @@ function MobileNavButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-2 text-xs font-medium transition-colors",
-        active ? "text-primary" : "text-muted-foreground"
+        "relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-2 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase transition-colors",
+        active ? "text-primary" : "text-muted-foreground hover:text-foreground"
       )}
     >
       <span
         className={cn(
-          "absolute inset-x-4 top-0 h-0.5 rounded-full transition-opacity",
+          "absolute inset-x-5 top-0 h-0.5 rounded-full transition-opacity",
           active ? "bg-primary opacity-100" : "opacity-0"
         )}
       />
@@ -205,32 +205,39 @@ function HomePageContent() {
   const sessionTitle = currentSession?.title ?? "New conversation"
 
   return (
-    <div className="bg-background flex h-dvh w-dvw flex-col overflow-hidden">
-      <header className="bg-background/95 flex h-12 shrink-0 items-center justify-between border-b px-3 backdrop-blur sm:h-14 sm:px-4">
+    <div className="from-background via-surface-0 to-surface-2 dark:via-surface-0 rk-shell-grid flex h-dvh w-dvw flex-col overflow-hidden bg-radial-[at_50%_0%]">
+      <header className="bg-surface-1/90 flex h-14 shrink-0 items-center justify-between border-b px-3 backdrop-blur-xl sm:h-16 sm:px-4">
         <div className="flex items-center gap-3">
           <Button
             id="tour-sidebar-btn"
             variant="ghost"
             size="icon"
-            className="text-muted-foreground hover:text-foreground h-8 w-8 rounded-lg"
+            className="text-muted-foreground hover:text-foreground border-border/60 bg-surface-2/60 h-9 w-9 rounded-lg border"
             onClick={() => setSidebarOpen(true)}
             aria-label="Open session history"
           >
             <PanelLeft className="h-4 w-4" />
           </Button>
-          <div className="flex items-center gap-2">
-            <div className="bg-primary/10 flex h-6 w-6 items-center justify-center rounded-md">
-              <Rekdin className="text-primary h-3.5 w-3.5" />
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="bg-primary/10 ring-primary/20 flex h-9 w-9 items-center justify-center rounded-lg ring-1">
+              <Rekdin className="text-primary h-4 w-4" />
             </div>
-            <span className="text-sm font-semibold tracking-tight">REKDIN</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[11px] font-black tracking-[0.2em]">REKDIN</span>
+                <span className="bg-border hidden h-3 w-px sm:block" />
+                <span
+                  className="text-muted-foreground hidden max-w-60 truncate text-xs sm:block"
+                  title={sessionTitle}
+                >
+                  {sessionTitle}
+                </span>
+              </div>
+              <p className="text-muted-foreground hidden font-mono text-[10px] tracking-[0.14em] uppercase sm:block">
+                local research and automation workspace
+              </p>
+            </div>
           </div>
-          <span className="text-muted-foreground hidden text-xs sm:block">·</span>
-          <span
-            className="text-muted-foreground hidden max-w-48 truncate text-sm sm:block"
-            title={sessionTitle}
-          >
-            {sessionTitle}
-          </span>
           {isThinking && (
             <span className="hidden sm:inline-flex">
               <ThinkingBadge />
@@ -257,7 +264,7 @@ function HomePageContent() {
             aria-label="GitHub profile"
             className="hidden sm:block"
           >
-            <Button variant="outline" size="icon" className="rounded-full">
+            <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg">
               <GitHub className="h-4 w-4" />
             </Button>
           </a>
@@ -269,7 +276,7 @@ function HomePageContent() {
 
       {!viewportReady ? (
         <main className="min-h-0 flex-1 px-3 pt-3">
-          <div className="bg-card h-full animate-pulse rounded-xl border shadow-(--shadow-panel)" />
+          <div className="rk-panel h-full animate-pulse" />
         </main>
       ) : !isPhoneLayout ? (
         <main className="min-h-0 flex-1 overflow-hidden p-3">
@@ -277,14 +284,17 @@ function HomePageContent() {
             id="main-workspace"
             orientation="horizontal"
             defaultLayout={MAIN_LAYOUT}
-            className="h-full"
+            className="h-full rounded-xl"
           >
             <ResizablePanel id="chat" minSize={24} className="min-h-0 min-w-0">
               <div id="tour-chat-panel" className="h-full">
                 <ChatPanel />
               </div>
             </ResizablePanel>
-            <ResizableHandle withHandle className="bg-border mx-1 w-px" />
+            <ResizableHandle
+              withHandle
+              className="bg-border/70 data-[resize-handle-state=hover]:bg-primary/50 mx-1 w-px rounded-full"
+            />
             <ResizablePanel id="workspace" minSize={28} className="min-h-0 min-w-0">
               <div id="tour-workspace-panel" className="h-full">
                 <WorkspacePanel />
@@ -307,7 +317,7 @@ function HomePageContent() {
           </main>
 
           <nav
-            className="bg-background/95 border-border shrink-0 border-t"
+            className="bg-surface-1/95 border-border shrink-0 border-t backdrop-blur-xl"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.25rem)" }}
           >
             <div className="flex h-14 items-stretch">
@@ -331,7 +341,7 @@ function HomePageContent() {
               <OpenRouterSettings
                 triggerVariant="ghost"
                 triggerSize="default"
-                triggerClassName="relative h-full min-w-0 flex-1 flex-col gap-1 rounded-none px-2 py-2 text-[11px] font-medium text-muted-foreground"
+                triggerClassName="relative h-full min-w-0 flex-1 flex-col gap-1 rounded-none px-2 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
                 triggerAriaLabel="Open settings"
                 triggerChildren={<span className="truncate">Settings</span>}
                 onRestartTour={undefined}
@@ -351,18 +361,22 @@ function HomePageContent() {
       {viewportReady && !isPhoneLayout ? (
         <aside
           className={cn(
-            "bg-sidebar fixed inset-y-0 left-0 z-50 flex w-64 flex-col overflow-hidden transition-transform duration-300 ease-in-out lg:w-72",
+            "bg-sidebar border-sidebar-border fixed inset-y-0 left-0 z-50 flex w-72 flex-col overflow-hidden border-r shadow-(--shadow-float) transition-transform duration-300 ease-in-out lg:w-80",
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           )}
         >
-          <div className="border-sidebar-border flex h-14 shrink-0 items-center gap-2.5 border-b px-4">
-            <div className="bg-primary/15 flex h-7 w-7 items-center justify-center rounded-lg">
+          <div className="border-sidebar-border flex h-16 shrink-0 items-center gap-3 border-b px-4">
+            <div className="bg-primary/15 ring-primary/20 flex h-9 w-9 items-center justify-center rounded-lg ring-1">
               <Rekdin className="text-primary h-4 w-4" />
             </div>
-            <span className="text-sidebar-foreground text-sm font-semibold tracking-tight">
-              REKDIN
-            </span>
-            <span className="text-sidebar-foreground/40 ml-auto text-xs">Sessions</span>
+            <div>
+              <p className="text-sidebar-foreground font-mono text-[11px] font-black tracking-[0.18em]">
+                REKDIN
+              </p>
+              <p className="text-sidebar-foreground/45 font-mono text-[10px] tracking-[0.14em] uppercase">
+                Session archive
+              </p>
+            </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden">
@@ -374,7 +388,7 @@ function HomePageContent() {
       <Sheet open={isPhoneLayout && sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent
           side="bottom"
-          className="max-h-[75vh] rounded-t-3xl border-t p-0 [&>button]:top-3 [&>button]:right-3"
+          className="bg-sidebar max-h-[75vh] rounded-t-3xl border-t p-0 [&>button]:top-3 [&>button]:right-3"
         >
           <SheetHeader className="border-b px-4 py-3 text-left">
             <SheetTitle className="flex items-center gap-2 text-sm tracking-tight">

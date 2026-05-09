@@ -93,8 +93,11 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
       const sources = asArray(structuredContent.sources)
       return (
         <div className="space-y-3 text-sm">
-          <div>
-            <p className="text-base font-semibold">
+          <div className="bg-surface-2/50 rounded-xl border p-4">
+            <p className="text-primary font-mono text-[10px] tracking-[0.18em] uppercase">
+              Research report
+            </p>
+            <p className="mt-1 text-base font-semibold">
               {String(structuredContent.title ?? "Research Report")}
             </p>
             <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
@@ -108,12 +111,20 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
                 {findings.map((item, index) => {
                   const finding = item as Record<string, unknown>
                   return (
-                    <div key={`finding-${index}`} className="rounded-xl border p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium">
+                    <div
+                      key={`finding-${index}`}
+                      className="bg-surface-1 border-border/70 rounded-xl border p-3"
+                    >
+                      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <p className="min-w-0 flex-1 font-medium">
                           {String(finding.claim ?? `Finding ${index + 1}`)}
                         </p>
-                        <Badge variant="outline">{String(finding.confidence ?? "unknown")}</Badge>
+                        <Badge
+                          variant="outline"
+                          className="w-auto max-w-full shrink rounded-lg text-left leading-relaxed break-words whitespace-normal sm:max-w-[44%] sm:justify-start"
+                        >
+                          {String(finding.confidence ?? "unknown")}
+                        </Badge>
                       </div>
                       <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
                         {String(finding.evidence ?? "")}
@@ -132,7 +143,10 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
                   const source = item as Record<string, unknown>
                   const url = String(source.url ?? "")
                   return (
-                    <div key={`source-${index}`} className="rounded-xl border p-3">
+                    <div
+                      key={`source-${index}`}
+                      className="bg-surface-1 border-border/70 rounded-xl border p-3"
+                    >
                       <a
                         className="font-medium underline underline-offset-4"
                         href={url}
@@ -187,12 +201,18 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
                 {findings.map((item, index) => {
                   const finding = item as Record<string, unknown>
                   return (
-                    <div key={`review-${index}`} className="rounded-xl border p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium">
+                    <div
+                      key={`review-${index}`}
+                      className="bg-surface-1 border-border/70 rounded-xl border p-3"
+                    >
+                      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <p className="min-w-0 flex-1 font-medium">
                           {String(finding.title ?? `Item ${index + 1}`)}
                         </p>
-                        <Badge variant="outline">
+                        <Badge
+                          variant="outline"
+                          className="w-auto max-w-full shrink rounded-lg text-left leading-relaxed break-words whitespace-normal sm:max-w-[44%] sm:justify-start"
+                        >
                           {String(finding.severity ?? finding.priority ?? "info")}
                         </Badge>
                       </div>
@@ -228,7 +248,7 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
     if (!isStructuredDraft || !looksLikeJsonDraft(message.content || "")) return null
 
     return (
-      <div className="bg-muted/30 rounded-xl border px-3 py-3 text-sm">
+      <div className="bg-surface-2/60 rounded-xl border px-3 py-3 text-sm">
         <div className="flex items-start gap-2.5">
           <span className="bg-primary mt-1.5 h-2 w-2 shrink-0 animate-pulse rounded-full" />
           <div className="min-w-0">
@@ -248,7 +268,7 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
       {!isUser && (
         <button
           onClick={copyToClipboard}
-          className="hover:bg-muted text-muted-foreground/40 hover:text-foreground absolute -top-1 right-0 rounded-md p-1.5 opacity-0 transition-all group-hover:opacity-100"
+          className="hover:bg-surface-2 text-muted-foreground/40 hover:text-foreground hover:border-border absolute -top-1 right-0 rounded-md border border-transparent p-1.5 opacity-0 transition-all group-hover:opacity-100"
           aria-label="Copy message"
         >
           {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
@@ -257,14 +277,14 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
       {showHeader ? (
         <div
           className={cn(
-            "text-muted-foreground flex items-center gap-2 text-xs",
+            "text-muted-foreground flex items-center gap-2 font-mono text-[10px] tracking-[0.12em] uppercase",
             isUser && "ml-auto w-fit flex-row-reverse text-right"
           )}
         >
           <div
             className={cn(
-              "flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
-              isUser ? "bg-primary/20" : "bg-primary/10"
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded-md border",
+              isUser ? "border-primary/20 bg-primary/20" : "border-primary/20 bg-primary/10"
             )}
           >
             {isUser ? (
@@ -273,7 +293,7 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
               <RekdinIcon className="text-primary h-3 w-3" />
             )}
           </div>
-          <span className="text-[11px] font-medium">{isUser ? "You" : "Rekdin"}</span>
+          <span className="font-semibold">{isUser ? "You" : "Rekdin"}</span>
           {message.metadata?.agentType && !isUser ? (
             <Badge variant="outline" className="text-[0.65rem] tracking-wide uppercase">
               {message.metadata.agentType}
@@ -285,8 +305,8 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
         className={cn(
           "overflow-hidden transition",
           isUser
-            ? "bg-primary text-primary-foreground ml-auto max-w-[82%] rounded-2xl px-4 py-3 shadow-sm"
-            : "w-full px-0 py-0"
+            ? "bg-primary text-primary-foreground ml-auto max-w-[82%] rounded-2xl rounded-tr-md px-4 py-3 shadow-sm"
+            : "bg-surface-1/40 border-border/50 w-full rounded-2xl rounded-tl-md border px-4 py-4"
         )}
       >
         <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden">
@@ -313,7 +333,7 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
 
           {message.toolCalls && message.toolCalls.length > 0 && (
             <details className="mt-2">
-              <summary className="border-primary/30 text-muted-foreground hover:text-foreground cursor-pointer list-none border-l-2 pl-2 text-[11px] font-medium select-none">
+              <summary className="border-primary/30 text-muted-foreground hover:text-foreground cursor-pointer list-none border-l-2 pl-2 font-mono text-[10px] font-medium tracking-[0.08em] uppercase select-none">
                 {message.toolCalls.length} tool call
                 {message.toolCalls.length > 1 ? "s" : ""}
               </summary>
@@ -321,7 +341,7 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
                 {message.toolCalls.map((call) => (
                   <span
                     key={call.id ?? call.name}
-                    className="bg-muted/60 text-muted-foreground rounded-md border px-2 py-0.5 text-[11px]"
+                    className="bg-surface-2 text-muted-foreground rounded-md border px-2 py-0.5 font-mono text-[10px]"
                   >
                     {toolLabels[call.name] ?? call.name}
                   </span>

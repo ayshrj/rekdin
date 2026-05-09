@@ -96,9 +96,14 @@ function ToolApprovalComposer({
   const secondaryEntries = Object.entries(args).filter(([key]) => !hiddenKeys.has(key))
 
   return (
-    <div className="bg-background ring-border/50 rounded-xl border shadow-(--shadow-float) ring-1">
-      <div className="border-b px-3 py-2.5">
-        <p className="text-foreground text-xs font-semibold">Approve tool execution</p>
+    <div className="bg-surface-1 border-status-warning/35 overflow-hidden rounded-xl border shadow-(--shadow-float)">
+      <div className="bg-status-warning/10 border-status-warning/25 border-b px-3 py-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-status-warning font-mono text-[10px] font-semibold tracking-[0.18em] uppercase">
+            Approval required
+          </p>
+          <span className="rk-status-warning">Manual gate</span>
+        </div>
         <p className="text-muted-foreground mt-0.5 text-[11px]">
           Rekdin wants to run{" "}
           <span className="text-foreground font-mono font-semibold">{approval.toolName}</span>.
@@ -110,7 +115,7 @@ function ToolApprovalComposer({
         {primaryEntries.length > 0 ? (
           <div className="grid gap-2">
             {primaryEntries.map(([key, value]) => (
-              <div key={key} className="bg-muted/30 rounded-lg border px-3 py-2">
+              <div key={key} className="bg-surface-2/70 rounded-lg border px-3 py-2">
                 <p className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">
                   {formatApprovalLabel(key)}
                 </p>
@@ -124,7 +129,7 @@ function ToolApprovalComposer({
 
         {contentEntry ? (
           <div className="overflow-hidden rounded-lg border">
-            <div className="bg-muted/30 border-b px-3 py-2">
+            <div className="bg-surface-2/70 border-b px-3 py-2">
               <p className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">
                 {formatApprovalLabel(contentEntry[0])} preview
               </p>
@@ -137,7 +142,7 @@ function ToolApprovalComposer({
 
         {secondaryEntries.length > 0 ? (
           <div className="overflow-hidden rounded-lg border">
-            <div className="bg-muted/30 border-b px-3 py-2">
+            <div className="bg-surface-2/70 border-b px-3 py-2">
               <p className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">
                 Additional details
               </p>
@@ -146,7 +151,7 @@ function ToolApprovalComposer({
               {secondaryEntries.map(([key, value]) => (
                 <div key={key} className="grid gap-1 px-3 py-2">
                   <p className="text-muted-foreground text-xs">{formatApprovalLabel(key)}</p>
-                  <p className="text-foreground text-xs break-words">
+                  <p className="text-foreground text-xs wrap-break-word">
                     {formatApprovalValue(value)}
                   </p>
                 </div>
@@ -156,7 +161,7 @@ function ToolApprovalComposer({
         ) : null}
       </div>
 
-      <div className="bg-muted/30 flex items-center justify-end gap-2 border-t px-3 py-2">
+      <div className="bg-surface-2/70 flex items-center justify-end gap-2 border-t px-3 py-2">
         <Button type="button" variant="outline" size="sm" onClick={onReject}>
           Reject
         </Button>
@@ -511,7 +516,7 @@ export function ChatPanel() {
 
   if (!hydrated) {
     return (
-      <div className="bg-card flex h-full flex-col overflow-hidden rounded-xl border shadow-(--shadow-panel)">
+      <div className="rk-panel flex h-full flex-col overflow-hidden">
         <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">
           Loading…
         </div>
@@ -535,10 +540,7 @@ export function ChatPanel() {
   const errorParsed = hasError && lastMsg ? parseLLMError(lastMsg.content ?? "") : null
 
   return (
-    <div
-      ref={panelRef}
-      className="bg-card flex h-full flex-col overflow-hidden rounded-xl border shadow-(--shadow-panel)"
-    >
+    <div ref={panelRef} className="rk-panel flex h-full flex-col overflow-hidden">
       <div
         ref={scrollViewportRef}
         className="[&::-webkit-scrollbar-thumb]:bg-border min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent"
@@ -546,14 +548,15 @@ export function ChatPanel() {
         <div ref={innerContentRef} className="flex w-full flex-col gap-3">
           {messages.length === 0 ? (
             /* ── Empty state ─────────────────────────────────── */
-            <div className="mx-auto w-full max-w-sm py-6">
+            <div className="mx-auto w-full max-w-lg py-6">
               {/* Hero row */}
               <div className="mb-5 flex items-center gap-3">
-                <div className="bg-primary/10 shrink-0 rounded-xl p-2.5">
+                <div className="bg-primary/10 ring-primary/20 shrink-0 rounded-xl p-2.5 ring-1">
                   <RekdinIcon className="text-primary h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-foreground text-sm font-bold">Rekdin</h3>
+                  <p className="rk-section-label">Ready workspace</p>
+                  <h3 className="text-foreground text-lg font-bold tracking-tight">Rekdin</h3>
                   <p className="text-muted-foreground text-xs">
                     AI research &amp; automation workspace
                   </p>
@@ -562,7 +565,7 @@ export function ChatPanel() {
 
               {/* API key warning */}
               {missingApiKeyMessage ? (
-                <div className="bg-muted/40 border-border mb-5 rounded-lg border px-4 py-3 text-left text-sm">
+                <div className="border-destructive/20 bg-destructive/5 mb-5 rounded-lg border px-4 py-3 text-left text-sm">
                   <div className="flex items-start gap-2">
                     <span className="bg-primary/10 text-primary mt-0.5 rounded-md p-1">
                       <Cog8Tooth className="h-4 w-4" />
@@ -579,16 +582,14 @@ export function ChatPanel() {
 
               {/* Capabilities grid */}
               <div className="mb-5">
-                <p className="text-muted-foreground mb-2 text-[11px] font-semibold tracking-wider uppercase">
-                  What it can do
-                </p>
+                <p className="rk-section-label mb-2">What it can do</p>
                 <div className="grid grid-cols-2 gap-1.5">
                   {capabilities.map((cap) => {
                     const Icon = cap.icon
                     return (
                       <div
                         key={cap.label}
-                        className="bg-muted/30 border-border/50 flex items-center gap-2 rounded-lg border px-2.5 py-2"
+                        className="bg-surface-2/70 border-border/60 flex items-center gap-2 rounded-lg border px-2.5 py-2"
                       >
                         <Icon className="text-primary h-3.5 w-3.5 shrink-0" />
                         <span className="text-foreground truncate text-xs font-medium">
@@ -602,9 +603,7 @@ export function ChatPanel() {
 
               {/* Workflow presets */}
               <div>
-                <p className="text-muted-foreground mb-2 text-[11px] font-semibold tracking-wider uppercase">
-                  Workflow presets
-                </p>
+                <p className="rk-section-label mb-2">Workflow presets</p>
                 <div className="space-y-1.5">
                   {workflowPresets.map((workflow) => (
                     <button
@@ -612,14 +611,14 @@ export function ChatPanel() {
                       type="button"
                       disabled={isLoading || isThinking}
                       onClick={() => void launchWorkflow(workflow.id)}
-                      className="border-border/60 bg-muted/30 hover:bg-muted/60 w-full cursor-pointer rounded-xl border p-3 text-left transition-colors disabled:pointer-events-none disabled:opacity-50"
+                      className="border-border/60 bg-surface-1 hover:bg-surface-2/70 w-full cursor-pointer rounded-xl border p-3 text-left transition-colors disabled:pointer-events-none disabled:opacity-50"
                     >
                       <div className="mb-0.5 flex items-center justify-between gap-2">
-                        <span className="text-foreground text-xs font-semibold">
+                        <span className="text-foreground min-w-0 truncate text-xs font-semibold">
                           {workflow.title}
                         </span>
                         {workflow.supportsBackground ? (
-                          <span className="bg-primary/10 text-primary shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold">
+                          <span className="bg-primary/10 text-primary shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold">
                             BG
                           </span>
                         ) : null}
@@ -643,7 +642,7 @@ export function ChatPanel() {
 
           {/* Thinking indicator — inline at bottom, never sticky */}
           {latestChunk ? (
-            <div className="bg-muted/40 flex items-start gap-2.5 rounded-xl border px-3 py-2.5">
+            <div className="bg-surface-2/70 flex items-start gap-2.5 rounded-xl border px-3 py-2.5">
               <span className="bg-primary mt-1.25 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
               <div className="min-w-0 flex-1">
                 <p className="text-muted-foreground mb-0.5 text-[10px] font-semibold tracking-wider uppercase">
@@ -659,7 +658,7 @@ export function ChatPanel() {
       </div>
 
       {/* ── Workflow presets bar ───────────────────────────────── */}
-      <div className="relative shrink-0 border-t">
+      <div className="bg-surface-1/80 relative shrink-0 border-t">
         {presetsCanScrollRight && (
           <div className="from-card pointer-events-none absolute top-0 right-0 z-10 h-full w-10 bg-linear-to-l to-transparent" />
         )}
@@ -673,7 +672,7 @@ export function ChatPanel() {
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 text-xs"
+                className="h-7 font-mono text-[10px] tracking-[0.08em] uppercase"
                 onClick={() => void launchWorkflow(workflow.id)}
                 disabled={isLoading || isThinking}
               >
@@ -684,7 +683,7 @@ export function ChatPanel() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="text-muted-foreground h-7 text-xs"
+                  className="text-muted-foreground h-7 font-mono text-[10px] tracking-[0.08em] uppercase"
                   onClick={() => void queueWorkflow(workflow.id)}
                   disabled={isLoading || isThinking || !currentSessionId}
                 >
@@ -737,14 +736,12 @@ export function ChatPanel() {
 
       {/* ── Input ─────────────────────────────────────────────── */}
       <div
-        className="px-3 pt-1 pb-3"
+        className="bg-surface-1/90 border-t px-3 pt-2 pb-3 backdrop-blur-xl"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
       >
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">
-              Tool policy
-            </p>
+            <p className="rk-section-label">Tool policy</p>
             <p className="text-muted-foreground truncate text-[11px]">
               {TOOL_POLICY_OPTIONS.find((option) => option.value === toolPolicy)?.description}
             </p>
@@ -754,7 +751,10 @@ export function ChatPanel() {
             onValueChange={(value) => setToolPolicy(value as ToolPolicyProfile)}
             disabled={isLoading || isThinking}
           >
-            <SelectTrigger size="sm" className="bg-background h-8 w-32">
+            <SelectTrigger
+              size="sm"
+              className="bg-surface-2 h-8 w-36 font-mono text-[10px] uppercase"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent side="top" align="end">
@@ -766,15 +766,15 @@ export function ChatPanel() {
             </SelectContent>
           </Select>
         </div>
-        <div className="bg-muted/30 text-muted-foreground mb-2 rounded-lg border px-2.5 py-1.5 text-[11px]">
-          Workspace:{" "}
-          <span className="text-foreground font-medium break-all">
+        <div className="bg-surface-2/70 text-muted-foreground mb-2 rounded-lg border px-2.5 py-1.5 text-[11px]">
+          <span className="rk-section-label mr-2">Workspace</span>
+          <span className="text-foreground font-mono break-all">
             {workspaceRoot || "Default app root"}
           </span>
         </div>
         {selectedWorkflowId ? (
-          <div className="bg-muted/40 text-muted-foreground mb-2 rounded-lg border px-2.5 py-1.5 text-[11px]">
-            Workflow preset selected:{" "}
+          <div className="bg-primary/10 border-primary/20 text-muted-foreground mb-2 rounded-lg border px-2.5 py-1.5 text-[11px]">
+            <span className="rk-section-label text-primary mr-2">Workflow</span>
             <span className="text-foreground font-medium">
               {workflowPresets.find((workflow) => workflow.id === selectedWorkflowId)?.title}
             </span>

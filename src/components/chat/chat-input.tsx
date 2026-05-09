@@ -124,10 +124,12 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
   return (
     <div className="relative">
       {showCommandSuggestions ? (
-        <div className="bg-popover text-popover-foreground absolute right-0 bottom-full left-0 z-30 mb-2 overflow-hidden rounded-xl border shadow-(--shadow-float)">
-          <div className="border-b px-3 py-2">
-            <p className="text-foreground text-xs font-semibold">Slash commands</p>
-            <p className="text-muted-foreground text-[11px]">Use ↑/↓ to choose, Enter to insert.</p>
+        <div className="bg-popover/95 text-popover-foreground absolute right-0 bottom-full left-0 z-30 mb-2 overflow-hidden rounded-xl border shadow-(--shadow-float) backdrop-blur-xl">
+          <div className="bg-surface-2/70 border-b px-3 py-2">
+            <p className="rk-section-label text-foreground">Slash commands</p>
+            <p className="text-muted-foreground mt-0.5 text-[11px]">
+              Use ↑/↓ to choose, Enter or Tab to insert.
+            </p>
           </div>
           <div className="max-h-64 overflow-y-auto p-1.5">
             {commandSuggestions.map((command, index) => (
@@ -138,13 +140,15 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
                 }}
                 type="button"
                 className={[
-                  "flex w-full items-start gap-3 rounded-lg px-2.5 py-2 text-left transition-colors",
-                  index === activeCommandIndex ? "bg-muted" : "hover:bg-muted/70",
+                  "flex w-full items-start gap-3 rounded-lg border border-transparent px-2.5 py-2 text-left transition-colors",
+                  index === activeCommandIndex
+                    ? "bg-primary/10 border-primary/20 text-primary"
+                    : "hover:bg-muted/70",
                 ].join(" ")}
                 onMouseEnter={() => setActiveCommandIndex(index)}
                 onClick={() => selectCommand(command)}
               >
-                <span className="bg-primary/10 text-primary mt-0.5 rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold">
+                <span className="bg-surface-0 text-primary border-primary/20 mt-0.5 rounded-md border px-1.5 py-0.5 font-mono text-xs font-semibold">
                   /{command.id}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -165,7 +169,7 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
       ) : null}
       <div
         id="tour-chat-input"
-        className="bg-background ring-border/50 focus-within:ring-primary/30 rounded-xl border shadow-(--shadow-float) ring-1 transition-shadow"
+        className="bg-surface-1/95 ring-border/50 focus-within:ring-primary/30 rounded-xl border shadow-(--shadow-float) ring-1 backdrop-blur-xl transition-shadow"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {attachments.length > 0 && (
@@ -174,7 +178,7 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
               <Badge
                 key={file.name}
                 variant="secondary"
-                className="cursor-pointer"
+                className="border-border/70 bg-surface-2 cursor-pointer font-mono text-[10px]"
                 onClick={() =>
                   setAttachments((prev) => prev.filter((item) => item.name !== file.name))
                 }
@@ -189,7 +193,7 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
             type="button"
             size="icon"
             variant="ghost"
-            className="text-muted-foreground hover:text-foreground h-7 w-7 shrink-0 rounded-lg"
+            className="text-muted-foreground hover:text-foreground hover:bg-surface-2 h-8 w-8 shrink-0 rounded-lg"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || isLoading}
           >
@@ -203,12 +207,12 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
             onKeyDown={handleKeyDown}
             placeholder="Ask Rekdin to research or run commands..."
             disabled={disabled || isLoading}
-            className="placeholder:text-muted-foreground/60 max-h-36 min-h-18 flex-1 resize-none border-0 bg-transparent p-1.5 text-base focus-visible:ring-0 focus-visible:outline-none sm:text-sm"
+            className="placeholder:text-muted-foreground/60 max-h-36 min-h-18 flex-1 resize-none border-0 bg-transparent p-1.5 text-base leading-relaxed focus-visible:ring-0 focus-visible:outline-none sm:text-sm"
           />
           <Button
             onClick={() => void handleSend()}
             size="icon"
-            className="bg-primary text-primary-foreground hover:bg-primary/90 h-8 w-8 shrink-0 rounded-lg disabled:opacity-40"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 w-9 shrink-0 rounded-lg shadow-sm disabled:opacity-40"
             disabled={
               disabled || isLoading || (value.trim().length === 0 && attachments.length === 0)
             }
@@ -231,7 +235,9 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
             event.target.value = ""
           }}
         />
-        <p className="text-muted-foreground/60 px-3 pb-2 text-[11px]">↵ Send · Shift+↵ New line</p>
+        <p className="text-muted-foreground/60 px-3 pb-2 font-mono text-[10px] tracking-[0.08em] uppercase">
+          Enter send · Shift+Enter newline · / commands
+        </p>
       </div>
     </div>
   )

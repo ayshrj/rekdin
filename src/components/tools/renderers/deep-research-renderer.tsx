@@ -178,16 +178,16 @@ export const DeepResearchRenderer: React.FC<DeepResearchRendererProps> = ({ part
                     className="border-border hover:bg-muted/40 rounded-lg border p-4 transition-colors"
                   >
                     <div className="space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-base leading-tight font-medium">
+                      <div className="flex min-w-0 items-start gap-2">
+                        <h3 className="min-w-0 text-base leading-tight font-medium wrap-anywhere">
                           <a
                             href={source.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-tool-research hover:text-tool-research/80 flex items-center gap-1 hover:underline"
+                            className="text-tool-research hover:text-tool-research/80 inline hover:underline"
                           >
                             {source.title || source.url}
-                            <ExternalLink size={12} className="shrink-0" />
+                            <ExternalLink size={12} className="ml-1 inline shrink-0 align-[-1px]" />
                           </a>
                         </h3>
                       </div>
@@ -268,10 +268,10 @@ export const DeepResearchRenderer: React.FC<DeepResearchRendererProps> = ({ part
                     className="h-auto w-full"
                   />
                   <div className="border-border text-muted-foreground border-t p-3 text-xs">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Globe size={12} />
-                        <span className="truncate">{image.source || image.url}</span>
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Globe size={12} className="shrink-0" />
+                        <span className="min-w-0 truncate">{image.source || image.url}</span>
                       </div>
                       <a
                         href={image.url}

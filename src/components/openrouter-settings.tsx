@@ -668,7 +668,7 @@ export function OpenRouterSettings({
         <Button
           variant={triggerVariant}
           size={triggerSize}
-          className={cn("rounded-full", triggerClassName)}
+          className={cn("rounded-lg", triggerClassName)}
           aria-label={triggerAriaLabel}
         >
           <Settings className="h-4 w-4" />
@@ -676,7 +676,7 @@ export function OpenRouterSettings({
         </Button>
       </DialogTrigger>
       <DialogShell
-        className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] sm:w-auto sm:max-w-2xl"
+        className="bg-surface-1 w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] border shadow-(--shadow-float) sm:w-auto sm:max-w-3xl"
         footer={
           <>
             {onRestartTour ? (
@@ -711,7 +711,7 @@ export function OpenRouterSettings({
         }
         title={"Settings"}
         description={
-          "Configure model and upload settings for this local Rekdin server. Settings are persisted on the server and used by chat, uploads, and cleanup routes."
+          "Configure model, workspace, workflow, and upload settings for this local Rekdin server."
         }
       >
         <input
@@ -723,14 +723,14 @@ export function OpenRouterSettings({
         />
 
         {/* Tab bar */}
-        <div className="flex shrink-0 border-b px-6">
+        <div className="bg-surface-2/40 flex shrink-0 border-b px-6">
           {(["model", "workspace", "workflows", "uploads"] as const).map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setSettingsTab(tab)}
               className={cn(
-                "-mb-px border-b-2 px-4 py-3 text-sm font-medium capitalize transition-colors",
+                "-mb-px border-b-2 px-4 py-3 font-mono text-[10px] font-semibold tracking-[0.12em] uppercase transition-colors",
                 settingsTab === tab
                   ? "border-primary text-primary"
                   : "text-muted-foreground hover:text-foreground border-transparent"
@@ -772,7 +772,7 @@ export function OpenRouterSettings({
               </p>
             </div>
 
-            <div className="flex items-center justify-between gap-6 rounded-lg border px-3 py-2">
+            <div className="bg-surface-2/50 flex items-center justify-between gap-6 rounded-lg border px-3 py-2">
               <div className="min-w-0">
                 <Label className="text-sm">Live mode</Label>
                 <p className="text-muted-foreground text-xs">
@@ -826,7 +826,7 @@ export function OpenRouterSettings({
                       {isLoadingModels ? "Fetching..." : "Fetch models"}
                     </Button>
 
-                    <Command className="w-full max-w-full min-w-0 rounded-lg border shadow-md">
+                    <Command className="bg-surface-1 w-full max-w-full min-w-0 rounded-lg border shadow-md">
                       <CommandInput placeholder="Search models..." />
                       <CommandList className="max-w-full">
                         {models.length === 0 && (
@@ -932,7 +932,7 @@ export function OpenRouterSettings({
                       {isLoadingOpenAIModels ? "Fetching..." : "Fetch models"}
                     </Button>
 
-                    <Command className="w-full max-w-full min-w-0 rounded-lg border shadow-md">
+                    <Command className="bg-surface-1 w-full max-w-full min-w-0 rounded-lg border shadow-md">
                       <CommandInput placeholder="Search models..." />
                       <CommandList className="max-w-full">
                         {openAIModels.length === 0 && (
@@ -1091,9 +1091,9 @@ export function OpenRouterSettings({
           </div>
         ) : settingsTab === "workspace" ? (
           <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">
-            <div className="rounded-lg border px-3 py-3">
+            <div className="bg-surface-2/50 rounded-lg border px-3 py-3">
               <Label className="text-sm">Selected workspace</Label>
-              <p className="text-muted-foreground mt-1 text-xs break-all">
+              <p className="text-muted-foreground mt-1 font-mono text-xs break-all">
                 {workspaceRootDraft || "Default app root"}
               </p>
             </div>
@@ -1121,11 +1121,11 @@ export function OpenRouterSettings({
               </p>
             </div>
 
-            <div className="rounded-xl border">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
+            <div className="bg-surface-1 overflow-hidden rounded-xl border">
+              <div className="bg-surface-2/50 flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">Folder browser</p>
-                  <p className="text-muted-foreground truncate text-xs">
+                  <p className="text-sm font-semibold">Folder browser</p>
+                  <p className="text-muted-foreground truncate font-mono text-xs">
                     {workspaceBrowserPath || workspaceDefaultPath || "Loading..."}
                   </p>
                 </div>
@@ -1174,7 +1174,7 @@ export function OpenRouterSettings({
                       <button
                         key={directory.path}
                         type="button"
-                        className="hover:bg-muted/70 flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors"
+                        className="hover:bg-surface-2/70 flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors"
                         onClick={() => void browseWorkspace(directory.path)}
                       >
                         <span className="min-w-0 truncate">
@@ -1214,7 +1214,7 @@ export function OpenRouterSettings({
               </p>
             </div>
 
-            <div className="space-y-2 rounded-xl border p-3">
+            <div className="bg-surface-1 space-y-2 rounded-xl border p-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="workflow-title">Title</Label>
@@ -1305,8 +1305,8 @@ export function OpenRouterSettings({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-                  <div>
+                <div className="flex flex-col items-start gap-3 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
                     <Label className="text-sm">Background capable</Label>
                     <p className="text-muted-foreground text-xs">Allow queueing this workflow.</p>
                   </div>
@@ -1331,17 +1331,25 @@ export function OpenRouterSettings({
                 </div>
               ) : (
                 customWorkflowsDraft.map((workflow) => (
-                  <div key={workflow.id} className="rounded-xl border p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                  <div key={workflow.id} className="bg-surface-1 rounded-xl border p-3">
+                    <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
+                      <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold">{workflow.title}</p>
-                          <Badge variant="secondary">{workflow.mode}</Badge>
+                          <p className="min-w-0 text-sm font-semibold wrap-anywhere">
+                            {workflow.title}
+                          </p>
+                          <Badge variant="secondary" className="shrink-0">
+                            {workflow.mode}
+                          </Badge>
                           {workflow.toolPolicy ? (
-                            <Badge variant="outline">{workflow.toolPolicy}</Badge>
+                            <Badge variant="outline" className="shrink-0">
+                              {workflow.toolPolicy}
+                            </Badge>
                           ) : null}
                         </div>
-                        <p className="text-muted-foreground mt-1 text-xs">{workflow.description}</p>
+                        <p className="text-muted-foreground mt-1 text-xs wrap-anywhere">
+                          {workflow.description}
+                        </p>
                         <p className="text-muted-foreground mt-2 line-clamp-2 text-xs">
                           {workflow.prompt}
                         </p>
@@ -1350,6 +1358,7 @@ export function OpenRouterSettings({
                         type="button"
                         variant="ghost"
                         size="sm"
+                        className="shrink-0"
                         onClick={() => removeCustomWorkflow(workflow.id)}
                       >
                         Remove

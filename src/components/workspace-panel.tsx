@@ -64,10 +64,10 @@ function isResultEmpty(entry: ToolResultEntry): boolean {
 
 function ToolLoadingSkeleton({ toolName }: { toolName: string }) {
   return (
-    <div className="bg-card w-full space-y-4 rounded-2xl border p-4">
+    <div className="bg-surface-1 w-full space-y-4 rounded-2xl border p-4">
       <div className="flex items-center gap-2">
         <span className="bg-primary h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
-        <span className="text-muted-foreground text-xs font-medium">
+        <span className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
           {toolLabels[toolName] ?? toolName} — working…
         </span>
       </div>
@@ -657,9 +657,9 @@ export function WorkspacePanel() {
   }, [backgroundJobs, replayEvents, traces])
 
   return (
-    <div className="bg-card flex h-full min-w-0 overflow-hidden rounded-xl border shadow-(--shadow-panel)">
+    <div className="rk-panel flex h-full min-w-0 overflow-hidden">
       <motion.div
-        className="bg-muted/20 hidden shrink-0 overflow-y-auto border-r py-3 sm:block"
+        className="bg-surface-0/80 hidden shrink-0 overflow-y-auto border-r py-3 sm:block"
         initial={false}
         animate={{
           width: showTimeline ? 240 : 56,
@@ -670,7 +670,7 @@ export function WorkspacePanel() {
         <div className="mb-1 flex w-full items-center justify-between px-2">
           {showTimeline && (
             <motion.p
-              className="text-muted-foreground text-xs uppercase"
+              className="rk-section-label"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -684,7 +684,7 @@ export function WorkspacePanel() {
             variant="ghost"
             className={cn(
               !showTimeline && "mx-auto",
-              "text-muted-foreground hover:text-foreground cursor-pointer"
+              "text-muted-foreground hover:bg-surface-2 hover:text-foreground cursor-pointer"
             )}
           >
             <GalleryVerticalEnd className="size-4" />
@@ -699,10 +699,10 @@ export function WorkspacePanel() {
                 key={result.id}
                 type="button"
                 className={cn(
-                  "w-full rounded-md px-2.5 py-2 text-left text-xs transition-colors",
+                  "w-full rounded-md border border-transparent px-2.5 py-2 text-left transition-colors",
                   index === selectedIndex
-                    ? "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "border-primary/20 bg-primary/10 text-primary font-medium"
+                    : "text-muted-foreground hover:bg-surface-2 hover:text-foreground"
                 )}
                 onClick={() => {
                   handleStepChange(index)
@@ -717,10 +717,10 @@ export function WorkspacePanel() {
                       {result.status === "running" ? (
                         <span className="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full" />
                       ) : (
-                        <span className="text-muted-foreground text-[10px]">{result.status}</span>
+                        <span className="font-mono text-[10px]">{result.status}</span>
                       )}
                     </div>
-                    <p className="text-muted-foreground text-[10px]">
+                    <p className="text-muted-foreground font-mono text-[10px]">
                       {new Date(result.timestamp).toLocaleTimeString()}
                     </p>
                   </>
@@ -739,7 +739,7 @@ export function WorkspacePanel() {
       </motion.div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Header */}
-        <div className="flex h-12 shrink-0 items-center justify-between border-b px-4">
+        <div className="bg-surface-1/90 flex h-12 shrink-0 items-center justify-between border-b px-4">
           <div className="flex items-center gap-2">
             <h3 className="text-foreground text-sm font-semibold">
               {activeTab === "timeline"
@@ -753,22 +753,22 @@ export function WorkspacePanel() {
                     : "Activity"}
             </h3>
             {activeTab === "timeline" && toolResults.length > 0 && (
-              <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">
+              <span className="bg-surface-2 text-muted-foreground rounded-full px-2 py-0.5 font-mono text-[10px]">
                 {toolResults.length}
               </span>
             )}
             {activeTab === "artifacts" && artifacts.length > 0 && (
-              <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">
+              <span className="bg-surface-2 text-muted-foreground rounded-full px-2 py-0.5 font-mono text-[10px]">
                 {artifacts.length}
               </span>
             )}
             {activeTab === "timeline" && runningEntry ? (
-              <span className="border-primary/20 bg-primary/5 text-primary flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium">
+              <span className="border-primary/25 bg-primary/10 text-primary flex items-center gap-1.5 rounded-md border px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase">
                 <span className="bg-primary h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
                 {toolLabels[runningEntry.toolName] ?? runningEntry.toolName}
               </span>
             ) : activeEntry ? (
-              <span className="bg-muted/60 text-muted-foreground rounded-full border px-2 py-0.5 text-[11px]">
+              <span className="bg-surface-2 text-muted-foreground rounded-md border px-2 py-0.5 font-mono text-[10px]">
                 {toolLabels[activeEntry.toolName] ?? activeEntry.toolName}
               </span>
             ) : null}
@@ -802,7 +802,7 @@ export function WorkspacePanel() {
         </div>
 
         {/* Tab bar */}
-        <div className="bg-muted/20 flex shrink-0 items-center justify-between border-b px-2 sm:px-4">
+        <div className="bg-surface-2/50 flex shrink-0 items-center justify-between border-b px-2 sm:px-4">
           <div className="flex min-w-0 flex-1">
             {[
               { id: "timeline", label: "Timeline", icon: GalleryVerticalEnd },
@@ -816,7 +816,7 @@ export function WorkspacePanel() {
                   type="button"
                   onClick={() => setActiveTab(tab.id as typeof activeTab)}
                   className={cn(
-                    "flex h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 border-b-2 px-2 text-[11px] font-medium transition-colors sm:h-10 sm:flex-none sm:flex-row sm:gap-1.5 sm:px-3 sm:text-xs",
+                    "flex h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 border-b-2 px-2 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase transition-colors sm:h-10 sm:flex-none sm:flex-row sm:gap-1.5 sm:px-3",
                     activeTab === tab.id
                       ? "border-primary text-primary"
                       : "text-muted-foreground hover:text-foreground border-transparent"
@@ -833,7 +833,7 @@ export function WorkspacePanel() {
               type="button"
               onClick={() => setShowDiagnostics((value) => !value)}
               className={cn(
-                "rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                "rounded-md px-2 py-1 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase transition-colors",
                 showDiagnostics
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:text-foreground"
@@ -855,7 +855,7 @@ export function WorkspacePanel() {
                 transition={{ duration: 0.15 }}
                 className="flex h-full flex-col items-center justify-center gap-3 text-center"
               >
-                <div className="bg-muted/50 rounded-xl border p-4">
+                <div className="bg-surface-2/70 rounded-xl border p-4">
                   <Globe className="text-muted-foreground/60 h-6 w-6" />
                 </div>
                 <div>
@@ -881,10 +881,10 @@ export function WorkspacePanel() {
                     <div key={result.id} id={resultId} className="scroll-mt-4">
                       <div
                         className={cn(
-                          "mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 text-xs transition-colors",
+                          "mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
                           index === selectedIndex
-                            ? "bg-primary/5 text-primary"
-                            : "text-muted-foreground"
+                            ? "border-primary/20 bg-primary/10 text-primary"
+                            : "text-muted-foreground border-transparent"
                         )}
                       >
                         <span>Step {index + 1}</span>
@@ -910,7 +910,7 @@ export function WorkspacePanel() {
                   transition={{ duration: 0.15, ease: "easeOut" }}
                   className="mt-4"
                 >
-                  <div className="text-muted-foreground mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="text-muted-foreground border-border/60 bg-surface-2/50 mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1 font-mono text-[10px]">
                     <span>{stepLabel}</span>
                     <span>{toolLabels[activeEntry.toolName] ?? activeEntry.toolName}</span>
                     <span>{new Date(activeEntry.timestamp).toLocaleTimeString()}</span>
@@ -942,10 +942,13 @@ export function WorkspacePanel() {
                       href={artifact.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="group bg-card hover:border-primary/30 hover:bg-primary/5 block rounded-lg border p-3 transition-colors"
+                      className="group bg-surface-1 hover:border-primary/30 hover:bg-primary/5 block rounded-lg border p-3 transition-colors"
                     >
-                      <div className="text-sm font-medium">{artifact.label}</div>
-                      <div className="text-muted-foreground text-xs wrap-anywhere">
+                      <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
+                        Artifact
+                      </div>
+                      <div className="mt-1 text-sm font-medium">{artifact.label}</div>
+                      <div className="text-muted-foreground font-mono text-[11px] wrap-anywhere">
                         {artifact.url}
                       </div>
                     </a>
@@ -968,15 +971,15 @@ export function WorkspacePanel() {
                         initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.18, ease: "easeOut", delay: index * 0.04 }}
-                        className="bg-card/60 hover:bg-card rounded-lg border p-3 transition-colors"
+                        className="bg-surface-1/80 hover:bg-surface-2/70 rounded-lg border p-3 transition-colors"
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2 text-sm font-medium">
-                            <PlayCircle className="size-4" />
+                        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="flex min-w-0 items-start gap-2 text-sm font-medium wrap-anywhere">
+                            <PlayCircle className="mt-0.5 size-4 shrink-0" />
                             {item.title}
                           </div>
                           {item.timestamp ? (
-                            <div className="text-muted-foreground flex items-center gap-1 text-xs">
+                            <div className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs">
                               <Clock className="size-3" />
                               {item.timestamp}
                             </div>
@@ -1011,8 +1014,8 @@ export function WorkspacePanel() {
                 {showDiagnostics && traces.length > 0 ? (
                   <div className="space-y-3">
                     {traces.map((trace) => (
-                      <div key={String(trace.id)} className="bg-card/60 rounded-lg border p-3">
-                        <div className="text-sm font-medium">
+                      <div key={String(trace.id)} className="bg-surface-1/80 rounded-lg border p-3">
+                        <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
                           Diagnostic trace · {String(trace.mode ?? "general")} ·{" "}
                           {String(trace.model ?? "model")}
                         </div>
@@ -1030,9 +1033,9 @@ export function WorkspacePanel() {
                     {replayEvents.map((event, index) => (
                       <div
                         key={`${String(event.id ?? index)}`}
-                        className="bg-card/60 rounded-lg border p-3"
+                        className="bg-surface-1/80 rounded-lg border p-3"
                       >
-                        <div className="text-sm font-medium">
+                        <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
                           Diagnostic event · {String(event.type ?? "event")}
                         </div>
                         <JsonTreeViewer
@@ -1058,7 +1061,7 @@ export function WorkspacePanel() {
             )}
           </AnimatePresence>
         </div>
-        <div className="bg-muted/20 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-2">
+        <div className="bg-surface-2/50 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-2">
           <ToggleGroup
             type="single"
             value={navigationMode}

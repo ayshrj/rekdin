@@ -114,16 +114,16 @@ export const WebSearchResultRenderer: React.FC<WebSearchResultRendererProps> = (
             className="border-border hover:bg-muted/40 rounded-lg border p-4 transition-colors"
           >
             <div className="space-y-2">
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="text-base leading-tight font-medium wrap-anywhere">
+              <div className="flex min-w-0 items-start gap-2">
+                <h3 className="min-w-0 text-base leading-tight font-medium wrap-anywhere">
                   <a
                     href={item.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-tool-search hover:text-tool-search/80 flex items-center gap-1 hover:underline"
+                    className="text-tool-search hover:text-tool-search/80 inline hover:underline"
                   >
                     {item.title}
-                    <ExternalLink size={12} className="shrink-0" />
+                    <ExternalLink size={12} className="ml-1 inline shrink-0 align-[-1px]" />
                   </a>
                 </h3>
               </div>

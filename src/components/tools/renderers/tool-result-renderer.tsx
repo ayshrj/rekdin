@@ -395,14 +395,14 @@ export function ToolResultRenderer({
             key={index}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             id={`tool-result-${(part as any).id ?? index}`}
-            className={`bg-card w-full min-w-0 space-y-3 rounded-2xl border p-3 shadow-sm ${accentClass}`}
+            className={`bg-surface-1 w-full min-w-0 space-y-3 rounded-2xl border p-3 shadow-sm ${accentClass}`}
           >
             <div className="w-full min-w-0">
               <Renderer part={part} onAction={onAction} />
             </div>
             {normalizedSteps.length > 0 ? (
               <div className="border-t pt-3">
-                <div className="text-muted-foreground mb-2 text-xs uppercase">Steps</div>
+                <div className="rk-section-label mb-2">Steps</div>
                 <ol className="space-y-3">
                   {normalizedSteps.map((step, stepIndex) => {
                     const timestamp =
@@ -414,10 +414,12 @@ export function ToolResultRenderer({
                         key={stepIndex}
                         className="before:bg-border relative pl-4 before:absolute before:top-1.75 before:left-0 before:h-1.5 before:w-1.5 before:rounded-full"
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <span className="text-foreground text-sm font-medium">{step.label}</span>
+                        <div className="flex flex-col items-start gap-1 sm:flex-row sm:justify-between sm:gap-3">
+                          <span className="text-foreground min-w-0 text-sm font-medium wrap-anywhere">
+                            {step.label}
+                          </span>
                           {timestamp ? (
-                            <span className="text-muted-foreground shrink-0 text-xs">
+                            <span className="text-muted-foreground shrink-0 font-mono text-[10px]">
                               {timestamp}
                             </span>
                           ) : null}

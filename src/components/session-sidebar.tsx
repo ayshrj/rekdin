@@ -79,7 +79,7 @@ export function SessionSidebar({
             placeholder="Search sessions…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className="border-sidebar-border bg-sidebar-accent/60 text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-sidebar-ring h-8 w-full rounded-md pl-8 text-xs"
+            className="border-sidebar-border bg-sidebar-accent/60 text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-sidebar-ring h-9 w-full rounded-lg pl-8 text-xs"
           />
         </div>
       </div>
@@ -130,20 +130,20 @@ export function SessionSidebar({
                       }
                     }}
                     className={cn(
-                      "group flex w-full cursor-pointer items-center justify-between rounded-md py-2.5 pr-1.5 pl-3 text-left transition-colors",
+                      "group flex w-full cursor-pointer items-center justify-between rounded-xl border py-3 pr-1.5 pl-3 text-left transition-colors",
                       session.id === currentSessionId
-                        ? "bg-sidebar-primary/15 text-sidebar-foreground"
-                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                        ? "border-sidebar-primary/30 bg-sidebar-primary/15 text-sidebar-foreground"
+                        : "text-sidebar-foreground/70 hover:border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-foreground border-transparent"
                     )}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm leading-snug font-medium">{session.title}</p>
+                      <p className="truncate text-sm leading-snug font-semibold">{session.title}</p>
                       {preview ? (
                         <p className="text-sidebar-foreground/40 mt-0.5 truncate text-[11px] leading-tight">
                           {preview}
                         </p>
                       ) : null}
-                      <div className="text-sidebar-foreground/35 mt-1 flex items-center gap-1.5 text-[10px]">
+                      <div className="text-sidebar-foreground/35 mt-2 flex items-center gap-1.5 font-mono text-[10px]">
                         <span>
                           {formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true })}
                         </span>
@@ -185,7 +185,7 @@ export function SessionSidebar({
           }}
           disabled={isLoading}
           variant="ghost"
-          className="bg-sidebar-accent/60 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground h-9 w-full justify-start gap-2 rounded-lg text-sm"
+          className="bg-sidebar-accent/60 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground h-10 w-full justify-start gap-2 rounded-lg text-sm"
         >
           {isLoading ? <Loader className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           New session
