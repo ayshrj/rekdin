@@ -57,14 +57,14 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
     id: "workspace",
     label: "Workspace",
     usage: "/workspace",
-    description: "Open workspace settings and the folder browser.",
+    description: "Open the workspace picker in the chat panel.",
     handlerType: "client_action",
   },
   {
     id: "settings",
     label: "Settings",
     usage: "/settings",
-    description: "Open model, workspace, workflow, and upload settings.",
+    description: "Open model, workflow, and upload settings.",
     handlerType: "client_action",
   },
   {

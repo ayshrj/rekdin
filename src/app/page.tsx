@@ -7,7 +7,6 @@ import { OpenRouterSettings } from "@/components/openrouter-settings"
 import { SessionSidebar } from "@/components/session-sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { TourAlertDialog, TourProvider, type TourStep, useTour } from "@/components/tour"
-import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import {
   Sheet,
@@ -18,7 +17,7 @@ import {
 } from "@/components/ui/sheet"
 import { WorkspacePanel } from "@/components/workspace-panel"
 import { useChat } from "@/contexts/chat-context"
-import { Clock, GalleryVerticalEnd, GitHub, Plus, Rekdin, Sparkles } from "@/lib/icons"
+import { Clock, GalleryVerticalEnd, GitHub, Rekdin, Sparkles } from "@/lib/icons"
 import { getProviderLabel } from "@/lib/llm-providers"
 import { cn } from "@/lib/utils"
 
@@ -157,66 +156,80 @@ function MobileNavButton({
 function DesktopRail({
   connected,
   providerLabel,
-  onOpenSessions,
+  sessionsOpen,
+  onToggleSessions,
   onRestartTour,
 }: {
   connected: boolean
   providerLabel: string
-  onOpenSessions: () => void
+  sessionsOpen: boolean
+  onToggleSessions: () => void
   onRestartTour: () => void
 }) {
   return (
-    <aside className="bg-surface-1 border-border hidden h-dvh w-[220px] shrink-0 flex-col border-r sm:flex">
-      <div className="px-4 pt-4">
-        <div className="flex items-center gap-3">
-          <div className="bg-surface-3 flex size-9 items-center justify-center rounded-lg">
+    <aside
+      className="bg-surface-1 border-border hidden h-dvh shrink-0 overflow-hidden border-r transition-[width] duration-200 ease-out sm:flex"
+      style={{ width: sessionsOpen ? 300 : 56 }}
+    >
+      <div className="border-border bg-surface-1 flex w-14 shrink-0 flex-col border-r">
+        <div className="flex h-14 items-center justify-center">
+          <div className="bg-surface-3 flex size-8 items-center justify-center rounded-lg">
             <Rekdin className="text-primary h-4 w-4" />
           </div>
-          <div className="min-w-0">
-            <p className="font-mono text-[11px] font-black tracking-[0.18em]">REKDIN</p>
-            <p className="text-muted-foreground truncate text-[11px]">Local workspace</p>
-          </div>
         </div>
-        <div className="mt-3">
-          <ConnectionBadge connected={connected} label={providerLabel} />
+
+        <div className="flex flex-col items-center gap-2 px-2 pt-2">
+          <button
+            id="tour-sidebar-btn"
+            type="button"
+            onClick={onToggleSessions}
+            aria-label={sessionsOpen ? "Collapse session history" : "Open session history"}
+            className={cn("rk-icon-button", sessionsOpen && "bg-primary/15 text-primary")}
+          >
+            <Clock className="h-4 w-4" />
+          </button>
+          <div id="tour-settings">
+            <OpenRouterSettings
+              triggerVariant="ghost"
+              triggerSize="icon"
+              triggerClassName="rk-icon-button"
+              onRestartTour={onRestartTour}
+            />
+          </div>
+          <ThemeToggle />
+          <a
+            href="https://github.com/ayshrj"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="GitHub profile"
+            className="rk-icon-button"
+          >
+            <GitHub className="h-4 w-4" />
+          </a>
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col justify-end gap-2 p-4">
-        <button
-          id="tour-sidebar-btn"
-          type="button"
-          onClick={onOpenSessions}
-          aria-label="Open session history"
-          className="rk-icon-button"
-        >
-          <Clock className="h-4 w-4" />
-        </button>
-        <div id="tour-settings">
-          <OpenRouterSettings
-            triggerVariant="ghost"
-            triggerSize="icon"
-            triggerClassName="rk-icon-button"
-            onRestartTour={onRestartTour}
-          />
+      {sessionsOpen ? (
+        <div className="bg-surface-2 flex min-w-0 flex-1 flex-col">
+          <div className="bg-surface-3 border-border flex h-14 shrink-0 items-center border-b px-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Sessions</p>
+              <div className="mt-1">
+                <ConnectionBadge connected={connected} label={providerLabel} />
+              </div>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <SessionSidebar />
+          </div>
         </div>
-        <ThemeToggle />
-        <a
-          href="https://github.com/ayshrj"
-          target="_blank"
-          rel="noreferrer"
-          aria-label="GitHub profile"
-          className="rk-icon-button"
-        >
-          <GitHub className="h-4 w-4" />
-        </a>
-      </div>
+      ) : null}
     </aside>
   )
 }
 
 function HomePageContent() {
-  const { connected, llmProvider, createSession } = useChat()
+  const { connected, llmProvider } = useChat()
   const isPhone = useIsPhone()
   const viewportReady = isPhone !== null
   const isPhoneLayout = isPhone === true
@@ -253,7 +266,8 @@ function HomePageContent() {
           <DesktopRail
             connected={connected}
             providerLabel={providerLabel}
-            onOpenSessions={() => setSidebarOpen(true)}
+            sessionsOpen={sidebarOpen}
+            onToggleSessions={() => setSidebarOpen((open) => !open)}
             onRestartTour={restartTour}
           />
           <main className="min-w-0 flex-1 overflow-hidden">
@@ -328,40 +342,6 @@ function HomePageContent() {
           </nav>
         </div>
       )}
-
-      {viewportReady && !isPhoneLayout && sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-black/70" onClick={() => setSidebarOpen(false)} />
-      )}
-
-      {viewportReady && !isPhoneLayout ? (
-        <aside
-          className={cn(
-            "bg-surface-2 border-border fixed inset-y-0 left-0 z-50 flex w-[220px] flex-col overflow-hidden border-r shadow-none transition-transform duration-200 ease-out",
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          )}
-        >
-          <div className="bg-surface-3 border-border flex h-12 shrink-0 items-center justify-between border-b px-3">
-            <p className="text-sm font-semibold">Sessions</p>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              className="rounded-md"
-              onClick={async () => {
-                await createSession()
-                setSidebarOpen(false)
-              }}
-              aria-label="Create a new session from sidebar"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <SessionSidebar onSessionOpen={() => setSidebarOpen(false)} />
-          </div>
-        </aside>
-      ) : null}
 
       <Sheet open={isPhoneLayout && sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent
