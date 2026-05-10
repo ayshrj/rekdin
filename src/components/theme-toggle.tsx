@@ -7,11 +7,30 @@ import { Button } from "@/components/ui/button"
 import { Moon, Sun } from "@/lib/icons"
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme()
+  const { resolvedTheme, setTheme } = useTheme()
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const toggleTheme = React.useCallback(() => {
-    setTheme(theme === "dark" ? "light" : "dark")
-  }, [setTheme, theme])
+    setTheme(resolvedTheme === "dark" ? "light" : "dark")
+  }, [resolvedTheme, setTheme])
+
+  if (!mounted) {
+    return (
+      <Button
+        variant="ghost"
+        size="icon"
+        disabled
+        aria-label="Toggle theme"
+        className="rk-icon-button opacity-70"
+      >
+        <Sun className="h-4 w-4" />
+      </Button>
+    )
+  }
 
   return (
     <Button variant="ghost" size="icon" onClick={toggleTheme} className="rk-icon-button">
