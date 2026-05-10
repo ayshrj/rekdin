@@ -16,6 +16,7 @@ import {
   ChevronRight,
   GalleryVerticalEnd,
   InformationCircle,
+  XMark,
 } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
@@ -57,8 +58,7 @@ function DirectoryRow({
       type="button"
       disabled={isProtected}
       className={cn(
-        "group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
-        "hover:bg-surface-4/80",
+        "rk-workspace-row group",
         "disabled:cursor-not-allowed disabled:hover:bg-transparent",
         isProtected && "text-muted-foreground"
       )}
@@ -117,7 +117,13 @@ function DirectoryRow({
   )
 }
 
-export function WorkspaceSelector({ active = true }: { active?: boolean }) {
+export function WorkspaceSelector({
+  active = true,
+  onClose,
+}: {
+  active?: boolean
+  onClose?: () => void
+}) {
   const { workspaceRoot, updateWorkspaceSettings } = useChat()
 
   const [workspaceRootDraft, setWorkspaceRootDraft] = React.useState("")
@@ -130,6 +136,9 @@ export function WorkspaceSelector({ active = true }: { active?: boolean }) {
   const [historyIndex, setHistoryIndex] = React.useState(-1)
 
   const historyIndexRef = React.useRef(-1)
+  const normalizedDraft = workspaceRootDraft.trim()
+  const normalizedWorkspaceRoot = (workspaceRoot ?? "").trim()
+  const hasUnsavedWorkspace = normalizedDraft !== normalizedWorkspaceRoot
 
   const browseWorkspace = React.useCallback(
     async (targetPath?: string, options: BrowseOptions = {}) => {
@@ -192,44 +201,80 @@ export function WorkspaceSelector({ active = true }: { active?: boolean }) {
   }, [active, browseWorkspace, workspaceRoot])
 
   const saveWorkspace = React.useCallback(() => {
-    updateWorkspaceSettings({ workspaceRoot: workspaceRootDraft })
+    const nextWorkspaceRoot = workspaceRootDraft.trim()
+    if (nextWorkspaceRoot === (workspaceRoot ?? "").trim()) return
+
+    updateWorkspaceSettings({ workspaceRoot: nextWorkspaceRoot })
+    setWorkspaceRootDraft(nextWorkspaceRoot)
     toast.success("Workspace saved")
-  }, [updateWorkspaceSettings, workspaceRootDraft])
+    onClose?.()
+  }, [onClose, updateWorkspaceSettings, workspaceRoot, workspaceRootDraft])
 
   const canGoBack = historyIndex > 0
   const canGoForward = historyIndex >= 0 && historyIndex < history.length - 1
 
   return (
     <TooltipProvider delayDuration={250}>
-      <div className="bg-surface-2 flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="border-border/80 bg-surface-2/95 shrink-0 border-b px-4 py-3">
+      <div className="rk-workspace-selector">
+        <div className="rk-workspace-selector-header">
           <div className="flex min-w-0 items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+              <div className="bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
                 <GalleryVerticalEnd className="h-4 w-4" />
               </div>
 
               <div className="min-w-0">
-                <h3 className="text-sm leading-none font-semibold">Workspace</h3>
-                <p className="text-muted-foreground mt-1 truncate font-mono text-xs">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h3 className="text-sm leading-none font-semibold">Workspace</h3>
+                  {hasUnsavedWorkspace ? (
+                    <span className="rk-workspace-unsaved">Unsaved</span>
+                  ) : null}
+                </div>
+                <p className="text-muted-foreground mt-1 truncate font-mono text-[11px]">
                   {workspaceRoot || "App root (default)"}
                 </p>
               </div>
             </div>
 
-            <Button type="button" size="sm" onClick={saveWorkspace}>
-              <Check className="h-3.5 w-3.5" />
-              Save
-            </Button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                disabled={!hasUnsavedWorkspace}
+                onClick={saveWorkspace}
+              >
+                <Check className="h-3.5 w-3.5" />
+                Save
+              </Button>
+              {onClose ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="rounded-md"
+                  onClick={onClose}
+                  aria-label="Close workspace selector"
+                >
+                  <XMark className="h-4 w-4" />
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
 
         <div className="rk-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
-          <div className="flex w-full flex-col gap-4">
-            <div className="border-border bg-surface-3/70 rounded-xl border p-3">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+            <div className="rk-workspace-card">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <Label className="text-muted-foreground text-xs">Selected workspace</Label>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-muted-foreground text-xs">Selected workspace</Label>
+                    {hasUnsavedWorkspace ? (
+                      <span className="rk-workspace-unsaved">Not saved</span>
+                    ) : (
+                      <span className="rk-workspace-badge">Active</span>
+                    )}
+                  </div>
                   <p className="text-foreground/80 mt-1 font-mono text-xs break-all">
                     {workspaceRootDraft || "App root (default)"}
                   </p>
@@ -252,7 +297,7 @@ export function WorkspaceSelector({ active = true }: { active?: boolean }) {
               </div>
             </div>
 
-            <div className="border-border bg-surface-3/70 rounded-xl border p-3">
+            <div className="rk-workspace-card">
               <div className="space-y-2">
                 <Label htmlFor="chat-workspace-root">Workspace root</Label>
 
@@ -281,8 +326,8 @@ export function WorkspaceSelector({ active = true }: { active?: boolean }) {
               </div>
             </div>
 
-            <div className="border-border bg-surface-3 overflow-hidden rounded-xl border">
-              <div className="border-border bg-surface-4/60 border-b p-3">
+            <div className="rk-workspace-browser">
+              <div className="rk-workspace-browser-header">
                 <div className="flex flex-col gap-3">
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">

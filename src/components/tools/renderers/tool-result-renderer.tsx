@@ -62,6 +62,74 @@ export interface ToolResultContentPart {
   [key: string]: any
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value))
+}
+
+function stringifyFallback(value: unknown) {
+  if (typeof value === "string") return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function normalizeContentPart(value: unknown, index: number): ToolResultContentPart {
+  if (isRecord(value)) {
+    const type = typeof value.type === "string" && value.type ? value.type : "generic"
+    const toolName = typeof value.toolName === "string" ? value.toolName : undefined
+    const name = typeof value.name === "string" ? value.name : undefined
+    return { ...value, type, toolName, name } as ToolResultContentPart
+  }
+
+  return {
+    type: "generic",
+    name: `content-${index + 1}`,
+    toolResult: value,
+  }
+}
+
+function normalizeContent(content: unknown): ToolResultContentPart[] {
+  if (!Array.isArray(content)) return []
+  return content.map((part, index) => normalizeContentPart(part, index))
+}
+
+class ToolRendererErrorBoundary extends React.Component<
+  {
+    part: ToolResultContentPart
+    children: React.ReactNode
+  },
+  { error: Error | null }
+> {
+  state = { error: null }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  componentDidUpdate(prevProps: { part: ToolResultContentPart }) {
+    if (prevProps.part !== this.props.part && this.state.error) {
+      this.setState({ error: null })
+    }
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children
+
+    return (
+      <div className="space-y-3">
+        <div className="border-status-warning/35 bg-status-warning/10 text-status-warning rounded-md border px-3 py-2 text-xs">
+          This tool result could not be rendered safely. Showing raw payload instead.
+        </div>
+        <pre className="rk-code-block max-h-72 text-[11px]">
+          {stringifyFallback(this.props.part.toolResult ?? this.props.part)}
+        </pre>
+      </div>
+    )
+  }
+}
+
 const CONTENT_RENDERERS: Record<
   string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -227,7 +295,9 @@ export function ToolResultRenderer({
   onAction?: (action: string, data: any) => void
   className?: string
 }) {
-  if (!content || content.length === 0) {
+  const safeContent = normalizeContent(content)
+
+  if (safeContent.length === 0) {
     return <div className="rk-empty-state p-4">No content to display</div>
   }
 
@@ -262,7 +332,7 @@ export function ToolResultRenderer({
 
   return (
     <div className={`w-full min-w-0 space-y-4 ${className}`}>
-      {content.map((part, index) => {
+      {safeContent.map((part, index) => {
         let rendererKey = part.type
 
         if (part.toolName) {
@@ -398,7 +468,9 @@ export function ToolResultRenderer({
             className={`rk-tool-card space-y-3 ${accentClass}`}
           >
             <div className="w-full min-w-0">
-              <Renderer part={part} onAction={onAction} />
+              <ToolRendererErrorBoundary part={part}>
+                <Renderer part={part} onAction={onAction} />
+              </ToolRendererErrorBoundary>
             </div>
             {normalizedSteps.length > 0 ? (
               <div className="border-border border-t pt-3">

@@ -964,6 +964,440 @@
     background: var(--surface-4);
     animation: rk-skeleton-pulse 1.5s ease-in-out infinite;
   }
+
+  /* ─── ChatPanel restructure utilities ───────────────────────────────────── */
+
+  /* Global header bar */
+  .rk-chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 46px;
+    padding: 0 14px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  /* Provider pill — shows active model + connection status in the header */
+  .rk-provider-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--surface-3);
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: var(--muted-foreground);
+    flex-shrink: 0;
+  }
+
+  .rk-provider-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Workflow chip bar — horizontal scrollable row above the composer */
+  .rk-workflow-bar-label {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+    opacity: 0.6;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .rk-workflow-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--surface-3);
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background 120ms ease-out,
+      color 120ms ease-out,
+      border-color 120ms ease-out;
+  }
+
+  .rk-workflow-chip:hover {
+    background: var(--surface-4);
+    color: var(--foreground);
+    border-color: var(--input);
+  }
+
+  .rk-workflow-chip--active {
+    background: var(--primary);
+    color: var(--primary-foreground);
+    border-color: var(--primary);
+  }
+
+  .rk-workflow-chip--active:hover {
+    background: #4a80ff;
+    border-color: #4a80ff;
+  }
+
+  .rk-workflow-bg-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: rgba(139, 127, 240, 0.18);
+    color: #8b7ff0;
+    font-size: 8px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+
+  /* "Queue" text button that appears beside BG-capable workflow chips */
+  .rk-workflow-queue-btn {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 6px;
+    border-radius: 9999px;
+    border: none;
+    background: transparent;
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 9px;
+    font-weight: 500;
+    color: #8b7ff0;
+    cursor: pointer;
+    transition: background 120ms ease-out;
+  }
+
+  .rk-workflow-queue-btn:hover {
+    background: rgba(139, 127, 240, 0.12);
+  }
+
+  .rk-workflow-queue-btn:disabled {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
+  /* Composer meta row — workspace path + policy on one line */
+  .rk-composer-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 5px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+
+  .rk-composer-path {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+    direction: rtl;
+    text-align: left;
+  }
+
+  .rk-composer-change-btn {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 10px;
+    color: var(--primary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    white-space: nowrap;
+    transition: opacity 120ms;
+  }
+
+  .rk-composer-change-btn:hover {
+    opacity: 0.7;
+  }
+
+  /* Policy segmented control */
+  .rk-policy-seg {
+    display: flex;
+    align-items: center;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px;
+    gap: 1px;
+    flex-shrink: 0;
+  }
+
+  .rk-policy-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 3px;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: transparent;
+    color: var(--muted-foreground);
+    transition:
+      background 120ms ease-out,
+      color 120ms ease-out;
+  }
+
+  .rk-policy-btn:hover:not(.rk-policy-btn--read):not(.rk-policy-btn--balanced):not(
+      .rk-policy-btn--auto
+    ) {
+    background: var(--surface-4);
+    color: var(--foreground);
+  }
+
+  .rk-policy-btn:disabled {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
+  .rk-policy-btn--read {
+    background: var(--surface-4);
+    color: var(--foreground);
+  }
+
+  .rk-policy-btn--balanced {
+    background: rgba(232, 160, 32, 0.14);
+    color: var(--status-warning);
+  }
+
+  .rk-policy-btn--auto {
+    background: rgba(59, 114, 246, 0.14);
+    color: var(--primary);
+  }
+
+  .rk-policy-icon {
+    width: 11px;
+    height: 11px;
+    flex-shrink: 0;
+    opacity: 0.82;
+    transition: opacity 120ms ease-out;
+  }
+
+  .rk-policy-btn:hover .rk-policy-icon,
+  .rk-policy-btn--read .rk-policy-icon,
+  .rk-policy-btn--balanced .rk-policy-icon,
+  .rk-policy-btn--auto .rk-policy-icon {
+    opacity: 1;
+  }
+
+  /* Selected workflow card — appears between meta row and input */
+  .rk-selected-workflow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 6px 12px 0;
+    padding: 8px 10px;
+    border-radius: 7px;
+    background: rgba(59, 114, 246, 0.08);
+    border: 1px solid rgba(59, 114, 246, 0.2);
+  }
+
+  /* Composer outer shell — wraps workflow bar + meta row + input */
+  .rk-composer-shell {
+    flex-shrink: 0;
+    background: var(--surface-2);
+    border-top: 1px solid var(--border);
+  }
+
+  .rk-workspace-selector {
+    @apply bg-surface-2 flex min-h-0 flex-1 flex-col overflow-hidden;
+  }
+
+  .rk-workspace-selector-header {
+    @apply border-border/80 bg-surface-2/95 shrink-0 border-b px-4 py-3;
+  }
+
+  .rk-workspace-card {
+    @apply border-border bg-surface-3/70 rounded-lg border p-3;
+  }
+
+  .rk-workspace-browser {
+    @apply border-border bg-surface-3 overflow-hidden rounded-lg border;
+  }
+
+  .rk-workspace-browser-header {
+    @apply border-border bg-surface-4/60 border-b p-3;
+  }
+
+  .rk-workspace-row {
+    @apply hover:bg-surface-4/80 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors;
+  }
+
+  .rk-workspace-badge {
+    @apply bg-status-success/10 text-status-success inline-flex rounded-full px-1.5 py-0.5 font-mono text-[10px] font-medium;
+  }
+
+  .rk-workspace-unsaved {
+    @apply bg-status-warning/10 text-status-warning inline-flex rounded-full px-1.5 py-0.5 font-mono text-[10px] font-medium;
+  }
+
+  /* Preset tile — in the empty state workflow grid */
+  .rk-preset-tile {
+    height: 76px;
+    width: 100%;
+    cursor: pointer;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-3);
+    padding: 12px 14px;
+    text-align: left;
+    transition:
+      background 120ms ease-out,
+      border-color 120ms ease-out;
+  }
+
+  .rk-preset-tile:hover {
+    background: var(--surface-4);
+    border-color: var(--input);
+  }
+
+  .rk-preset-tile:disabled {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  /* Thinking indicator — inline in message stream */
+  .rk-thinking-bar {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(59, 114, 246, 0.14);
+    background: rgba(59, 114, 246, 0.06);
+  }
+
+  .rk-thinking-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--primary);
+    flex-shrink: 0;
+    margin-top: 3px;
+    animation: rk-pulse-dot 1.5s ease-in-out infinite;
+  }
+
+  .rk-thinking-label {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+    margin-bottom: 2px;
+    opacity: 0.7;
+  }
+
+  .rk-thinking-text {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 11px;
+    font-weight: 300;
+    color: var(--muted-foreground);
+    line-height: 1.55;
+  }
+
+  /* ─── ChatInput utilities ────────────────────────────────────────────────── */
+
+  /* Slash command dropdown */
+  .rk-command-popover {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    margin-bottom: 6px;
+    background: var(--surface-5);
+    border: 1px solid var(--input);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: none;
+  }
+
+  .rk-command-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    height: 36px;
+    padding: 0 10px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: background 120ms ease-out;
+  }
+
+  .rk-command-item--active {
+    background: var(--surface-4);
+  }
+
+  .rk-command-item:hover:not(.rk-command-item--active) {
+    background: var(--surface-4);
+  }
+
+  .rk-command-name {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--foreground);
+    flex-shrink: 0;
+  }
+
+  .rk-command-desc {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 11px;
+    font-weight: 300;
+    color: var(--muted-foreground);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  /* Input container */
+  .rk-input-container {
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition: border-color 150ms ease-out;
+  }
+
+  .rk-input-container:focus-within {
+    border-color: rgba(59, 114, 246, 0.4);
+  }
 } /* end @layer utilities */
 
 /* ─── Keyframes (outside @layer so they are always registered) ──────────────── */

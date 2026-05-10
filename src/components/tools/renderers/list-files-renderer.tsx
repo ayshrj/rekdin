@@ -34,6 +34,35 @@ interface TreeNode {
 
 const EMPTY_FILE_ENTRIES: FileEntry[] = []
 
+function normalizeFileEntry(entry: unknown, index: number): FileEntry | null {
+  if (!entry || typeof entry !== "object") return null
+
+  const record = entry as Partial<FileEntry>
+  const name = typeof record.name === "string" && record.name.trim() ? record.name : undefined
+  const path = typeof record.path === "string" && record.path.trim() ? record.path : name
+  if (!path) return null
+
+  const type = record.type === "directory" || record.type === "file" ? record.type : "file"
+
+  return {
+    name: name ?? path.split("/").filter(Boolean).pop() ?? `entry-${index + 1}`,
+    path,
+    type,
+    size: typeof record.size === "number" ? record.size : 0,
+    modified: typeof record.modified === "string" ? record.modified : "",
+    protected: record.protected,
+    skipped: record.skipped,
+    reason: record.reason,
+  }
+}
+
+function normalizeFileEntries(files: unknown): FileEntry[] {
+  if (!Array.isArray(files)) return EMPTY_FILE_ENTRIES
+  return files
+    .map((entry, index) => normalizeFileEntry(entry, index))
+    .filter((entry): entry is FileEntry => entry !== null)
+}
+
 function buildTree(files: FileEntry[]): TreeNode[] {
   const root: TreeNode[] = []
   const map = new Map<string, TreeNode>()
@@ -189,11 +218,11 @@ export const ListFilesRenderer: React.FC<{
   part: ToolResultContentPart
   onAction?: (action: string, data: unknown) => void
 }> = ({ part }) => {
-  const result = part.toolResult as { path?: string; files?: FileEntry[] } | undefined
+  const result = part.toolResult as { path?: string; files?: unknown } | undefined
 
   const rootPath: string =
     result?.path ?? (part.toolInput as { path?: string } | undefined)?.path ?? "."
-  const files: FileEntry[] = result?.files ?? EMPTY_FILE_ENTRIES
+  const files = React.useMemo(() => normalizeFileEntries(result?.files), [result?.files])
   const tree = React.useMemo(() => buildTree(files), [files])
 
   const totalFiles = files.filter((f) => f.type === "file").length

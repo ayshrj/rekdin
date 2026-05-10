@@ -333,7 +333,7 @@ function summarizeAssistantOutcome(message?: string | null) {
  * Renders Rekdin's inspection surface: live tool results, background jobs, replay events, traces,
  * and export controls for the active chat session.
  */
-export function WorkspacePanel() {
+export function WorkspacePanel({ onChangeWorkspace }: { onChangeWorkspace?: () => void }) {
   const { toolResults } = useToolResults()
   const { currentSessionId, messages } = useChat()
   const [selectedIndex, setSelectedIndex] = React.useState(0)
@@ -693,9 +693,22 @@ export function WorkspacePanel() {
               </span>
             ) : null}
           </div>
-          <div className="hidden items-center gap-1 sm:flex">
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 rounded-md text-xs"
+              onClick={
+                onChangeWorkspace ??
+                (() => window.dispatchEvent(new CustomEvent("rekdin:open-workspace")))
+              }
+            >
+              <Globe className="h-3 w-3" />
+              Root
+            </Button>
             {currentSessionId ? (
-              <>
+              <div className="hidden items-center gap-1 sm:flex">
                 <Button
                   type="button"
                   variant="ghost"
@@ -716,7 +729,7 @@ export function WorkspacePanel() {
                   <ClipboardDocumentList className="h-3 w-3" />
                   HTML
                 </Button>
-              </>
+              </div>
             ) : null}
           </div>
         </div>

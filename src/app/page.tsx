@@ -254,6 +254,17 @@ function HomePageContent() {
   const { restartTour } = useTour()
 
   const providerLabel = getProviderLabel(llmProvider)
+  const openWorkspaceSelector = React.useCallback(() => {
+    if (isPhoneLayout) {
+      setMobilePanel("chat")
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("rekdin:open-workspace"))
+      }, 0)
+      return
+    }
+
+    window.dispatchEvent(new CustomEvent("rekdin:open-workspace"))
+  }, [isPhoneLayout])
 
   return (
     <div className="bg-background text-foreground flex h-dvh w-dvw overflow-hidden">
@@ -288,7 +299,7 @@ function HomePageContent() {
               />
               <ResizablePanel id="workspace" minSize={28} className="min-h-0 min-w-[360px]">
                 <section id="tour-workspace-panel" className="h-full min-h-0 min-w-0">
-                  <WorkspacePanel />
+                  <WorkspacePanel onChangeWorkspace={openWorkspaceSelector} />
                 </section>
               </ResizablePanel>
             </ResizablePanelGroup>
@@ -303,7 +314,7 @@ function HomePageContent() {
               </div>
             ) : (
               <div className="h-full">
-                <WorkspacePanel />
+                <WorkspacePanel onChangeWorkspace={openWorkspaceSelector} />
               </div>
             )}
           </main>
