@@ -258,7 +258,7 @@ export const ListFilesRenderer: React.FC<{
       {tree.length === 0 ? (
         <div className="text-muted-foreground px-3 py-4 text-xs italic">Empty directory</div>
       ) : (
-        <div className="max-h-[60vh] overflow-auto py-1">
+        <div className="rk-scrollbar max-h-[60vh] overflow-auto py-1">
           {tree.map((node) => (
             <TreeNodeRow key={node.path} node={node} depth={0} defaultOpen={true} />
           ))}

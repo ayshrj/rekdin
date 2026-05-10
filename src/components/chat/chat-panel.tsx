@@ -225,6 +225,70 @@ function ProviderPill({
   )
 }
 
+function getOverflowValue(element: HTMLElement, axis: "x" | "y") {
+  const style = window.getComputedStyle(element)
+  return axis === "x" ? style.overflowX : style.overflowY
+}
+
+function allowsScroll(element: HTMLElement, axis: "x" | "y") {
+  const overflow = getOverflowValue(element, axis)
+  return overflow === "auto" || overflow === "scroll" || overflow === "overlay"
+}
+
+function canScrollInDirection(element: HTMLElement, axis: "x" | "y", delta: number) {
+  if (delta === 0 || !allowsScroll(element, axis)) return false
+
+  if (axis === "y") {
+    if (element.scrollHeight <= element.clientHeight + 1) return false
+    if (delta < 0) return element.scrollTop > 0
+    return element.scrollTop + element.clientHeight < element.scrollHeight - 1
+  }
+
+  if (element.scrollWidth <= element.clientWidth + 1) return false
+  if (delta < 0) return element.scrollLeft > 0
+  return element.scrollLeft + element.clientWidth < element.scrollWidth - 1
+}
+
+function getNestedWheelTarget({
+  target,
+  boundary,
+  viewport,
+  deltaX,
+  deltaY,
+}: {
+  target: EventTarget | null
+  boundary: HTMLElement
+  viewport: HTMLElement
+  deltaX: number
+  deltaY: number
+}): { element: HTMLElement; mode: "native" | "horizontal-from-vertical" } | null {
+  if (!(target instanceof HTMLElement)) return null
+
+  let element: HTMLElement | null = target
+  while (element && element !== boundary) {
+    if (element !== viewport) {
+      if (
+        canScrollInDirection(element, "y", deltaY) ||
+        canScrollInDirection(element, "x", deltaX)
+      ) {
+        return { element, mode: "native" }
+      }
+
+      if (
+        Math.abs(deltaY) > Math.abs(deltaX) &&
+        canScrollInDirection(element, "x", deltaY) &&
+        !canScrollInDirection(element, "y", deltaY)
+      ) {
+        return { element, mode: "horizontal-from-vertical" }
+      }
+    }
+
+    element = element.parentElement
+  }
+
+  return null
+}
+
 // ─── WorkflowBar ──────────────────────────────────────────────────────────────
 // Compact horizontal chip row that lives above the composer meta row.
 
@@ -523,6 +587,22 @@ export function ChatPanel() {
       if ((e.target as HTMLElement).closest("textarea")) return
       const viewport = scrollViewportRef.current
       if (!viewport) return
+
+      const nestedWheelTarget = getNestedWheelTarget({
+        target: e.target,
+        boundary: panel,
+        viewport,
+        deltaX: e.deltaX,
+        deltaY: e.deltaY,
+      })
+
+      if (nestedWheelTarget?.mode === "native") return
+      if (nestedWheelTarget?.mode === "horizontal-from-vertical") {
+        e.preventDefault()
+        nestedWheelTarget.element.scrollLeft += e.deltaY
+        return
+      }
+
       e.preventDefault()
       viewport.scrollTop += e.deltaY
     }

@@ -298,6 +298,7 @@
   }
 
   .rk-scrollbar {
+    overscroll-behavior: contain;
     scrollbar-color: var(--border) transparent;
     scrollbar-width: thin;
   }
