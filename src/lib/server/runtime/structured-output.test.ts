@@ -30,7 +30,11 @@ describe("validateStructuredOutput", () => {
   })
 
   it("rejects invalid JSON and missing required fields", () => {
-    const malformed = validateStructuredOutput("{oops", { type: "object" })
+    const malformed = validateStructuredOutput("{oops", {
+      type: "object",
+      required: ["summary"],
+      properties: { summary: { type: "string" } },
+    })
     expect(malformed.valid).toBe(false)
 
     const missingField = validateStructuredOutput(JSON.stringify({ summary: "ok" }), {
@@ -43,5 +47,28 @@ describe("validateStructuredOutput", () => {
     })
     expect(missingField.valid).toBe(false)
     expect(missingField.errors[0]).toContain("sources")
+  })
+
+  it("accepts fenced and repaired JSON before requiring a retry", () => {
+    const schema = {
+      type: "object",
+      required: ["summary", "sources"],
+      properties: {
+        summary: { type: "string" },
+        sources: { type: "array" },
+      },
+    }
+
+    const fenced = validateStructuredOutput(
+      'Here is the result:\n```json\n{"summary":"ok","sources":[]}\n```',
+      schema
+    )
+    expect(fenced.valid).toBe(true)
+    expect(fenced.parsed).toEqual({ summary: "ok", sources: [] })
+
+    const repaired = validateStructuredOutput("{summary:'ok',sources:[],}", schema)
+    expect(repaired.valid).toBe(true)
+    expect(repaired.repaired).toBe(true)
+    expect(repaired.parsed).toEqual({ summary: "ok", sources: [] })
   })
 })

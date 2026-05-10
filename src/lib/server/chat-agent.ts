@@ -22,9 +22,20 @@ import {
   normalizeLlmProvider,
 } from "@/lib/llm-providers"
 import { ChatMessage, ToolCall } from "@/types/chat"
-import { LlmProvider, ProviderSettings, ToolPolicyProfile } from "@/types/runtime"
+import {
+  LlmProvider,
+  ProviderSettings,
+  TokenUsageEstimate,
+  ToolPolicyProfile,
+} from "@/types/runtime"
 
+import { createModelToolMessageContent } from "./model-tool-results"
 import { getToolApprovalReason, requiresToolApproval } from "./runtime/tool-policy"
+import {
+  createEmptyTokenUsageEstimate,
+  estimateTokens,
+  finalizeTokenUsageEstimate,
+} from "./token-budget"
 import { runWithToolExecutionContext } from "./tool-execution-context"
 import { createToolset } from "./tools"
 import {
@@ -55,11 +66,6 @@ type ToolCapableChatModel = {
   bindTools: (tools: StructuredToolInterface[]) => BoundToolModel
 }
 
-const MAX_TOOL_RESULT_CHARS = 12_000
-const MAX_STRING_CHARS = 6_000
-const MAX_ARRAY_ITEMS = 30
-const MAX_OBJECT_KEYS = 50
-const MAX_DEPTH = 4
 const GEMINI_UNSUPPORTED_TOOL_NAMES = new Set([
   "http_request",
   "download_fetch",
@@ -70,6 +76,7 @@ const GEMINI_UNSUPPORTED_TOOL_NAMES = new Set([
 const PROTECTED_WORKSPACE_ACCESS_ARGUMENT_KEYS: Record<string, string[]> = {
   file_read: ["path"],
   list_files: ["path"],
+  code_map: ["path"],
   file_search: ["path"],
   write_file: ["path"],
   file_replace: ["path"],
@@ -117,92 +124,6 @@ function getProtectedWorkspaceAccessReason(toolName: string, args: unknown) {
     }
   }
   return undefined
-}
-
-/**
- * Truncates large strings before they are sent back to the model or persisted as tool output.
- */
-function truncateString(value: string, max = MAX_STRING_CHARS) {
-  if (value.length <= max) return value
-  return `${value.slice(0, max)}\n\n...(truncated, ${value.length} chars total)`
-}
-
-/**
- * Reduces arbitrary tool payloads into model-safe JSON by limiting size, nesting, arrays, keys, and
- * embedded binary/image data.
- */
-function sanitizeToolPayload(value: unknown, depth = 0): unknown {
-  if (depth > MAX_DEPTH) return "[truncated: max depth]"
-
-  if (typeof value === "string") {
-    if (value.startsWith("data:image/") && value.length > 200) {
-      return `[omitted image data url, ${value.length} chars]`
-    }
-    return truncateString(value)
-  }
-
-  if (typeof value === "number" || typeof value === "boolean" || value == null) return value
-
-  if (Array.isArray(value)) {
-    const slice = value
-      .slice(0, MAX_ARRAY_ITEMS)
-      .map((item) => sanitizeToolPayload(item, depth + 1))
-    if (value.length > MAX_ARRAY_ITEMS) {
-      slice.push(`[truncated: ${value.length - MAX_ARRAY_ITEMS} more items]`)
-    }
-    return slice
-  }
-
-  if (typeof value === "object") {
-    const obj = value as Record<string, unknown>
-    const keys = Object.keys(obj)
-    const limitedKeys = keys.slice(0, MAX_OBJECT_KEYS)
-    const out: Record<string, unknown> = {}
-
-    for (const key of limitedKeys) {
-      const val = obj[key]
-      if (typeof val === "string") {
-        const lower = key.toLowerCase()
-        if (lower.includes("screenshot") || lower.includes("image")) {
-          out[key] = val.startsWith("data:image/")
-            ? `[omitted ${key}, ${val.length} chars]`
-            : truncateString(val, 500)
-          continue
-        }
-        if (
-          key === "markdown" ||
-          key === "content" ||
-          key === "html" ||
-          key === "stdout" ||
-          key === "stderr"
-        ) {
-          out[key] = truncateString(val)
-          continue
-        }
-      }
-      out[key] = sanitizeToolPayload(val, depth + 1)
-    }
-
-    if (keys.length > MAX_OBJECT_KEYS) {
-      out.__truncatedKeys = keys.length - MAX_OBJECT_KEYS
-    }
-
-    return out
-  }
-
-  return String(value)
-}
-
-/**
- * Serializes a tool result into the compact ToolMessage content required by provider chat APIs.
- */
-function toolMessageContent(result: unknown) {
-  const sanitized = sanitizeToolPayload(result)
-  let content = JSON.stringify(sanitized)
-  if (content.length > MAX_TOOL_RESULT_CHARS) {
-    content = `${content.slice(0, MAX_TOOL_RESULT_CHARS)}...(truncated tool result, ${content.length} chars total)`
-  }
-  return content
 }
 
 /**
@@ -303,16 +224,56 @@ function createModel({
   })
 }
 
+function addToolTokenEstimate(
+  estimate: TokenUsageEstimate,
+  result: { originalTokens: number; tokens: number }
+) {
+  estimate.originalToolResultTokens += result.originalTokens
+  estimate.toolResultTokens += result.tokens
+  estimate.savedToolResultTokens = Math.max(
+    estimate.originalToolResultTokens - estimate.toolResultTokens,
+    0
+  )
+}
+
+function estimateToolSchemaTokens(tools: StructuredToolInterface[]) {
+  return estimateTokens(
+    JSON.stringify(
+      tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+      }))
+    )
+  )
+}
+
 /**
  * Converts persisted Rekdin messages into LangChain messages, including matching ToolMessages for
  * assistant tool calls so providers accept historical tool-call context.
  */
-function toLangChainMessages(message: ChatMessage): BaseMessage[] {
+function toLangChainMessages(
+  message: ChatMessage,
+  tokenEstimate?: TokenUsageEstimate
+): BaseMessage[] {
   if (message.role === "user") {
-    return [new HumanMessage(formatUserContent(message.content, message.attachments))]
+    const content = formatUserContent(message.content, message.attachments)
+    if (tokenEstimate) tokenEstimate.historyTokens += estimateTokens(content)
+    return [new HumanMessage(content)]
   }
   if (message.role === "assistant") {
     const toolCalls = message.toolCalls ?? []
+    if (tokenEstimate) {
+      tokenEstimate.historyTokens += estimateTokens(
+        JSON.stringify({
+          role: message.role,
+          content: message.content,
+          toolCalls: toolCalls.map((call) => ({
+            name: call.name,
+            arguments: call.arguments,
+          })),
+        })
+      )
+    }
     const aiMsg = new AIMessage({
       content: message.content,
       tool_calls: toolCalls.map((call) => ({
@@ -325,15 +286,21 @@ function toLangChainMessages(message: ChatMessage): BaseMessage[] {
     // otherwise OpenAI rejects the conversation with a 400.
     const toolMessages = toolCalls
       .filter((call) => call.result !== undefined || call.error !== undefined)
-      .map(
-        (call) =>
-          new ToolMessage({
-            tool_call_id: call.id,
-            content: toolMessageContent(call.result ?? { error: call.error ?? "unknown error" }),
-          })
-      )
+      .map((call) => {
+        const toolContent = createModelToolMessageContent(
+          call.name,
+          call.result ?? { error: call.error ?? "unknown error" },
+          "history"
+        )
+        if (tokenEstimate) addToolTokenEstimate(tokenEstimate, toolContent)
+        return new ToolMessage({
+          tool_call_id: call.id,
+          content: toolContent.content,
+        })
+      })
     return [aiMsg, ...toolMessages]
   }
+  if (tokenEstimate) tokenEstimate.historyTokens += estimateTokens(message.content)
   return [new SystemMessage(message.content)]
 }
 
@@ -370,6 +337,7 @@ export interface AgentRunResult {
   reply: string
   toolCalls: ToolCall[]
   usageTokens: number
+  tokenUsageEstimate: TokenUsageEstimate
   model: string
   retryCount: number
 }
@@ -528,9 +496,12 @@ export async function runAgent({
       azureOpenAIDeployment: providerSettings.azureOpenAIDeployment,
     })
     let llmWithTools = llm.bindTools(tools)
+    const tokenUsageEstimate = createEmptyTokenUsageEstimate()
+    tokenUsageEstimate.systemPromptTokens = estimateTokens(systemPrompt ?? "")
+    tokenUsageEstimate.toolSchemaTokens = estimateToolSchemaTokens(tools)
     const history: BaseMessage[] = [
       ...(systemPrompt ? [new SystemMessage(systemPrompt)] : []),
-      ...contextMessages.flatMap(toLangChainMessages),
+      ...contextMessages.flatMap((message) => toLangChainMessages(message, tokenUsageEstimate)),
     ]
 
     const executedTools: ToolCall[] = []
@@ -653,10 +624,16 @@ export async function runAgent({
           }
           executedTools.push(record)
           await onToolResult?.(record)
+          const toolContent = createModelToolMessageContent(
+            record.name,
+            record.result ?? record.error ?? "",
+            "current"
+          )
+          addToolTokenEstimate(tokenUsageEstimate, toolContent)
           history.push(
             new ToolMessage({
               tool_call_id: record.id,
-              content: toolMessageContent(record.result ?? record.error ?? ""),
+              content: toolContent.content,
             })
           )
         }
@@ -674,11 +651,14 @@ export async function runAgent({
       typeof finalMessage.content === "string"
         ? finalMessage.content
         : JSON.stringify(finalMessage.content)
+    const completionTokens = estimateTokens(text)
+    const finalizedTokenEstimate = finalizeTokenUsageEstimate(tokenUsageEstimate, completionTokens)
 
     return {
       reply: text,
       toolCalls: executedTools,
-      usageTokens: finalMessage.usage_metadata?.total_tokens ?? 0,
+      usageTokens: finalMessage.usage_metadata?.total_tokens ?? finalizedTokenEstimate.totalTokens,
+      tokenUsageEstimate: finalizedTokenEstimate,
       model: modelId,
       retryCount,
     }

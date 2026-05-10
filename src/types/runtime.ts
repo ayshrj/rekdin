@@ -63,6 +63,18 @@ export interface ChatTurnRequest {
   responseSchema?: Record<string, unknown> | null
 }
 
+export interface TokenUsageEstimate {
+  systemPromptTokens: number
+  historyTokens: number
+  toolSchemaTokens: number
+  toolResultTokens: number
+  originalToolResultTokens: number
+  savedToolResultTokens: number
+  completionTokens: number
+  totalPromptTokens: number
+  totalTokens: number
+}
+
 export interface TurnTrace {
   id: string
   sessionId: string
@@ -79,6 +91,7 @@ export interface TurnTrace {
   retryCount: number
   success: boolean
   workflowId?: string
+  tokenUsageEstimate?: TokenUsageEstimate
   error?: string
 }
 

@@ -100,4 +100,66 @@ describe("workspace directory guard", () => {
       }
     )
   })
+
+  it("maps code structure without reading protected generated directories", async () => {
+    const repo = await mkdtemp(path.join(os.tmpdir(), "rekdin-code-map-"))
+    await mkdir(path.join(repo, "src"), { recursive: true })
+    await mkdir(path.join(repo, "node_modules", "pkg"), { recursive: true })
+    await writeFile(
+      path.join(repo, "package.json"),
+      JSON.stringify({
+        name: "demo",
+        scripts: { test: "vitest" },
+        dependencies: { next: "1.0.0" },
+      }),
+      "utf-8"
+    )
+    await writeFile(
+      path.join(repo, "src", "widget.tsx"),
+      [
+        'import React from "react"',
+        "export function Widget() { return <div /> }",
+        "export const useWidget = () => Widget",
+      ].join("\n"),
+      "utf-8"
+    )
+    await writeFile(
+      path.join(repo, "node_modules", "pkg", "index.ts"),
+      "export const hidden = 1",
+      "utf-8"
+    )
+
+    const { setWorkspaceRoot } = await import("./workspace")
+    setWorkspaceRoot(repo)
+    const { codeMapTool } = await import("./tools")
+    const result = (await codeMapTool.invoke({})) as unknown as {
+      type: string
+      fileCount: number
+      package: { name: string; scripts: Record<string, string>; dependencies: string[] }
+      skipped: Array<{ path: string }>
+      files: Array<{
+        path: string
+        imports: string[]
+        exports: string[]
+        reactComponents: string[]
+      }>
+    }
+
+    expect(result.type).toBe("code_map")
+    expect(result.package.name).toBe("demo")
+    expect(result.package.scripts.test).toBe("vitest")
+    expect(result.package.dependencies).toContain("next")
+    expect(result.skipped.some((entry) => entry.path === "node_modules")).toBe(true)
+    expect(result.files.some((file) => file.path.includes("node_modules"))).toBe(false)
+    expect(result.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "src/widget.tsx",
+          imports: ["react"],
+          exports: expect.arrayContaining(["Widget", "useWidget"]),
+          reactComponents: expect.arrayContaining(["Widget"]),
+        }),
+      ])
+    )
+  })
 })

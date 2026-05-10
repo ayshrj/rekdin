@@ -18,6 +18,7 @@ const TOOL_GROUPS: Record<string, ToolGroup[]> = {
   download_fetch: ["network"],
   link_preview: ["network"],
   npm_package_info: ["network"],
+  code_map: ["workspace_read", "repo"],
   file_search: ["workspace_read"],
   file_read: ["workspace_read"],
   list_files: ["workspace_read"],
@@ -202,6 +203,50 @@ export function resolveAllowedToolNames(mode: AgentMode, profile: ToolPolicyProf
       return groups.some((group) => modeGroups.has(group) && profileGroups.has(group))
     })
     .map(([toolName]) => toolName)
+}
+
+const WORKFLOW_TOOL_ALLOWLISTS: Record<string, string[]> = {
+  "research-plan": [],
+  "research-report": [
+    "web_search",
+    "visit_link",
+    "link_preview",
+    "browser_get_markdown",
+    "text_summarize",
+  ],
+  "repo-audit": [
+    "code_map",
+    "file_read",
+    "file_search",
+    "list_files",
+    "extract_todos",
+    "git_log_summary",
+    "git_branches",
+    "git_diff_summary",
+    "git_blame",
+    "git_file_history",
+  ],
+  "diff-review": [
+    "git_diff_summary",
+    "code_map",
+    "file_read",
+    "file_search",
+    "list_files",
+    "git_blame",
+    "git_file_history",
+  ],
+}
+
+export function resolveWorkflowAllowedToolNames(
+  mode: AgentMode,
+  profile: ToolPolicyProfile,
+  workflowId?: string | null
+): string[] {
+  const baseTools = resolveAllowedToolNames(mode, profile)
+  const workflowTools = workflowId ? WORKFLOW_TOOL_ALLOWLISTS[workflowId] : undefined
+  if (!workflowTools) return baseTools
+  const base = new Set(baseTools)
+  return workflowTools.filter((toolName) => base.has(toolName))
 }
 
 export function requiresToolApproval(toolName: string, profile: ToolPolicyProfile) {

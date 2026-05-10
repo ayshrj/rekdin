@@ -4,13 +4,13 @@ import { ChatMessage } from "@/types/chat"
 import { AgentMode, ProviderSettings, ToolPolicyProfile } from "@/types/runtime"
 
 import { type AgentRunResult, runAgent } from "../chat-agent"
+import { DEFAULT_CONTEXT_TOKEN_BUDGET, estimateTokens } from "../token-budget"
 import { getWorkspaceRoot } from "../workspace"
 import { buildSystemPrompt } from "./prompt-builder"
 import { validateStructuredOutput } from "./structured-output"
-import { resolveAllowedToolNames } from "./tool-policy"
+import { resolveWorkflowAllowedToolNames } from "./tool-policy"
 import { verifyToolCalls } from "./verification"
 
-const MAX_CONTEXT_CHARS = 32_000
 const MAX_CONTEXT_MESSAGES = 60
 
 /**
@@ -50,15 +50,27 @@ function normalizeToolPolicy(value?: string | null): ToolPolicyProfile {
  * note when older context was compacted away.
  */
 function trimHistory(messages: ChatMessage[]) {
-  let totalChars = 0
+  let totalTokens = 0
   const selected: ChatMessage[] = []
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]
-    const contentLength = message.content?.length ?? 0
+    const messageTokens = estimateTokens(
+      [
+        message.role,
+        message.content ?? "",
+        JSON.stringify(message.attachments ?? []),
+        JSON.stringify(
+          (message.toolCalls ?? []).map((toolCall) => ({
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+          }))
+        ),
+      ].join("\n")
+    )
     if (selected.length >= MAX_CONTEXT_MESSAGES) break
-    if (selected.length > 0 && totalChars + contentLength > MAX_CONTEXT_CHARS) break
-    totalChars += contentLength
+    if (selected.length > 0 && totalTokens + messageTokens > DEFAULT_CONTEXT_TOKEN_BUDGET) break
+    totalTokens += messageTokens
     selected.push(message)
   }
 
@@ -180,7 +192,7 @@ export async function runChatTurn({
     responseSchema,
   })
   const preparedMessages = withCurrentWorkspaceContext(trimHistory(contextMessages), workspaceRoot)
-  const allowedToolNames = resolveAllowedToolNames(mode, toolPolicy)
+  const allowedToolNames = resolveWorkflowAllowedToolNames(mode, toolPolicy, workflowId)
   let retryPrompt = baseSystemPrompt
   let agentResult: AgentRunResult | null = null
   for (let attempt = 0; attempt < (responseSchema ? 2 : 1); attempt += 1) {
@@ -206,6 +218,12 @@ export async function runChatTurn({
     })
 
     const validation = validateStructuredOutput(agentResult.reply, responseSchema)
+    if (responseSchema && validation.valid && validation.parsed !== null) {
+      const normalizedReply = JSON.stringify(validation.parsed)
+      if (normalizedReply !== agentResult.reply.trim()) {
+        agentResult = { ...agentResult, reply: normalizedReply }
+      }
+    }
     if (!responseSchema || validation.valid) break
     await onWarning?.(
       `Structured output validation failed (${validation.errors.join("; ")}). Retrying with stricter instructions.`

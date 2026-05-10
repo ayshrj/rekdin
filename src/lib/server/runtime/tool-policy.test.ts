@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { requiresToolApproval, resolveAllowedToolNames } from "./tool-policy"
+import {
+  requiresToolApproval,
+  resolveAllowedToolNames,
+  resolveWorkflowAllowedToolNames,
+} from "./tool-policy"
 
 describe("resolveAllowedToolNames", () => {
   it("blocks destructive tools in read-only mode", () => {
@@ -41,5 +45,28 @@ describe("resolveAllowedToolNames", () => {
     expect(requiresToolApproval("file_read", "balanced")).toBe(false)
     expect(requiresToolApproval("write_file", "full_auto")).toBe(false)
     expect(requiresToolApproval("execute_command", "full_auto")).toBe(true)
+  })
+
+  it("narrows workflow tools to deterministic low-token sets", () => {
+    expect(resolveWorkflowAllowedToolNames("research", "balanced", "research-plan")).toEqual([])
+
+    const researchReportTools = resolveWorkflowAllowedToolNames(
+      "research",
+      "balanced",
+      "research-report"
+    )
+    expect(researchReportTools).toContain("web_search")
+    expect(researchReportTools).toContain("visit_link")
+    expect(researchReportTools).not.toContain("file_read")
+
+    const repoAuditTools = resolveWorkflowAllowedToolNames("workspace", "balanced", "repo-audit")
+    expect(repoAuditTools).toContain("code_map")
+    expect(repoAuditTools).toContain("file_search")
+    expect(repoAuditTools).not.toContain("write_file")
+
+    const diffReviewTools = resolveWorkflowAllowedToolNames("workspace", "balanced", "diff-review")
+    expect(diffReviewTools).toContain("git_diff_summary")
+    expect(diffReviewTools).toContain("code_map")
+    expect(diffReviewTools).not.toContain("execute_command")
   })
 })
