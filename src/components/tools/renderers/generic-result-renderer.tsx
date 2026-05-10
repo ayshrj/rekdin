@@ -46,9 +46,9 @@ export const GenericResultRenderer: React.FC<{
 
   const statusIconClass =
     part.status === "success"
-      ? "text-[color:var(--status-success)]"
+      ? "text-status-success"
       : part.status === "error"
-        ? "text-[color:var(--destructive)]"
+        ? "text-destructive"
         : "text-muted-foreground"
 
   return (

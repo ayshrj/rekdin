@@ -5,8 +5,13 @@ import React from "react"
 export { toolLabels } from "../tool-labels"
 
 import { ArchiveRenderer } from "./archive-renderer"
+import { ArtifactRenderer } from "./artifact-renderer"
 import { Base64Renderer } from "./base64-renderer"
 import {
+  BrowserEvalRenderer,
+  BrowserLogsRenderer,
+  BrowserScreenshotExtRenderer,
+  BrowserStorageRenderer,
   ClickActionRenderer,
   DataExtractionRenderer,
   DragActionRenderer,
@@ -17,27 +22,53 @@ import {
 import { BrowserControlRenderer } from "./browser-control-renderer"
 import { BrowserResultRenderer } from "./browser-result-renderer"
 import { CodeActRenderer } from "./code-act-renderer"
+import { CodeQualityRenderer } from "./code-quality-renderer"
 import { CommandResultRenderer } from "./command-result-renderer"
+import { DataQueryRenderer } from "./data-query-renderer"
 import { DeepResearchRenderer } from "./deep-research-renderer"
+import { DependencyAuditRenderer } from "./dependency-audit-renderer"
+import { DevServerRenderer } from "./dev-server-renderer"
+import { DocumentExtractRenderer } from "./document-extract-renderer"
+import { DomainInfoRenderer } from "./domain-info-renderer"
 import { ExtractTodosRenderer } from "./extract-todos-renderer"
+import { FetchManyRenderer } from "./fetch-many-renderer"
+import { FileOutlineRenderer } from "./file-outline-renderer"
 import { FileReadRenderer } from "./file-read-renderer"
 import { FileSearchRenderer } from "./file-search-renderer"
+import { FileStatRenderer } from "./file-stat-renderer"
 import { GenericResultRenderer } from "./generic-result-renderer"
 import { GitBlameRenderer } from "./git-blame-renderer"
 import { GitBranchesRenderer } from "./git-branches-renderer"
+import { GitCommitSearchRenderer } from "./git-commit-search-renderer"
+import { GitConflictsRenderer } from "./git-conflicts-renderer"
 import { GitDiffRenderer } from "./git-diff-renderer"
 import { GitLogRenderer } from "./git-log-renderer"
+import { GitShowRenderer } from "./git-show-renderer"
+import { GitStatusRenderer } from "./git-status-renderer"
+import { GitTagsRenderer } from "./git-tags-renderer"
 import { HashRenderer } from "./hash-renderer"
 import { HttpRequestRenderer } from "./http-request-renderer"
+import { ImageAnalysisRenderer } from "./image-analysis-renderer"
+import { ImageExifRenderer } from "./image-exif-renderer"
 import { ImageInfoRenderer } from "./image-info-renderer"
 import { JsonResultRenderer } from "./json-result-renderer"
 import { LinkPreviewRenderer } from "./link-preview-renderer"
 import { ListFilesRenderer } from "./list-files-renderer"
 import { NpmPackageRenderer } from "./npm-package-renderer"
+import { NpmScriptsRenderer } from "./npm-scripts-renderer"
 import { PdfRenderer } from "./pdf-renderer"
+import { RouteMapRenderer } from "./route-map-renderer"
 import { ScriptResultRenderer } from "./script-result-renderer"
+import { SecretScanRenderer } from "./secret-scan-renderer"
+import { SecurityCheckRenderer } from "./security-check-renderer"
+import { SymbolRenderer } from "./symbol-renderer"
+import { TableRenderer } from "./table-renderer"
+import { TextAnalysisRenderer } from "./text-analysis-renderer"
 import { TextOutputRenderer } from "./text-output-renderer"
+import { VisitLinkRenderer } from "./visit-link-renderer"
+import { WebMetadataRenderer } from "./web-metadata-renderer"
 import { WebSearchResultRenderer } from "./web-search-result-renderer"
+import { WorkspaceStatsRenderer } from "./workspace-stats-renderer"
 import { WriteFileRenderer } from "./write-file-renderer"
 
 export interface ToolResultContentPart {
@@ -148,6 +179,55 @@ const CONTENT_RENDERERS: Record<
   git_log: GitLogRenderer,
   git_branches: GitBranchesRenderer,
   git_blame: GitBlameRenderer,
+  file_stat: FileStatRenderer,
+  file_head_tail: FileStatRenderer,
+  workspace_stats: WorkspaceStatsRenderer,
+  code_map: WorkspaceStatsRenderer,
+  dependency_graph: WorkspaceStatsRenderer,
+  symbol_search: SymbolRenderer,
+  symbol_references: SymbolRenderer,
+  file_outline: FileOutlineRenderer,
+  route_map: RouteMapRenderer,
+  test_map: RouteMapRenderer,
+  config_inventory: RouteMapRenderer,
+  env_inventory: RouteMapRenderer,
+  lockfile_summary: RouteMapRenderer,
+  secret_scan: SecretScanRenderer,
+  dependency_audit: DependencyAuditRenderer,
+  license_summary: DependencyAuditRenderer,
+  lockfile_risk_summary: DependencyAuditRenderer,
+  sbom_generate: DependencyAuditRenderer,
+  duplicate_code_candidates: CodeQualityRenderer,
+  dead_code_candidates: CodeQualityRenderer,
+  semgrep_scan: CodeQualityRenderer,
+  dockerfile_scan: CodeQualityRenderer,
+  csv_preview: TableRenderer,
+  csv_query: TableRenderer,
+  html_table_extract: TableRenderer,
+  sqlite_query: TableRenderer,
+  browser_table_extract: TableRenderer,
+  json_query: DataQueryRenderer,
+  yaml_query: DataQueryRenderer,
+  yaml_patch: DataQueryRenderer,
+  token_count: TextAnalysisRenderer,
+  text_keywords: TextAnalysisRenderer,
+  text_entities: TextAnalysisRenderer,
+  markdown_frontmatter: TextAnalysisRenderer,
+  image_exif: ImageExifRenderer,
+  image_ocr: ImageAnalysisRenderer,
+  image_diff: ImageAnalysisRenderer,
+  svg_optimize: ImageAnalysisRenderer,
+  git_status: GitStatusRenderer,
+  git_changed_files: GitStatusRenderer,
+  git_staged_diff: GitStatusRenderer,
+  git_show: GitShowRenderer,
+  git_compare_refs: GitShowRenderer,
+  git_conflicts: GitConflictsRenderer,
+  git_tags: GitTagsRenderer,
+  git_remote_info: GitTagsRenderer,
+  git_commit_search: GitCommitSearchRenderer,
+  git_patch_preview: GitCommitSearchRenderer,
+  git_apply_patch: GitCommitSearchRenderer,
   link_preview: LinkPreviewRenderer,
   npm_package_info: NpmPackageRenderer,
   extract_todos: ExtractTodosRenderer,
@@ -185,6 +265,30 @@ const CONTENT_RENDERERS: Record<
   browser_get_links: DataExtractionRenderer,
   browser_get_clickable_elements: DataExtractionRenderer,
 
+  browser_evaluate: BrowserEvalRenderer,
+  browser_console_logs: BrowserLogsRenderer,
+  browser_network_log: BrowserLogsRenderer,
+  browser_storage_snapshot: BrowserStorageRenderer,
+  browser_accessibility_snapshot: BrowserStorageRenderer,
+  browser_set_viewport: BrowserStorageRenderer,
+  browser_selector_screenshot: BrowserScreenshotExtRenderer,
+  browser_full_page_screenshot: BrowserScreenshotExtRenderer,
+  browser_print_pdf: BrowserScreenshotExtRenderer,
+  browser_downloads: BrowserScreenshotExtRenderer,
+  browser_form_schema: BrowserScreenshotExtRenderer,
+  visit_link: VisitLinkRenderer,
+  robots_txt: WebMetadataRenderer,
+  sitemap_fetch: WebMetadataRenderer,
+  rss_fetch: WebMetadataRenderer,
+  page_metadata_batch: WebMetadataRenderer,
+  page_diff_snapshot: WebMetadataRenderer,
+  domain_info: DomainInfoRenderer,
+  github_repo_info: DomainInfoRenderer,
+  citation_metadata: DomainInfoRenderer,
+  package_compare: DomainInfoRenderer,
+  fetch_many: FetchManyRenderer,
+  search_batch: FetchManyRenderer,
+
   node_codeact: CodeActRenderer,
   python_codeact: CodeActRenderer,
   shell_codeact: CodeActRenderer,
@@ -199,6 +303,26 @@ const CONTENT_RENDERERS: Record<
   generate_latex_pdf: PdfRenderer,
   latex_pdf: PdfRenderer,
   pdf_generate: PdfRenderer,
+
+  artifact_list: ArtifactRenderer,
+  artifact_read: ArtifactRenderer,
+  artifact_delete: ArtifactRenderer,
+  asset_manifest: ArtifactRenderer,
+
+  dev_server_start: DevServerRenderer,
+  dev_server_stop: DevServerRenderer,
+  dev_server_status: DevServerRenderer,
+  port_probe: DevServerRenderer,
+  http_health_check: DevServerRenderer,
+
+  npm_scripts: NpmScriptsRenderer,
+  run_npm_script: NpmScriptsRenderer,
+
+  pdf_extract_text: DocumentExtractRenderer,
+  docx_extract_text: DocumentExtractRenderer,
+
+  url_safety_check: SecurityCheckRenderer,
+  workspace_permissions_scan: SecurityCheckRenderer,
 
   generic: GenericResultRenderer,
 }
@@ -272,11 +396,96 @@ const TOOL_ACCENT_MAP: Record<string, string> = {
   image_convert: "border-tool-json/25",
   link_preview: "border-tool-browser/25",
   npm_package_info: "border-tool-browser/25",
+  file_stat: "border-tool-code/25",
+  file_head_tail: "border-tool-code/25",
+  workspace_stats: "border-tool-data/25",
+  code_map: "border-tool-data/25",
+  dependency_graph: "border-tool-data/25",
+  symbol_search: "border-tool-search/25",
+  symbol_references: "border-tool-search/25",
+  file_outline: "border-tool-code/25",
+  route_map: "border-tool-data/25",
+  test_map: "border-tool-data/25",
+  config_inventory: "border-tool-data/25",
+  env_inventory: "border-tool-data/25",
+  lockfile_summary: "border-tool-data/25",
+  csv_preview: "border-tool-data/25",
+  csv_query: "border-tool-data/25",
+  html_table_extract: "border-tool-data/25",
+  sqlite_query: "border-tool-data/25",
+  browser_table_extract: "border-tool-data/25",
+  json_query: "border-tool-json/25",
+  yaml_query: "border-tool-json/25",
+  token_count: "border-tool-research/25",
+  text_keywords: "border-tool-research/25",
+  text_entities: "border-tool-research/25",
+  markdown_frontmatter: "border-tool-json/25",
+  image_exif: "border-tool-json/25",
+  image_ocr: "border-tool-data/25",
+  image_diff: "border-tool-data/25",
+  svg_optimize: "border-tool-code/25",
+  browser_evaluate: "border-tool-browser/25",
+  browser_console_logs: "border-tool-browser/25",
+  browser_network_log: "border-tool-browser/25",
+  browser_storage_snapshot: "border-tool-data/25",
+  browser_accessibility_snapshot: "border-tool-data/25",
+  browser_set_viewport: "border-tool-action/25",
+  browser_selector_screenshot: "border-tool-browser/25",
+  browser_full_page_screenshot: "border-tool-browser/25",
+  browser_print_pdf: "border-tool-doc/25",
+  browser_downloads: "border-tool-data/25",
+  browser_form_schema: "border-tool-data/25",
+  robots_txt: "border-tool-data/25",
+  sitemap_fetch: "border-tool-data/25",
+  rss_fetch: "border-tool-research/25",
+  page_metadata_batch: "border-tool-data/25",
+  page_diff_snapshot: "border-tool-data/25",
+  domain_info: "border-tool-browser/25",
+  github_repo_info: "border-tool-browser/25",
+  citation_metadata: "border-tool-research/25",
+  package_compare: "border-tool-data/25",
+  fetch_many: "border-tool-browser/25",
+  search_batch: "border-tool-search/25",
+  secret_scan: "border-tool-command/25",
+  dependency_audit: "border-tool-data/25",
+  license_summary: "border-tool-data/25",
+  lockfile_risk_summary: "border-tool-data/25",
+  sbom_generate: "border-tool-data/25",
+  duplicate_code_candidates: "border-tool-search/25",
+  dead_code_candidates: "border-tool-search/25",
+  semgrep_scan: "border-tool-search/25",
+  dockerfile_scan: "border-tool-code/25",
   git_diff_summary: "border-tool-code/25",
   git_log_summary: "border-tool-code/25",
   git_branches: "border-tool-code/25",
   git_blame: "border-tool-code/25",
   git_file_history: "border-tool-code/25",
+  git_status: "border-tool-code/25",
+  git_changed_files: "border-tool-code/25",
+  git_staged_diff: "border-tool-code/25",
+  git_show: "border-tool-code/25",
+  git_compare_refs: "border-tool-code/25",
+  git_conflicts: "border-tool-code/25",
+  git_tags: "border-tool-code/25",
+  git_remote_info: "border-tool-code/25",
+  git_commit_search: "border-tool-code/25",
+  git_patch_preview: "border-tool-code/25",
+  git_apply_patch: "border-tool-command/25",
+  artifact_list: "border-tool-data/25",
+  artifact_read: "border-tool-code/25",
+  artifact_delete: "border-tool-command/25",
+  asset_manifest: "border-tool-data/25",
+  dev_server_start: "border-tool-command/25",
+  dev_server_stop: "border-tool-command/25",
+  dev_server_status: "border-tool-data/25",
+  port_probe: "border-tool-browser/25",
+  http_health_check: "border-tool-browser/25",
+  npm_scripts: "border-tool-data/25",
+  run_npm_script: "border-tool-command/25",
+  pdf_extract_text: "border-tool-doc/25",
+  docx_extract_text: "border-tool-doc/25",
+  url_safety_check: "border-tool-search/25",
+  workspace_permissions_scan: "border-tool-data/25",
   download_fetch: "border-tool-json/25",
   generic: "border-tool-generic/25",
 }

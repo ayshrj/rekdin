@@ -60,7 +60,7 @@ export const WebSearchResultRenderer: React.FC<{
     <ToolRendererShell
       header={
         <>
-          <Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--tool-search)]" />
+          <Search className="text-tool-search h-3.5 w-3.5 shrink-0" />
           <span className="text-foreground min-w-0 flex-1 truncate font-mono text-[11px] font-semibold">
             {query ? `"${query}"` : "Web Search"}
           </span>
@@ -89,14 +89,14 @@ export const WebSearchResultRenderer: React.FC<{
             return (
               <div
                 key={i}
-                className="px-3 py-2.5 transition-colors duration-100 hover:bg-[var(--surface-4)]"
+                className="hover:bg-surface-4 px-3 py-2.5 transition-colors duration-100"
               >
                 {/* Title */}
                 <a
                   href={item.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mb-1 block font-mono text-[11px] leading-snug font-semibold text-[color:var(--tool-search)] hover:underline"
+                  className="text-tool-search mb-1 block font-mono text-[11px] leading-snug font-semibold hover:underline"
                 >
                   {item.title}
                   <ExternalLink className="ml-1 inline h-2.5 w-2.5 align-[-1px] opacity-50" />

@@ -162,4 +162,91 @@ describe("workspace directory guard", () => {
       ])
     )
   })
+
+  it("runs deterministic workspace intelligence and data tools", async () => {
+    const repo = await mkdtemp(path.join(os.tmpdir(), "rekdin-expanded-tools-"))
+    await mkdir(path.join(repo, "src", "app", "api", "hello"), { recursive: true })
+    await writeFile(
+      path.join(repo, "package.json"),
+      JSON.stringify({
+        scripts: { test: "vitest", typecheck: "tsc --noEmit" },
+        dependencies: { next: "1.0.0" },
+      }),
+      "utf-8"
+    )
+    await writeFile(
+      path.join(repo, "src", "app", "api", "hello", "route.ts"),
+      "export function GET() { return Response.json({ ok: true }) }\n",
+      "utf-8"
+    )
+    await writeFile(
+      path.join(repo, "src", "util.ts"),
+      "export function parseThing(value: string) { return value.trim() }\n",
+      "utf-8"
+    )
+    await writeFile(path.join(repo, "data.csv"), "name,score\nAda,10\nLinus,9\n", "utf-8")
+    await writeFile(
+      path.join(repo, "config.json"),
+      JSON.stringify({ app: { name: "demo" } }),
+      "utf-8"
+    )
+    await writeFile(
+      path.join(repo, ".env"),
+      "OPENAI_API_KEY=sk-testsecretvaluethatshouldnotleak\n",
+      "utf-8"
+    )
+
+    vi.resetModules()
+    const { setWorkspaceRoot } = await import("./workspace")
+    setWorkspaceRoot(repo)
+    const {
+      csvPreviewTool,
+      fileOutlineTool,
+      jsonQueryTool,
+      routeMapTool,
+      secretScanTool,
+      symbolSearchTool,
+      workspaceStatsTool,
+    } = await import("./tools")
+
+    const stats = (await workspaceStatsTool.invoke({})) as {
+      fileCount: number
+      byExtension: Record<string, number>
+    }
+    expect(stats.fileCount).toBeGreaterThanOrEqual(4)
+    expect(stats.byExtension[".ts"]).toBeGreaterThanOrEqual(1)
+
+    const outline = (await fileOutlineTool.invoke({ path: "src/util.ts" })) as {
+      symbols: { functions: Array<{ name: string }> }
+    }
+    expect(outline.symbols.functions).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "parseThing" })])
+    )
+
+    const symbols = (await symbolSearchTool.invoke({ query: "parse" })) as unknown as {
+      results: Array<{ name: string }>
+    }
+    expect(symbols.results.some((result) => result.name === "parseThing")).toBe(true)
+
+    const routes = (await routeMapTool.invoke({})) as { routes: Array<{ path: string }> }
+    expect(routes.routes.some((route) => route.path.endsWith("route.ts"))).toBe(true)
+
+    const csv = (await csvPreviewTool.invoke({ path: "data.csv" })) as {
+      headers: string[]
+      rows: string[][]
+    }
+    expect(csv.headers).toEqual(["name", "score"])
+    expect(csv.rows[0]).toEqual(["Ada", "10"])
+
+    const json = (await jsonQueryTool.invoke({ path: "config.json", query: "$.app.name" })) as {
+      value: string
+    }
+    expect(json.value).toBe("demo")
+
+    const secrets = (await secretScanTool.invoke({})) as unknown as {
+      findings: Array<{ preview: string }>
+    }
+    expect(secrets.findings.length).toBeGreaterThan(0)
+    expect(JSON.stringify(secrets.findings)).not.toContain("sk-testsecretvalue")
+  })
 })

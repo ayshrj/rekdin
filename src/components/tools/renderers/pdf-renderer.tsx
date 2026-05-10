@@ -98,7 +98,7 @@ export const PdfRenderer: React.FC<{
     <button
       type="button"
       onClick={onClick}
-      className="text-muted-foreground hover:text-foreground inline-flex h-7 items-center gap-1.5 rounded border bg-[var(--surface-4)] px-2.5 font-mono text-[10px] transition-colors duration-150 hover:bg-[var(--surface-5)]"
+      className="text-muted-foreground hover:text-foreground bg-surface-4 hover:bg-surface-5 inline-flex h-7 items-center gap-1.5 rounded border px-2.5 font-mono text-[10px] transition-colors duration-150"
     >
       {children}
     </button>
@@ -109,9 +109,7 @@ export const PdfRenderer: React.FC<{
       header={
         <>
           <File
-            className={`h-3.5 w-3.5 shrink-0 ${
-              isSuccess ? "text-[color:var(--tool-doc)]" : "text-[color:var(--destructive)]"
-            }`}
+            className={`h-3.5 w-3.5 shrink-0 ${isSuccess ? "text-tool-doc" : "text-destructive"}`}
           />
           <span className="text-foreground font-mono text-[11px] font-semibold">
             {part.toolName === "markdown_to_pdf" ? "Markdown → PDF" : "LaTeX → PDF"}
@@ -142,7 +140,7 @@ export const PdfRenderer: React.FC<{
       {/* ── Degraded notice ── */}
       {isDegraded && result.error && (
         <div className="border-b px-3 py-2">
-          <p className="font-mono text-[11px] text-[color:var(--status-warning)]">{result.error}</p>
+          <p className="text-status-warning font-mono text-[11px]">{result.error}</p>
         </div>
       )}
 
@@ -196,7 +194,7 @@ export const PdfRenderer: React.FC<{
                 <button
                   type="button"
                   onClick={() => void ensureMaterializedPdfUrl()}
-                  className="text-[color:var(--primary)] hover:underline"
+                  className="text-primary hover:underline"
                 >
                   Retry
                 </button>
@@ -249,14 +247,14 @@ export const PdfRenderer: React.FC<{
       {!isSuccess && !isDegraded && (
         <>
           <div className="border-b px-3 py-2">
-            <p className="font-mono text-[11px] font-semibold text-[color:var(--destructive)]">
+            <p className="text-destructive font-mono text-[11px] font-semibold">
               {isLegacyLatexEngineError
                 ? "LaTeX engine unavailable (legacy result)"
                 : "LaTeX compilation failed"}
             </p>
           </div>
           {result.error && (
-            <pre className="rk-scrollbar max-h-[40vh] overflow-auto px-3 py-3 font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-[color:var(--destructive)]">
+            <pre className="rk-scrollbar text-destructive max-h-[40vh] overflow-auto px-3 py-3 font-mono text-[10px] leading-relaxed whitespace-pre-wrap">
               {result.error}
             </pre>
           )}
@@ -279,7 +277,7 @@ export const PdfRenderer: React.FC<{
           <button
             type="button"
             onClick={() => setShowLatexSource((v) => !v)}
-            className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left transition-colors duration-150 hover:bg-[var(--surface-4)]"
+            className="hover:bg-surface-4 flex w-full items-center gap-1.5 px-3 py-1.5 text-left transition-colors duration-150"
           >
             <CodeBracket className="text-muted-foreground h-3 w-3 shrink-0" />
             <span className="rk-section-label">

@@ -134,7 +134,7 @@ function TreeNodeRow({
   const row = (
     <div
       className={cn(
-        "group flex items-center gap-1.5 rounded px-2 py-[3px] text-[12px]",
+        "group flex items-center gap-1.5 rounded px-2 py-0.75 text-[12px]",
         isDir
           ? cn(
               "text-foreground/80 font-medium",

@@ -50,8 +50,8 @@ export const BrowserResultRenderer: React.FC<{
       {/* URL bar */}
       {extractedUrl && (
         <div className="flex items-center gap-1.5">
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md border bg-[var(--surface-3)] px-2.5 py-1.5">
-            <Globe className="h-3.5 w-3.5 shrink-0 text-[color:var(--tool-browser)]" />
+          <div className="bg-surface-3 flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md border px-2.5 py-1.5">
+            <Globe className="text-tool-browser h-3.5 w-3.5 shrink-0" />
             <span
               className="text-foreground/70 min-w-0 flex-1 truncate font-mono text-[11px]"
               title={extractedUrl}
@@ -74,7 +74,7 @@ export const BrowserResultRenderer: React.FC<{
 
       {/* Browser shell */}
       <BrowserShell title={title} url={extractedUrl}>
-        <div className="rk-scrollbar max-h-[65vh] min-h-[80px] overflow-auto border-t">
+        <div className="rk-scrollbar max-h-[65vh] min-h-20 overflow-auto border-t">
           {screenshot && (
             <div className="p-3">
               <Image src={screenshot} alt="Browser screenshot" className="h-auto w-full rounded" />
@@ -97,7 +97,7 @@ export const BrowserResultRenderer: React.FC<{
                   />
                 </div>
                 {contentMode === "preview" ? (
-                  <Markdown className="max-w-none break-words">{extractedContent}</Markdown>
+                  <Markdown className="max-w-none wrap-break-word">{extractedContent}</Markdown>
                 ) : (
                   <SimpleCodeEditor
                     code={extractedContent}

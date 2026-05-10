@@ -108,4 +108,56 @@ describe("model-facing tool result compaction", () => {
     expect(command.stdout.preview).toBeTypeOf("string")
     expect(command.stdout.truncated).toBe(true)
   })
+
+  it("summarizes new high-volume structured tool outputs", () => {
+    const graph = JSON.parse(
+      createModelToolMessageContent(
+        "dependency_graph",
+        {
+          type: "dependency_graph",
+          nodes: Array.from({ length: 200 }, (_, index) => `src/${index}.ts`),
+          edges: Array.from({ length: 500 }, (_, index) => ({
+            from: `src/${index}.ts`,
+            to: `src/${index + 1}.ts`,
+          })),
+        },
+        "history"
+      ).content
+    )
+    expect(graph.nodes.length).toBeLessThan(200)
+    expect(graph.edges.length).toBeLessThan(500)
+
+    const pdf = JSON.parse(
+      createModelToolMessageContent(
+        "pdf_extract_text",
+        { type: "pdf_extract_text", text: "long pdf text\n".repeat(5000), pages: 5 },
+        "history"
+      ).content
+    )
+    expect(pdf.text).toBeUndefined()
+    expect(pdf.textPreview).toBeTypeOf("string")
+
+    const ocr = JSON.parse(
+      createModelToolMessageContent(
+        "image_ocr",
+        { type: "image_ocr", text: "recognized image text\n".repeat(5000), confidence: 91 },
+        "history"
+      ).content
+    )
+    expect(ocr.text).toBeUndefined()
+    expect(ocr.textPreview).toBeTypeOf("string")
+
+    const browserLogs = JSON.parse(
+      createModelToolMessageContent(
+        "browser_console_logs",
+        {
+          type: "browser_console_logs",
+          logs: Array.from({ length: 100 }, (_, index) => ({ type: "log", text: `line ${index}` })),
+        },
+        "history"
+      ).content
+    )
+    expect(browserLogs.logs.length).toBeLessThan(100)
+    expect(browserLogs.omittedLogs).toBeGreaterThan(0)
+  })
 })

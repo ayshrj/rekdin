@@ -53,11 +53,7 @@ export function CopyButton({ text, className }: { text: string; className?: stri
       title="Copy to clipboard"
       aria-label="Copy to clipboard"
     >
-      {copied ? (
-        <Check className="h-3 w-3 text-[color:var(--status-success)]" />
-      ) : (
-        <Copy className="h-3 w-3" />
-      )}
+      {copied ? <Check className="text-status-success h-3 w-3" /> : <Copy className="h-3 w-3" />}
     </button>
   )
 }
@@ -69,13 +65,13 @@ type StatusVariant = "success" | "error" | "warning" | "info" | "neutral"
 
 const STATUS_CLASSES: Record<StatusVariant, string> = {
   success:
-    "bg-[color-mix(in_srgb,var(--status-success)_12%,transparent)] text-[color:var(--status-success)] border-[color-mix(in_srgb,var(--status-success)_25%,transparent)]",
+    "bg-[color-mix(in_srgb,var(--status-success)_12%,transparent)] text-status-success border-[color-mix(in_srgb,var(--status-success)_25%,transparent)]",
   error:
-    "bg-[color-mix(in_srgb,var(--destructive)_12%,transparent)] text-[color:var(--destructive)] border-[color-mix(in_srgb,var(--destructive)_25%,transparent)]",
+    "bg-[color-mix(in_srgb,var(--destructive)_12%,transparent)] text-destructive border-[color-mix(in_srgb,var(--destructive)_25%,transparent)]",
   warning:
-    "bg-[color-mix(in_srgb,var(--status-warning)_12%,transparent)] text-[color:var(--status-warning)] border-[color-mix(in_srgb,var(--status-warning)_25%,transparent)]",
-  info: "bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] text-[color:var(--primary)] border-[color-mix(in_srgb,var(--primary)_25%,transparent)]",
-  neutral: "bg-[var(--surface-4)] text-muted-foreground border-[var(--border)]",
+    "bg-[color-mix(in_srgb,var(--status-warning)_12%,transparent)] text-status-warning border-[color-mix(in_srgb,var(--status-warning)_25%,transparent)]",
+  info: "bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] text-primary border-[color-mix(in_srgb,var(--primary)_25%,transparent)]",
+  neutral: "bg-surface-4 text-muted-foreground border-border",
 }
 
 export function ToolStatusBadge({
@@ -169,8 +165,8 @@ export function SegmentedControl<T extends string>({
           className={cn(
             "px-2 py-0.5 font-mono text-[10px] font-medium transition-colors duration-150",
             value === opt.value
-              ? "text-foreground bg-[var(--surface-5)]"
-              : "text-muted-foreground hover:text-foreground bg-[var(--surface-3)]"
+              ? "text-foreground bg-surface-5"
+              : "text-muted-foreground hover:text-foreground bg-surface-3"
           )}
         >
           {opt.label}
@@ -195,7 +191,7 @@ export function EmptyState({ children }: { children: React.ReactNode }) {
 
 export function ErrorBanner({ children }: { children: React.ReactNode }) {
   return (
-    <div className="border-b border-[color-mix(in_srgb,var(--destructive)_25%,transparent)] bg-[color-mix(in_srgb,var(--destructive)_10%,transparent)] px-3 py-2 font-mono text-[11px] text-[color:var(--destructive)]">
+    <div className="text-destructive border-b border-[color-mix(in_srgb,var(--destructive)_25%,transparent)] bg-[color-mix(in_srgb,var(--destructive)_10%,transparent)] px-3 py-2 font-mono text-[11px]">
       {children}
     </div>
   )
@@ -237,7 +233,7 @@ export function MonoField({ label, value }: { label: string; value: string }) {
   return (
     <div className="px-3 py-2">
       <span className="rk-section-label mb-1 block">{label}</span>
-      <pre className="text-foreground/80 rounded bg-[var(--surface-4)] px-2 py-1 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap">
+      <pre className="text-foreground/80 bg-surface-4 rounded px-2 py-1 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap">
         {value}
       </pre>
     </div>
@@ -277,7 +273,7 @@ export function RawPayloadDisclosure({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left transition-colors duration-150 hover:bg-[var(--surface-4)]"
+        className="hover:bg-surface-4 flex w-full items-center gap-1.5 px-3 py-1.5 text-left transition-colors duration-150"
         aria-expanded={open}
       >
         {open ? (
@@ -314,17 +310,12 @@ export function ToolRendererShell({
   className?: string
 }) {
   return (
-    <div
-      className={cn(
-        "w-full min-w-0 overflow-hidden rounded-lg border bg-[var(--surface-3)]",
-        className
-      )}
-    >
-      <div className="flex min-h-0 items-center gap-2 border-b bg-[var(--surface-3)] px-3 py-2">
+    <div className={cn("bg-surface-3 w-full min-w-0 overflow-hidden rounded-lg border", className)}>
+      <div className="bg-surface-3 flex min-h-0 items-center gap-2 border-b px-3 py-2">
         {header}
       </div>
-      <div className="bg-[var(--surface-3)]">{children}</div>
-      {footer && <div className="bg-[var(--surface-3)]">{footer}</div>}
+      <div className="bg-surface-3">{children}</div>
+      {footer && <div className="bg-surface-3">{footer}</div>}
     </div>
   )
 }

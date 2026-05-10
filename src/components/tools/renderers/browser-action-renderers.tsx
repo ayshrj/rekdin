@@ -110,7 +110,7 @@ export const ClickActionRenderer: React.FC<{
                   transform: "translate(-50%, -50%)",
                 }}
               >
-                <div className="h-3 w-3 rounded-full bg-[color:var(--tool-action)] opacity-90 ring-2 ring-white/50" />
+                <div className="bg-tool-action h-3 w-3 rounded-full opacity-90 ring-2 ring-white/50" />
               </div>
             )}
           </div>
@@ -120,7 +120,7 @@ export const ClickActionRenderer: React.FC<{
       <ToolRendererShell
         header={
           <>
-            <MousePointer className="h-3.5 w-3.5 shrink-0 text-[color:var(--tool-action)]" />
+            <MousePointer className="text-tool-action h-3.5 w-3.5 shrink-0" />
             <span className="text-foreground min-w-0 flex-1 truncate font-mono text-[11px] font-semibold">
               {label}
             </span>
@@ -189,7 +189,7 @@ export const HoverActionRenderer: React.FC<{
                 }}
               >
                 {/* Hover ring — distinct from click dot */}
-                <div className="h-5 w-5 rounded-full border border-[color:var(--tool-action)]/60 bg-[color-mix(in_srgb,var(--tool-action)_15%,transparent)]" />
+                <div className="h-5 w-5 rounded-full border border-(--tool-action)/60 bg-[color-mix(in_srgb,var(--tool-action)_15%,transparent)]" />
               </div>
             )}
           </div>
@@ -199,7 +199,7 @@ export const HoverActionRenderer: React.FC<{
       <ToolRendererShell
         header={
           <>
-            <MousePointer className="h-3.5 w-3.5 shrink-0 text-[color:var(--tool-action)]" />
+            <MousePointer className="text-tool-action h-3.5 w-3.5 shrink-0" />
             <span className="text-foreground min-w-0 flex-1 truncate font-mono text-[11px] font-semibold">
               Hover
             </span>
@@ -318,7 +318,7 @@ export const DragActionRenderer: React.FC<{
       <ToolRendererShell
         header={
           <>
-            <Move className="h-3.5 w-3.5 shrink-0 text-[color:var(--tool-action)]" />
+            <Move className="text-tool-action h-3.5 w-3.5 shrink-0" />
             <span className="text-foreground min-w-0 flex-1 truncate font-mono text-[11px] font-semibold">
               Drag &amp; Drop
             </span>
@@ -372,7 +372,7 @@ export const FormFillRenderer: React.FC<{
       <ToolRendererShell
         header={
           <>
-            <Edit3 className="h-3.5 w-3.5 shrink-0 text-[color:var(--tool-action)]" />
+            <Edit3 className="text-tool-action h-3.5 w-3.5 shrink-0" />
             <span className="text-foreground min-w-0 flex-1 truncate font-mono text-[11px] font-semibold">
               Form Input
             </span>
@@ -419,7 +419,7 @@ export const WaitActionRenderer: React.FC<{
       <ToolRendererShell
         header={
           <>
-            <Clock className="h-3.5 w-3.5 shrink-0 text-[color:var(--tool-action)]" />
+            <Clock className="text-tool-action h-3.5 w-3.5 shrink-0" />
             <span className="text-foreground min-w-0 flex-1 truncate font-mono text-[11px] font-semibold">
               Wait
             </span>
@@ -484,7 +484,7 @@ export const DataExtractionRenderer: React.FC<{
       <ToolRendererShell
         header={
           <>
-            <ArrowDownTray className="h-3.5 w-3.5 shrink-0 text-[color:var(--tool-data)]" />
+            <ArrowDownTray className="text-tool-data h-3.5 w-3.5 shrink-0" />
             <span className="text-foreground min-w-0 flex-1 truncate font-mono text-[11px] font-semibold">
               Data Extraction
             </span>
@@ -501,7 +501,7 @@ export const DataExtractionRenderer: React.FC<{
           {selector && (
             <div className="flex items-center gap-1.5">
               <span className="rk-section-label">selector</span>
-              <span className="rk-path-chip max-w-[200px] truncate">{selector}</span>
+              <span className="rk-path-chip max-w-50 truncate">{selector}</span>
             </div>
           )}
           <div className="flex items-center gap-1.5">
@@ -535,7 +535,7 @@ export const DataExtractionRenderer: React.FC<{
                   {extractedData.map((item: unknown, i: number) => (
                     <div
                       key={i}
-                      className="text-foreground/80 rounded bg-[var(--surface-4)] px-2 py-1 font-mono text-[11px]"
+                      className="text-foreground/80 bg-surface-4 rounded px-2 py-1 font-mono text-[11px]"
                     >
                       {typeof item === "string" ? item : JSON.stringify(item)}
                     </div>

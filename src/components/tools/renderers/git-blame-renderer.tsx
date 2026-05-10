@@ -1,5 +1,7 @@
 "use client"
 
+import { FileExtensionIcon } from "@/components/file-extension-icon"
+
 import { type ToolResultContentPart } from "./tool-result-renderer"
 
 interface BlameLine {
@@ -31,6 +33,9 @@ export function GitBlameRenderer({ part }: { part: ToolResultContentPart }) {
       {/* Header */}
       <div className="bg-muted/20 flex items-center gap-2 border-b px-3 py-2">
         <span className="text-foreground text-xs font-semibold">Git Blame</span>
+        {filePath && (
+          <FileExtensionIcon extensionName={filePath} className="h-3.5 w-3.5 shrink-0" />
+        )}
         <span className="text-muted-foreground truncate font-mono text-[10px]">{filePath}</span>
         {lines.length > 0 && (
           <span className="bg-muted text-muted-foreground ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px]">
@@ -52,19 +57,19 @@ export function GitBlameRenderer({ part }: { part: ToolResultContentPart }) {
               {rows.map((row, i) => (
                 <tr key={i} className="hover:bg-muted/10 group">
                   {/* Hash */}
-                  <td className="w-[52px] border-r px-2 py-px align-top whitespace-nowrap text-amber-600 select-none">
+                  <td className="w-13 border-r px-2 py-px align-top whitespace-nowrap text-amber-600 select-none">
                     {row.showMeta ? row.hash : ""}
                   </td>
                   {/* Author */}
-                  <td className="text-muted-foreground w-[100px] max-w-[100px] truncate border-r px-2 py-px align-top whitespace-nowrap">
+                  <td className="text-muted-foreground w-25 max-w-25 truncate border-r px-2 py-px align-top whitespace-nowrap">
                     {row.showMeta ? row.author : ""}
                   </td>
                   {/* Date */}
-                  <td className="text-muted-foreground/60 w-[72px] border-r px-2 py-px align-top whitespace-nowrap select-none">
+                  <td className="text-muted-foreground/60 w-18 border-r px-2 py-px align-top whitespace-nowrap select-none">
                     {row.showMeta ? row.date : ""}
                   </td>
                   {/* Line number */}
-                  <td className="text-muted-foreground/40 w-[36px] border-r px-2 py-px text-right align-top whitespace-nowrap select-none">
+                  <td className="text-muted-foreground/40 w-9 border-r px-2 py-px text-right align-top whitespace-nowrap select-none">
                     {row.lineNo}
                   </td>
                   {/* Code */}

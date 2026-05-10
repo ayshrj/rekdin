@@ -74,8 +74,8 @@ export function HttpRequestRenderer({ part }: { part: ToolResultContentPart }) {
     <ToolRendererShell
       header={
         <>
-          <Globe className="h-3.5 w-3.5 shrink-0 text-[color:var(--tool-browser)]" />
-          <span className="rounded bg-[color-mix(in_srgb,var(--tool-browser)_15%,transparent)] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[color:var(--tool-browser)]">
+          <Globe className="text-tool-browser h-3.5 w-3.5 shrink-0" />
+          <span className="text-tool-browser rounded bg-[color-mix(in_srgb,var(--tool-browser)_15%,transparent)] px-1.5 py-0.5 font-mono text-[10px] font-semibold">
             {method}
           </span>
           {status !== undefined && (

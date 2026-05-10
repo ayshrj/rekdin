@@ -2,8 +2,8 @@
 
 import React from "react"
 
+import { FileExtensionIcon } from "@/components/file-extension-icon"
 import { Markdown } from "@/components/markdown"
-import { FileText } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 import { SimpleCodeEditor } from "./simple-code-editor"
@@ -96,7 +96,10 @@ export const FileReadRenderer: React.FC<{
       {/* Header */}
       <div className="bg-muted/20 flex items-center justify-between border-b px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <FileText className="text-tool-code h-3.5 w-3.5 shrink-0" />
+          <FileExtensionIcon
+            extensionName={filePath || fileName}
+            className="h-3.5 w-3.5 shrink-0"
+          />
           <span className="text-foreground/70 truncate font-mono text-[11px]" title={filePath}>
             {filePath || "(unknown path)"}
           </span>

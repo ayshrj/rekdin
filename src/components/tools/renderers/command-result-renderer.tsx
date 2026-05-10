@@ -18,13 +18,13 @@ import { ToolResultContentPart } from "./tool-result-renderer"
 
 function TokenizedCommand({ command }: { command: string }) {
   const patterns: { re: RegExp; cls: string }[] = [
-    { re: /^\$\w+|\$\{\w+\}/, cls: "text-[color:var(--tool-command)] opacity-70" },
+    { re: /^\$\w+|\$\{\w+\}/, cls: "text-tool-command opacity-70" },
     { re: /^(["'])(?:(?=(\\?))\2.)*?\1/, cls: "text-foreground/60" },
     { re: /^(?:\/|\.\.?\/|~\/)[\w./\\_-]*/, cls: "text-foreground/70" },
     { re: /^-{1,2}[\w-]+/, cls: "text-muted-foreground" },
     {
       re: /^(?:>|>>|<|<<|2>|2>>|&>)(?=\s|$)/,
-      cls: "text-[color:var(--tool-command)] font-semibold",
+      cls: "text-tool-command font-semibold",
     },
     { re: /^(?:\|{1,2}|;|&&)(?=\s|$)/, cls: "text-destructive/70 font-semibold" },
   ]
@@ -39,7 +39,7 @@ function TokenizedCommand({ command }: { command: string }) {
       const m = remaining.match(/^[\w.-]+/)
       if (m) {
         nodes.push(
-          <span key={key++} className="font-semibold text-[color:var(--tool-command)]">
+          <span key={key++} className="text-tool-command font-semibold">
             {m[0]}
           </span>
         )
@@ -86,20 +86,16 @@ function StreamPane({ label, content, isErr }: { label: string; content: string;
       <div
         className={cn(
           "flex items-center justify-between border-b border-dashed px-3 py-1",
-          isErr
-            ? "border-[color-mix(in_srgb,var(--destructive)_20%,transparent)]"
-            : "border-[var(--border)]"
+          isErr ? "border-[color-mix(in_srgb,var(--destructive)_20%,transparent)]" : "border-border"
         )}
       >
-        <span className={cn("rk-section-label", isErr && "text-[color:var(--destructive)]/60")}>
-          {label}
-        </span>
+        <span className={cn("rk-section-label", isErr && "text-destructive/60")}>{label}</span>
         <CopyButton text={content} />
       </div>
       <pre
         className={cn(
           "rk-scrollbar max-h-[55vh] overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed wrap-anywhere whitespace-pre-wrap",
-          isErr ? "text-[color:var(--destructive)]" : "text-foreground/80"
+          isErr ? "text-destructive" : "text-foreground/80"
         )}
       >
         {content}
@@ -157,14 +153,12 @@ export const CommandResultRenderer: React.FC<{
         <>
           {/* Terminal dots — identity marker for shell context */}
           <span className="flex shrink-0 gap-1" aria-hidden>
-            <span className="h-2 w-2 rounded-full bg-[color:var(--tool-command)]/80" />
-            <span className="h-2 w-2 rounded-full bg-[color:var(--tool-command)]/50" />
-            <span className="h-2 w-2 rounded-full bg-[color:var(--tool-command)]/25" />
+            <span className="h-2 w-2 rounded-full bg-(--tool-command)/80" />
+            <span className="h-2 w-2 rounded-full bg-(--tool-command)/50" />
+            <span className="h-2 w-2 rounded-full bg-(--tool-command)/25" />
           </span>
 
-          <span className="font-mono text-[11px] font-semibold text-[color:var(--tool-command)]">
-            Terminal
-          </span>
+          <span className="text-tool-command font-mono text-[11px] font-semibold">Terminal</span>
 
           {cwd && (
             <span className="rk-path-chip max-w-[40%] min-w-0 truncate" title={cwd}>
@@ -189,9 +183,7 @@ export const CommandResultRenderer: React.FC<{
       {command && (
         <div className="border-b px-3 py-2">
           <div className="flex items-start gap-2 font-mono text-[12px]">
-            <span className="shrink-0 font-bold text-[color:var(--tool-command)] select-none">
-              $
-            </span>
+            <span className="text-tool-command shrink-0 font-bold select-none">$</span>
             <div className="min-w-0 flex-1 leading-relaxed break-all">
               {command.split("\n").map((line, i) => (
                 <div key={i} className="whitespace-nowrap">

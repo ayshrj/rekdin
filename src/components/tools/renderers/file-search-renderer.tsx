@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 
-import { Check, ClipboardDocumentList as Copy, FileSearch, FileText } from "@/lib/icons"
+import { FileExtensionIcon } from "@/components/file-extension-icon"
+import { Check, ClipboardDocumentList as Copy, FileSearch } from "@/lib/icons"
 
 import { ToolResultContentPart } from "./tool-result-renderer"
 
@@ -90,7 +91,10 @@ export function FileSearchRenderer({ part }: { part: ToolResultContentPart }) {
               key={`${match.file}-${match.line}-${idx}`}
               className="group hover:bg-muted/30 flex items-start gap-2 px-3 py-2"
             >
-              <FileText className="text-muted-foreground/50 mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <FileExtensionIcon
+                extensionName={match.file ?? ""}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0"
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1">
                   <span className="text-foreground/80 font-mono text-[11px] font-medium">

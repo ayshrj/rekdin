@@ -73,7 +73,7 @@ export const BrowserControlRenderer: React.FC<{
                   zIndex: 10,
                 }}
               >
-                <div className="h-2.5 w-2.5 rounded-full bg-[color:var(--tool-action)] opacity-90 ring-2 ring-white/50" />
+                <div className="bg-tool-action h-2.5 w-2.5 rounded-full opacity-90 ring-2 ring-white/50" />
               </div>
             )}
           </div>
@@ -84,7 +84,7 @@ export const BrowserControlRenderer: React.FC<{
       <ToolRendererShell
         header={
           <>
-            <MousePointer className="h-3.5 w-3.5 shrink-0 text-[color:var(--tool-action)]" />
+            <MousePointer className="text-tool-action h-3.5 w-3.5 shrink-0" />
             <span className="text-foreground min-w-0 flex-1 truncate font-mono text-[11px] font-semibold">
               GUI Agent Operation
             </span>
@@ -98,7 +98,7 @@ export const BrowserControlRenderer: React.FC<{
         <div className="divide-y">
           {thought && (
             <div className="flex items-start gap-2 px-3 py-2">
-              <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--tool-action)]" />
+              <Eye className="text-tool-action mt-0.5 h-3.5 w-3.5 shrink-0" />
               <div className="min-w-0">
                 <span className="rk-section-label mb-0.5 block">Thought</span>
                 <p className="text-foreground/80 font-mono text-[11px] leading-relaxed">
@@ -109,7 +109,7 @@ export const BrowserControlRenderer: React.FC<{
           )}
           {step && (
             <div className="flex items-start gap-2 px-3 py-2">
-              <ChevronDoubleRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--tool-action)]" />
+              <ChevronDoubleRight className="text-tool-action mt-0.5 h-3.5 w-3.5 shrink-0" />
               <div className="min-w-0">
                 <span className="rk-section-label mb-0.5 block">Action</span>
                 <p className="text-foreground/80 font-mono text-[11px] leading-relaxed">{step}</p>
@@ -118,13 +118,13 @@ export const BrowserControlRenderer: React.FC<{
           )}
           {action && (
             <div className="flex items-start gap-2 px-3 py-2">
-              <Type className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--tool-action)]" />
+              <Type className="text-tool-action mt-0.5 h-3.5 w-3.5 shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="mb-1 flex items-center justify-between">
                   <span className="rk-section-label">Command</span>
                   <CopyButton text={String(action)} />
                 </div>
-                <pre className="text-foreground/80 rounded bg-[var(--surface-4)] px-2 py-1 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap">
+                <pre className="text-foreground/80 bg-surface-4 rounded px-2 py-1 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap">
                   {action}
                 </pre>
               </div>

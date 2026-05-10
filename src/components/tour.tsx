@@ -281,7 +281,7 @@ export function TourProvider({
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.97 }}
                 className={cn(
-                  "border-primary pointer-events-none fixed z-[60] rounded-xl border-4 shadow-[0_0_0_9999px_rgba(0,0,0,0.7)]",
+                  "border-primary pointer-events-none fixed z-60 rounded-xl border-4 shadow-[0_0_0_9999px_rgba(0,0,0,0.7)]",
                   className
                 )}
                 style={{
@@ -298,7 +298,7 @@ export function TourProvider({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
               transition={{ duration: 0.15, ease: "easeOut" }}
-              className="fixed z-[70]"
+              className="fixed z-70"
               style={{
                 top: contentPosition.top,
                 left: contentPosition.left,

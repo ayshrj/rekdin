@@ -254,6 +254,49 @@ function compactCommand(result: Record<string, unknown>, mode: ModelToolResultMo
   }
 }
 
+function compactTextPayload(result: Record<string, unknown>, mode: ModelToolResultMode) {
+  const text =
+    typeof result.text === "string"
+      ? result.text
+      : typeof result.content === "string"
+        ? result.content
+        : ""
+  const preview = previewText(text, mode === "history" ? 180 : 700)
+  return {
+    ...result,
+    text: undefined,
+    content: undefined,
+    textPreview: preview.preview,
+    textChars: preview.chars,
+    textTokens: preview.tokens,
+    textSha256: preview.sha256,
+    truncated: preview.truncated,
+  }
+}
+
+function compactRows(result: Record<string, unknown>, mode: ModelToolResultMode) {
+  const limit = mode === "history" ? 8 : 40
+  const rows = Array.isArray(result.rows) ? result.rows : []
+  const tables = Array.isArray(result.tables) ? result.tables : []
+  return {
+    ...result,
+    rows: rows.slice(0, limit),
+    omittedRows: Math.max(rows.length - limit, 0),
+    tables: tables.slice(0, mode === "history" ? 3 : 10),
+    omittedTables: Math.max(tables.length - (mode === "history" ? 3 : 10), 0),
+  }
+}
+
+function compactArrayKey(result: Record<string, unknown>, key: string, mode: ModelToolResultMode) {
+  const limit = mode === "history" ? 10 : 50
+  const values = Array.isArray(result[key]) ? result[key] : []
+  return {
+    ...result,
+    [key]: values.slice(0, limit),
+    [`omitted${key[0].toUpperCase()}${key.slice(1)}`]: Math.max(values.length - limit, 0),
+  }
+}
+
 function compactGeneric(toolName: string, result: unknown, mode: ModelToolResultMode) {
   const record = asRecord(result)
   const type = typeof record.type === "string" ? record.type : toolName
@@ -273,10 +316,50 @@ function compactGeneric(toolName: string, result: unknown, mode: ModelToolResult
     toolName === "shell_execute" ||
     toolName === "node_execute" ||
     toolName === "python_execute" ||
-    toolName.endsWith("_codeact")
+    toolName.endsWith("_codeact") ||
+    toolName === "run_npm_script" ||
+    toolName === "typecheck_project" ||
+    toolName === "lint_project" ||
+    toolName === "test_project" ||
+    toolName === "format_check" ||
+    toolName === "build_project" ||
+    type === "run_npm_script" ||
+    type === "typecheck_project" ||
+    type === "lint_project" ||
+    type === "test_project" ||
+    type === "format_check" ||
+    type === "build_project"
   ) {
     return compactCommand(record, mode)
   }
+  if (type === "pdf_extract_text" || type === "docx_extract_text" || type === "image_ocr")
+    return compactTextPayload(record, mode)
+  if (
+    type === "csv_preview" ||
+    type === "csv_query" ||
+    type === "sqlite_query" ||
+    type === "html_table_extract" ||
+    type === "browser_table_extract"
+  ) {
+    return compactRows(record, mode)
+  }
+  if (type === "dependency_graph") {
+    const nodes = Array.isArray(record.nodes) ? record.nodes : []
+    const edges = Array.isArray(record.edges) ? record.edges : []
+    return {
+      ...record,
+      nodeCount: record.nodeCount ?? nodes.length,
+      edgeCount: record.edgeCount ?? edges.length,
+      nodes: nodes.slice(0, mode === "history" ? 10 : 80),
+      edges: edges.slice(0, mode === "history" ? 15 : 160),
+      omittedNodes: Math.max(nodes.length - (mode === "history" ? 10 : 80), 0),
+      omittedEdges: Math.max(edges.length - (mode === "history" ? 15 : 160), 0),
+    }
+  }
+  if (type === "browser_console_logs") return compactArrayKey(record, "logs", mode)
+  if (type === "browser_network_log") return compactArrayKey(record, "requests", mode)
+  if (type === "secret_scan") return compactArrayKey(record, "findings", mode)
+  if (type === "dependency_audit") return sanitizeToolPayload(record)
   if (toolName.startsWith("browser_") || String(type).startsWith("browser_")) {
     return compactBrowserResult(record, mode)
   }

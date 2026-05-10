@@ -54,20 +54,16 @@ function StreamPane({ label, content, isErr }: { label: string; content: string;
       <div
         className={cn(
           "flex items-center justify-between border-b border-dashed px-3 py-1",
-          isErr
-            ? "border-[color-mix(in_srgb,var(--destructive)_20%,transparent)]"
-            : "border-[var(--border)]"
+          isErr ? "border-[color-mix(in_srgb,var(--destructive)_20%,transparent)]" : "border-border"
         )}
       >
-        <span className={cn("rk-section-label", isErr && "text-[color:var(--destructive)]/60")}>
-          {label}
-        </span>
+        <span className={cn("rk-section-label", isErr && "text-destructive/60")}>{label}</span>
         <CopyButton text={content} />
       </div>
       <pre
         className={cn(
           "rk-scrollbar max-h-[50vh] overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed wrap-anywhere whitespace-pre-wrap",
-          isErr ? "text-[color:var(--destructive)]" : "text-foreground/80"
+          isErr ? "text-destructive" : "text-foreground/80"
         )}
       >
         {content}
@@ -127,16 +123,16 @@ export const ScriptResultRenderer: React.FC<{
 
       {/* ── Execution output ── */}
       {(mode === "both" || mode === "output") && hasOutput && (
-        <div className="overflow-hidden rounded-lg border bg-[var(--surface-3)]">
+        <div className="bg-surface-3 overflow-hidden rounded-lg border">
           {/* Output header */}
-          <div className="flex items-center gap-2 border-b bg-[var(--surface-3)] px-3 py-2">
+          <div className="bg-surface-3 flex items-center gap-2 border-b px-3 py-2">
             <span className="flex shrink-0 gap-1" aria-hidden>
-              <span className="h-2 w-2 rounded-full bg-[color:var(--tool-command)]/80" />
-              <span className="h-2 w-2 rounded-full bg-[color:var(--tool-command)]/50" />
-              <span className="h-2 w-2 rounded-full bg-[color:var(--tool-command)]/25" />
+              <span className="h-2 w-2 rounded-full bg-(--tool-command)/80" />
+              <span className="h-2 w-2 rounded-full bg-(--tool-command)/50" />
+              <span className="h-2 w-2 rounded-full bg-(--tool-command)/25" />
             </span>
-            <Play className="h-3 w-3 shrink-0 text-[color:var(--tool-command)]" aria-hidden />
-            <span className="font-mono text-[11px] font-semibold text-[color:var(--tool-command)]">
+            <Play className="text-tool-command h-3 w-3 shrink-0" aria-hidden />
+            <span className="text-tool-command font-mono text-[11px] font-semibold">
               {interpreter}
             </span>
             <div className="ml-auto flex items-center gap-2">

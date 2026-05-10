@@ -76,6 +76,15 @@ const GEMINI_UNSUPPORTED_TOOL_NAMES = new Set([
 const PROTECTED_WORKSPACE_ACCESS_ARGUMENT_KEYS: Record<string, string[]> = {
   file_read: ["path"],
   list_files: ["path"],
+  file_stat: ["path"],
+  workspace_stats: ["path"],
+  file_head_tail: ["path"],
+  file_outline: ["path"],
+  symbol_search: ["path"],
+  symbol_references: ["path"],
+  dependency_graph: ["path"],
+  duplicate_code_candidates: ["path"],
+  dead_code_candidates: ["path"],
   code_map: ["path"],
   file_search: ["path"],
   write_file: ["path"],
@@ -85,9 +94,25 @@ const PROTECTED_WORKSPACE_ACCESS_ARGUMENT_KEYS: Record<string, string[]> = {
   archive_create: ["paths"],
   archive_extract: ["outputDir"],
   extract_todos: ["path"],
+  pdf_extract_text: ["path"],
+  docx_extract_text: ["path"],
+  csv_preview: ["path"],
+  csv_query: ["path"],
+  json_query: ["path"],
+  yaml_query: ["path"],
+  sqlite_query: ["path"],
+  markdown_frontmatter: ["path"],
+  secret_scan: ["path"],
+  workspace_permissions_scan: ["path"],
+  asset_manifest: ["path"],
+  svg_optimize: ["path"],
   git_diff_summary: ["path"],
   git_blame: ["path"],
   git_file_history: ["path"],
+  git_staged_diff: ["path"],
+  git_show: ["path"],
+  git_patch_preview: ["path"],
+  git_apply_patch: ["patch"],
   execute_command: ["command", "cwd"],
   shell_execute: ["command", "cwd"],
   node_execute: ["code"],
@@ -96,7 +121,7 @@ const PROTECTED_WORKSPACE_ACCESS_ARGUMENT_KEYS: Record<string, string[]> = {
   python_codeact: ["code"],
   shell_codeact: ["code"],
 }
-const FREEFORM_PROTECTED_WORKSPACE_ARGUMENT_KEYS = new Set(["command", "code"])
+const FREEFORM_PROTECTED_WORKSPACE_ARGUMENT_KEYS = new Set(["command", "code", "patch"])
 
 function findProtectedWorkspaceAccessReference(key: string, value: unknown): string | undefined {
   if (typeof value === "string") {

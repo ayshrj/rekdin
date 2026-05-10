@@ -52,7 +52,7 @@ export const JsonResultRenderer: React.FC<{
     <ToolRendererShell
       header={
         <>
-          <CodeBracket className="h-3.5 w-3.5 shrink-0 text-[color:var(--tool-json)]" />
+          <CodeBracket className="text-tool-json h-3.5 w-3.5 shrink-0" />
           <span className="text-foreground min-w-0 flex-1 truncate font-mono text-[11px] font-semibold">
             {part.toolName || "JSON"}
           </span>
@@ -110,7 +110,7 @@ export const JsonResultRenderer: React.FC<{
         ) : (
           <div className="flex min-w-0">
             {/* Line numbers */}
-            <div className="text-muted-foreground/50 border-r bg-[var(--surface-4)] px-2 py-3 text-right font-mono text-[10px] select-none">
+            <div className="text-muted-foreground/50 bg-surface-4 border-r px-2 py-3 text-right font-mono text-[10px] select-none">
               {jsonString.split("\n").map((_, i) => (
                 <div key={i} className="leading-[1.6]">
                   {i + 1}

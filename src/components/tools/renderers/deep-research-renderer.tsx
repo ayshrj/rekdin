@@ -45,7 +45,7 @@ export const DeepResearchRenderer: React.FC<{
     <ToolRendererShell
       header={
         <>
-          <Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--tool-research)]" />
+          <Search className="text-tool-research h-3.5 w-3.5 shrink-0" />
           <span className="text-foreground min-w-0 flex-1 truncate font-mono text-[11px] font-semibold">
             {part.toolName || "Deep Research"}
           </span>
@@ -110,13 +110,13 @@ export const DeepResearchRenderer: React.FC<{
                 return (
                   <div
                     key={i}
-                    className="px-3 py-2.5 transition-colors duration-100 hover:bg-[var(--surface-4)]"
+                    className="hover:bg-surface-4 px-3 py-2.5 transition-colors duration-100"
                   >
                     <a
                       href={source.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mb-1 block font-mono text-[11px] leading-snug font-semibold text-[color:var(--tool-research)] hover:underline"
+                      className="text-tool-research mb-1 block font-mono text-[11px] leading-snug font-semibold hover:underline"
                     >
                       {source.title || source.url}
                       <ExternalLink className="ml-1 inline h-2.5 w-2.5 align-[-1px] opacity-50" />
@@ -150,7 +150,7 @@ export const DeepResearchRenderer: React.FC<{
               {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
               {insights.map((insight: any, i: number) => (
                 <div key={i} className="flex items-start gap-2.5 px-3 py-2.5">
-                  <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--tool-research)]" />
+                  <BookOpen className="text-tool-research mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-foreground font-mono text-[11px] font-semibold">
                       {insight.title || `Insight ${i + 1}`}

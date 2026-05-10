@@ -288,7 +288,7 @@ function HomePageContent() {
               defaultLayout={MAIN_LAYOUT}
               className="h-full"
             >
-              <ResizablePanel id="chat" minSize={34} className="min-h-0 min-w-[340px]">
+              <ResizablePanel id="chat" minSize={34} className="min-h-0 min-w-85">
                 <section id="tour-chat-panel" className="h-full min-h-0 min-w-0">
                   <ChatPanel />
                 </section>
@@ -297,7 +297,7 @@ function HomePageContent() {
                 withHandle
                 className="bg-border data-[resize-handle-state=hover]:bg-primary/70 w-px"
               />
-              <ResizablePanel id="workspace" minSize={28} className="min-h-0 min-w-[360px]">
+              <ResizablePanel id="workspace" minSize={28} className="min-h-0 min-w-90">
                 <section id="tour-workspace-panel" className="h-full min-h-0 min-w-0">
                   <WorkspacePanel onChangeWorkspace={openWorkspaceSelector} />
                 </section>
@@ -323,7 +323,7 @@ function HomePageContent() {
             className="bg-surface-1 border-border shrink-0 border-t"
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
-            <div className="flex h-[52px] items-stretch">
+            <div className="flex h-13 items-stretch">
               <MobileNavButton
                 active={mobilePanel === "chat"}
                 icon={<Sparkles className="h-4 w-4" />}

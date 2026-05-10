@@ -4,7 +4,6 @@ import { useState } from "react"
 
 import { Markdown } from "@/components/markdown"
 import { toolLabels } from "@/components/tools/tool-labels"
-import { Badge } from "@/components/ui/badge"
 import { Check, ClipboardDocumentList as Copy, RekdinIcon, User } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { getWorkflowPreset, parseStructuredWorkflowContent } from "@/lib/workflows"

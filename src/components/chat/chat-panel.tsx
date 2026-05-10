@@ -220,7 +220,7 @@ function ProviderPill({
   return (
     <div className="rk-provider-pill">
       <span className={cn("rk-provider-dot", dotColor)} />
-      <span className="max-w-[160px] truncate">{label}</span>
+      <span className="max-w-40 truncate">{label}</span>
     </div>
   )
 }
@@ -324,9 +324,9 @@ function WorkflowBar({
   }, [])
 
   return (
-    <div className="border-border relative border-b">
+    <div id="tour-workflow-bar" className="border-border relative border-b">
       {canScrollRight && (
-        <div className="from-surface-2 pointer-events-none absolute top-0 right-0 z-10 h-full w-6 bg-gradient-to-l to-transparent" />
+        <div className="from-surface-2 pointer-events-none absolute top-0 right-0 z-10 h-full w-6 bg-linear-to-l to-transparent" />
       )}
       <div
         ref={barRef}

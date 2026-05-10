@@ -18,7 +18,7 @@ function Textarea({
   const sizeClasses = {
     sm: "min-h-[40px] text-sm px-2 py-1",
     md: "min-h-[60px] text-base px-3 py-2",
-    lg: "min-h-[80px] text-lg px-4 py-3",
+    lg: "min-h-20 text-lg px-4 py-3",
   }
 
   if (isAutoresize) {
