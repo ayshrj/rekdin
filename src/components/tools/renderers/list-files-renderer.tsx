@@ -2,8 +2,9 @@
 
 import React from "react"
 
+import { FileExtensionIcon } from "@/components/file-extension-icon"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { ChevronDown, ChevronRight, File, InformationCircle } from "@/lib/icons"
+import { ChevronDown, ChevronRight, InformationCircle } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 import { type ToolResultContentPart } from "./tool-result-renderer"
@@ -30,6 +31,8 @@ interface TreeNode {
   reason?: string
   children: TreeNode[]
 }
+
+const EMPTY_FILE_ENTRIES: FileEntry[] = []
 
 function buildTree(files: FileEntry[]): TreeNode[] {
   const root: TreeNode[] = []
@@ -136,7 +139,7 @@ function TreeNodeRow({
           )}
         />
       ) : (
-        <File className="text-muted-foreground/45 group-hover:text-muted-foreground/65 h-3.5 w-3.5 shrink-0" />
+        <FileExtensionIcon extensionName={node.name} className="h-3.5 w-3.5 text-[14px]" />
       )}
 
       <span className="min-w-0 flex-1 truncate font-mono">{node.name}</span>
@@ -190,7 +193,7 @@ export const ListFilesRenderer: React.FC<{
 
   const rootPath: string =
     result?.path ?? (part.toolInput as { path?: string } | undefined)?.path ?? "."
-  const files: FileEntry[] = result?.files ?? []
+  const files: FileEntry[] = result?.files ?? EMPTY_FILE_ENTRIES
   const tree = React.useMemo(() => buildTree(files), [files])
 
   const totalFiles = files.filter((f) => f.type === "file").length
