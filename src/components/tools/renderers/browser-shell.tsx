@@ -37,26 +37,26 @@ export const BrowserShell: React.FC<BrowserShellProps> = ({
 
   return (
     <div
-      className={`border-border bg-card w-full min-w-0 overflow-hidden rounded-xl border shadow-sm ${className}`}
+      className={`border-border bg-surface-3 w-full min-w-0 overflow-hidden rounded-lg border shadow-none ${className}`}
     >
       <div className="border-border from-muted/70 to-muted/40 border-b bg-linear-to-r">
         <div className="flex items-center px-4 py-3">
           <div className="mr-4 flex shrink-0 space-x-1.5">
             <motion.div
               whileHover={{ scale: 1.1 }}
-              className="border-tool-browser/30 bg-tool-browser/80 h-3 w-3 cursor-pointer rounded-full border shadow-sm"
+              className="border-tool-browser/30 bg-tool-browser/80 h-3 w-3 cursor-pointer rounded-full border shadow-none"
             />
             <motion.div
               whileHover={{ scale: 1.1 }}
-              className="border-tool-browser/20 bg-tool-browser/60 h-3 w-3 cursor-pointer rounded-full border shadow-sm"
+              className="border-tool-browser/20 bg-tool-browser/60 h-3 w-3 cursor-pointer rounded-full border shadow-none"
             />
             <motion.div
               whileHover={{ scale: 1.1 }}
-              className="border-tool-browser/10 bg-tool-browser/40 h-3 w-3 cursor-pointer rounded-full border shadow-sm"
+              className="border-tool-browser/10 bg-tool-browser/40 h-3 w-3 cursor-pointer rounded-full border shadow-none"
             />
           </div>
 
-          <div className="group border-border/60 bg-background text-foreground hover:border-tool-browser/40 flex min-w-0 flex-1 items-center rounded-lg border px-3 py-2 text-xs shadow-sm transition-all duration-200">
+          <div className="group border-border/60 bg-background text-foreground hover:border-tool-browser/40 flex min-w-0 flex-1 items-center rounded-lg border px-3 py-2 text-xs shadow-none transition-all duration-200">
             <div className="flex w-full min-w-0 items-center">
               <div className="mr-2 flex shrink-0 items-center">
                 {isSecure ? (

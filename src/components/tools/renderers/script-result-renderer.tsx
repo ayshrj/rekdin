@@ -108,7 +108,7 @@ export const ScriptResultRenderer: React.FC<ScriptResultRendererProps> = ({ part
               onClick={() => setDisplayMode(id)}
               className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                 displayMode === id
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-none"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -167,7 +167,7 @@ export const ScriptResultRenderer: React.FC<ScriptResultRendererProps> = ({ part
 
           {/* Stdout */}
           {stdout && (
-            <div className="bg-card border-b last:border-b-0">
+            <div className="bg-surface-3 border-b last:border-b-0">
               <div className="border-muted flex items-center justify-between border-b border-dashed px-3 py-1">
                 <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
                   Output

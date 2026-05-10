@@ -23,7 +23,17 @@ import { storeArtifact } from "./artifact-store"
 import { getBrowserSessionManager } from "./browser-session-manager"
 import { getToolExecutionContext } from "./tool-execution-context"
 import { searchPublicWeb } from "./web-search"
-import { ensureWorkspaceDirs, getWorkspaceRoot, resolveWorkspacePath } from "./workspace"
+import {
+  assertWorkspacePathAllowed,
+  BLOCKED_WORKSPACE_DIRECTORIES,
+  ensureWorkspaceDirs,
+  findBlockedWorkspaceDirectoryReference,
+  findBlockedWorkspacePathSegment,
+  getWorkspaceRoot,
+  isBlockedWorkspaceDirectoryName,
+  protectedWorkspaceAccessAllowed,
+  resolveWorkspacePath,
+} from "./workspace"
 
 const turndown = new TurndownService({ headingStyle: "atx" })
 
@@ -190,6 +200,15 @@ async function centerOfSelector(page: Page, selector: string) {
 function truncateString(value: string, max = 4000) {
   if (value.length <= max) return value
   return `${value.slice(0, max)}\n\n...(truncated, ${value.length} chars total)`
+}
+
+function assertNoBlockedDirectoryReference(value: string) {
+  if (protectedWorkspaceAccessAllowed()) return
+  const blockedDirectory = findBlockedWorkspaceDirectoryReference(value)
+  if (!blockedDirectory) return
+  throw new Error(
+    `Access to protected workspace directory "${blockedDirectory}" is blocked. Use a narrower project path and never inspect generated dependency/build folders.`
+  )
 }
 
 /**
@@ -1845,18 +1864,33 @@ export const browserEvaluateTool = tool(
 export const fileSearchTool = tool(
   async ({ query, path: searchPath, maxResults }) => {
     await ensureWorkspaceDirs()
+    if (searchPath) resolveWorkspacePath(searchPath)
     const escapedQuery = query.replace(/'/g, "'\"'\"'")
     const targetPath = searchPath ? searchPath.replace(/'/g, "'\"'\"'") : "."
     const limit = Math.min(Math.max(maxResults ?? 200, 1), 1000)
+    const searchTargetsProtectedDirectory =
+      Boolean(searchPath && findBlockedWorkspacePathSegment(searchPath)) &&
+      protectedWorkspaceAccessAllowed()
+    const rgExcludes = searchTargetsProtectedDirectory
+      ? ""
+      : BLOCKED_WORKSPACE_DIRECTORIES.flatMap((directoryName) => [
+          `--glob '!${directoryName}/**'`,
+          `--glob '!**/${directoryName}/**'`,
+        ]).join(" ")
+    const grepExcludes = searchTargetsProtectedDirectory
+      ? ""
+      : BLOCKED_WORKSPACE_DIRECTORIES.map(
+          (directoryName) => `--exclude-dir='${directoryName}'`
+        ).join(" ")
     let res = await runCommand(
-      `rg --line-number --no-heading --color=never -m ${limit} '${escapedQuery}' '${targetPath}'`,
+      `rg ${rgExcludes} --line-number --no-heading --color=never -m ${limit} '${escapedQuery}' '${targetPath}'`,
       undefined,
       20000
     )
     // Fall back to grep when rg is not installed (exit code 127 = command not found)
     if (res.exitCode === 127) {
       res = await runCommand(
-        `grep -rn --color=never -m ${limit} '${escapedQuery}' '${targetPath}'`,
+        `grep -rn ${grepExcludes} --color=never -m ${limit} '${escapedQuery}' '${targetPath}'`,
         undefined,
         20000
       )
@@ -2089,6 +2123,7 @@ export const browserActionTool = tool(
  */
 export const nodeExecuteTool = tool(
   async ({ code }) => {
+    assertNoBlockedDirectoryReference(code)
     const dir = await mkdtemp(path.join(os.tmpdir(), "Rekdin-node-"))
     const filePath = path.join(dir, "script.js")
     await writeFile(filePath, code, "utf-8")
@@ -2115,6 +2150,7 @@ export const nodeExecuteTool = tool(
  */
 export const pythonExecuteTool = tool(
   async ({ code }) => {
+    assertNoBlockedDirectoryReference(code)
     const dir = await mkdtemp(path.join(os.tmpdir(), "Rekdin-python-"))
     const filePath = path.join(dir, "script.py")
     await writeFile(filePath, code, "utf-8")
@@ -2189,6 +2225,7 @@ export const pythonCodeActTool = tool(
  */
 export const shellCodeActTool = tool(
   async ({ code, filename }) => {
+    assertNoBlockedDirectoryReference(code)
     const started = Date.now()
     const dir = await mkdtemp(path.join(os.tmpdir(), "Rekdin-shell-"))
     const filePath = path.join(dir, filename ?? "code.sh")
@@ -2381,10 +2418,12 @@ export const archiveCreateTool = tool(
     }
 
     const addTree = async (absPath: string, zipPrefix: string) => {
+      assertWorkspacePathAllowed(absPath)
       const info = await stat(absPath)
       if (info.isDirectory()) {
         const entries = await readdir(absPath, { withFileTypes: true })
         for (const entry of entries) {
+          if (entry.isDirectory() && isBlockedWorkspaceDirectoryName(entry.name)) continue
           const childAbs = path.join(absPath, entry.name)
           const childZip = zipPrefix ? `${zipPrefix}/${entry.name}` : entry.name
           if (entry.isDirectory()) {
@@ -2645,8 +2684,9 @@ async function walkDirForTodos(
   const entries = await readdir(dirPath, { withFileTypes: true })
   const results: { file?: string; line?: number; text: string; type: string }[] = []
   for (const entry of entries) {
-    if (entry.name.startsWith(".") || entry.name === "node_modules") continue
+    if (entry.name.startsWith(".") || isBlockedWorkspaceDirectoryName(entry.name)) continue
     const fullPath = path.join(dirPath, entry.name)
+    assertWorkspacePathAllowed(fullPath)
     if (entry.isDirectory()) {
       results.push(...(await walkDirForTodos(fullPath, baseDir)))
     } else {
@@ -3038,11 +3078,18 @@ export const listFilesTool = tool(
   async ({ path: dirPath, recursive }) => {
     await ensureWorkspaceDirs()
     const gather = async (target: string, relative: string) => {
+      assertWorkspacePathAllowed(target)
       const entries = await readdir(target, { withFileTypes: true })
       const output: Array<Record<string, unknown>> = []
       for (const entry of entries) {
         const relPath = relative ? `${relative}/${entry.name}` : entry.name
-        const abs = resolveWorkspacePath(relPath)
+        const isProtectedDirectory =
+          entry.isDirectory() &&
+          isBlockedWorkspaceDirectoryName(entry.name) &&
+          !protectedWorkspaceAccessAllowed()
+        const abs = isProtectedDirectory
+          ? path.join(target, entry.name)
+          : resolveWorkspacePath(relPath)
         const info = await stat(abs)
         output.push({
           name: entry.name,
@@ -3050,8 +3097,13 @@ export const listFilesTool = tool(
           type: entry.isDirectory() ? "directory" : "file",
           size: info.size,
           modified: info.mtime.toISOString(),
+          protected: isProtectedDirectory,
+          skipped: isProtectedDirectory,
+          reason: isProtectedDirectory
+            ? "Skipped by default because this generated dependency/build folder is expected to be large. Ask explicitly to inspect it and Rekdin will request approval."
+            : undefined,
         })
-        if (recursive && entry.isDirectory()) {
+        if (recursive && entry.isDirectory() && !isProtectedDirectory) {
           const nested = await gather(abs, relPath)
           output.push(...nested)
         }
@@ -3110,6 +3162,7 @@ export const writeFileTool = tool(
 export const executeCommandTool = tool(
   async ({ command, cwd, timeout }) => {
     await ensureWorkspaceDirs()
+    assertNoBlockedDirectoryReference(command)
     const workingDir = cwd ? resolveWorkspacePath(cwd) : getWorkspaceRoot()
     return await new Promise((resolve) => {
       const child = spawn(command, {

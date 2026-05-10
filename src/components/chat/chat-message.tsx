@@ -20,9 +20,27 @@ function looksLikeJsonDraft(content: string) {
   return trimmed.startsWith("{") || trimmed.startsWith("[")
 }
 
+/** Maps workflow ids to a display label shown in the agent-mode badge */
+const workflowBadgeLabel: Record<string, string> = {
+  "research-plan": "research-plan",
+  "research-report": "research-report",
+  "repo-audit": "repo-audit",
+  "diff-review": "diff-review",
+}
+
+/** Color variant for the agent-mode badge */
+function workflowBadgeVariant(
+  workflowId: string | undefined
+): "blue" | "purple" | "green" | "default" {
+  if (!workflowId) return "default"
+  if (workflowId === "research-plan" || workflowId === "research-report") return "blue"
+  if (workflowId === "repo-audit" || workflowId === "diff-review") return "purple"
+  return "default"
+}
+
 /**
- * Renders a persisted chat message, including workflow-aware structured output blocks for selected
- * assistant responses.
+ * Renders a persisted chat message, including workflow-aware structured output blocks for
+ * selected assistant responses.
  */
 export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
   const isUser = message.role === "user"
@@ -44,199 +62,191 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
     }
   }
 
+  // ─── Structured renderers ───────────────────────────────────────────────────
+
   const renderStructured = () => {
     if (!structuredContent || !workflowId) return null
-
     const asArray = (value: unknown) => (Array.isArray(value) ? value : [])
 
+    // ── Research Plan ──────────────────────────────────────────────────────────
     if (workflowId === "research-plan") {
       return (
-        <div className="space-y-3 text-sm">
-          <div>
-            <p className="text-muted-foreground text-xs uppercase">Objective</p>
-            <p>
+        <div className="rk-structured-card">
+          <div className="rk-structured-card-header">
+            <span className="rk-structured-eyebrow">Research plan</span>
+            <p className="rk-structured-title">
               {String(structuredContent.objective ?? structuredContent.topic ?? "Research plan")}
             </p>
           </div>
-          <div>
-            <p className="text-muted-foreground text-xs uppercase">Questions</p>
-            <ul className="list-disc space-y-1 pl-5">
-              {asArray(structuredContent.questions).map((item, index) => (
-                <li key={`q-${index}`}>{String(item)}</li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <p className="text-muted-foreground text-xs uppercase">Search Queries</p>
-            <div className="flex flex-wrap gap-2">
-              {asArray(structuredContent.searchQueries).map((item, index) => (
-                <Badge key={`sq-${index}`} variant="secondary">
-                  {String(item)}
-                </Badge>
-              ))}
+
+          <div className="rk-structured-card-body">
+            {/* Questions */}
+            <div>
+              <p className="rk-section-label">Questions</p>
+              <ul className="rk-list">
+                {asArray(structuredContent.questions).map((item, i) => (
+                  <li key={`q-${i}`}>{String(item)}</li>
+                ))}
+              </ul>
             </div>
-          </div>
-          <div>
-            <p className="text-muted-foreground text-xs uppercase">Deliverables</p>
-            <ul className="list-disc space-y-1 pl-5">
-              {asArray(structuredContent.deliverables).map((item, index) => (
-                <li key={`d-${index}`}>{String(item)}</li>
-              ))}
-            </ul>
+
+            {/* Search queries */}
+            <div>
+              <p className="rk-section-label">Search queries</p>
+              <div className="rk-chip-group">
+                {asArray(structuredContent.searchQueries).map((item, i) => (
+                  <span key={`sq-${i}`} className="rk-mono-chip">
+                    {String(item)}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Deliverables */}
+            <div>
+              <p className="rk-section-label">Deliverables</p>
+              <ul className="rk-list">
+                {asArray(structuredContent.deliverables).map((item, i) => (
+                  <li key={`d-${i}`}>{String(item)}</li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       )
     }
 
+    // ── Research Report ────────────────────────────────────────────────────────
     if (workflowId === "research-report") {
       const findings = asArray(structuredContent.keyFindings)
       const sources = asArray(structuredContent.sources)
       return (
-        <div className="space-y-3 text-sm">
-          <div className="bg-surface-2/50 rounded-xl border p-4">
-            <p className="text-primary font-mono text-[10px] tracking-[0.18em] uppercase">
-              Research report
-            </p>
-            <p className="mt-1 text-base font-semibold">
+        <div className="rk-structured-card">
+          <div className="rk-structured-card-header">
+            <span className="rk-structured-eyebrow">Research report</span>
+            <p className="rk-structured-title">
               {String(structuredContent.title ?? "Research Report")}
             </p>
-            <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
+            <p className="rk-structured-summary">
               {String(structuredContent.executiveSummary ?? "")}
             </p>
           </div>
-          {findings.length > 0 ? (
-            <div>
-              <p className="text-muted-foreground text-xs uppercase">Key Findings</p>
-              <div className="mt-2 space-y-2">
-                {findings.map((item, index) => {
-                  const finding = item as Record<string, unknown>
-                  return (
-                    <div
-                      key={`finding-${index}`}
-                      className="bg-surface-1 border-border/70 rounded-xl border p-3"
-                    >
-                      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start sm:justify-between">
-                        <p className="min-w-0 flex-1 font-medium">
-                          {String(finding.claim ?? `Finding ${index + 1}`)}
-                        </p>
-                        <Badge
-                          variant="outline"
-                          className="w-auto max-w-full shrink rounded-lg text-left leading-relaxed break-words whitespace-normal sm:max-w-[44%] sm:justify-start"
-                        >
-                          {String(finding.confidence ?? "unknown")}
-                        </Badge>
+
+          <div className="rk-structured-card-body">
+            {findings.length > 0 && (
+              <div>
+                <p className="rk-section-label">Key findings</p>
+                <div className="rk-finding-list">
+                  {findings.map((item, i) => {
+                    const f = item as Record<string, unknown>
+                    return (
+                      <div key={`f-${i}`} className="rk-finding-row">
+                        <div className="rk-finding-meta">
+                          <p className="rk-finding-claim">
+                            {String(f.claim ?? `Finding ${i + 1}`)}
+                          </p>
+                          <ConfidenceBadge value={String(f.confidence ?? "unknown")} />
+                        </div>
+                        <p className="rk-finding-evidence">{String(f.evidence ?? "")}</p>
                       </div>
-                      <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
-                        {String(finding.evidence ?? "")}
-                      </p>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ) : null}
-          {sources.length > 0 ? (
-            <div>
-              <p className="text-muted-foreground text-xs uppercase">Sources</p>
-              <div className="mt-2 space-y-2">
-                {sources.map((item, index) => {
-                  const source = item as Record<string, unknown>
-                  const url = String(source.url ?? "")
-                  return (
-                    <div
-                      key={`source-${index}`}
-                      className="bg-surface-1 border-border/70 rounded-xl border p-3"
-                    >
-                      <a
-                        className="font-medium underline underline-offset-4"
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {String(source.title ?? url)}
-                      </a>
-                      <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
-                        {String(source.whyItMatters ?? "")}
-                      </p>
-                    </div>
-                  )
-                })}
+            )}
+
+            {sources.length > 0 && (
+              <div>
+                <p className="rk-section-label">Sources</p>
+                <div className="rk-finding-list">
+                  {sources.map((item, i) => {
+                    const s = item as Record<string, unknown>
+                    const url = String(s.url ?? "")
+                    return (
+                      <div key={`s-${i}`} className="rk-finding-row">
+                        <a className="rk-source-link" href={url} target="_blank" rel="noreferrer">
+                          {String(s.title ?? url)}
+                        </a>
+                        <p className="rk-finding-evidence">{String(s.whyItMatters ?? "")}</p>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ) : null}
+            )}
+          </div>
         </div>
       )
     }
 
+    // ── Repo Audit / Diff Review ───────────────────────────────────────────────
     if (workflowId === "repo-audit" || workflowId === "diff-review") {
-      const findings = asArray(
-        workflowId === "repo-audit" ? structuredContent.risks : structuredContent.findings
-      )
+      const isAudit = workflowId === "repo-audit"
+      const findings = asArray(isAudit ? structuredContent.risks : structuredContent.findings)
       const nextSteps = asArray(
-        workflowId === "repo-audit"
-          ? structuredContent.recommendedNextSteps
-          : structuredContent.validation
+        isAudit ? structuredContent.recommendedNextSteps : structuredContent.validation
       )
+      const entryPoints = asArray(structuredContent.entryPoints)
+
       return (
-        <div className="space-y-3 text-sm">
-          <p className="whitespace-pre-wrap">
-            {String(structuredContent.summary ?? "Structured workflow result")}
-          </p>
-          {asArray(structuredContent.entryPoints).length > 0 ? (
-            <div>
-              <p className="text-muted-foreground text-xs uppercase">Entry Points</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {asArray(structuredContent.entryPoints).map((item, index) => (
-                  <Badge key={`ep-${index}`} variant="secondary">
-                    {String(item)}
-                  </Badge>
-                ))}
+        <div className="rk-structured-card">
+          <div className="rk-structured-card-header">
+            <span className="rk-structured-eyebrow">{isAudit ? "Repo audit" : "Diff review"}</span>
+            {Boolean(structuredContent.title) && (
+              <p className="rk-structured-title">{String(structuredContent.title)}</p>
+            )}
+            <p className="rk-structured-summary">
+              {String(structuredContent.summary ?? "Structured workflow result")}
+            </p>
+          </div>
+
+          <div className="rk-structured-card-body">
+            {entryPoints.length > 0 && (
+              <div>
+                <p className="rk-section-label">Entry points</p>
+                <div className="rk-chip-group">
+                  {entryPoints.map((item, i) => (
+                    <span key={`ep-${i}`} className="rk-mono-chip">
+                      {String(item)}
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : null}
-          {findings.length > 0 ? (
-            <div>
-              <p className="text-muted-foreground text-xs uppercase">Findings</p>
-              <div className="mt-2 space-y-2">
-                {findings.map((item, index) => {
-                  const finding = item as Record<string, unknown>
-                  return (
-                    <div
-                      key={`review-${index}`}
-                      className="bg-surface-1 border-border/70 rounded-xl border p-3"
-                    >
-                      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start sm:justify-between">
-                        <p className="min-w-0 flex-1 font-medium">
-                          {String(finding.title ?? `Item ${index + 1}`)}
-                        </p>
-                        <Badge
-                          variant="outline"
-                          className="w-auto max-w-full shrink rounded-lg text-left leading-relaxed break-words whitespace-normal sm:max-w-[44%] sm:justify-start"
-                        >
-                          {String(finding.severity ?? finding.priority ?? "info")}
-                        </Badge>
+            )}
+
+            {findings.length > 0 && (
+              <div>
+                <p className="rk-section-label">Findings</p>
+                <div className="rk-finding-list">
+                  {findings.map((item, i) => {
+                    const f = item as Record<string, unknown>
+                    return (
+                      <div key={`rv-${i}`} className="rk-finding-row">
+                        <div className="rk-finding-meta">
+                          <p className="rk-finding-claim">{String(f.title ?? `Item ${i + 1}`)}</p>
+                          <SeverityBadge value={String(f.severity ?? f.priority ?? "info")} />
+                        </div>
+                        <p className="rk-finding-evidence">{String(f.reason ?? f.detail ?? "")}</p>
                       </div>
-                      <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
-                        {String(finding.reason ?? finding.detail ?? "")}
-                      </p>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ) : null}
-          {nextSteps.length > 0 ? (
-            <div>
-              <p className="text-muted-foreground text-xs uppercase">
-                {workflowId === "repo-audit" ? "Recommended Next Steps" : "Validation"}
-              </p>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                {nextSteps.map((item, index) => (
-                  <li key={`step-${index}`}>{String(item)}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+            )}
+
+            {nextSteps.length > 0 && (
+              <div>
+                <p className="rk-section-label">
+                  {isAudit ? "Recommended next steps" : "Validation"}
+                </p>
+                <ul className="rk-arrow-list">
+                  {nextSteps.map((item, i) => (
+                    <li key={`ns-${i}`}>{String(item)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
       )
     }
@@ -244,48 +254,50 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
     return null
   }
 
+  // ── Building-result draft state ──────────────────────────────────────────────
   const renderStructuredDraft = () => {
     if (!isStructuredDraft || !looksLikeJsonDraft(message.content || "")) return null
-
     return (
-      <div className="bg-surface-2/60 rounded-xl border px-3 py-3 text-sm">
-        <div className="flex items-start gap-2.5">
-          <span className="bg-primary mt-1.5 h-2 w-2 shrink-0 animate-pulse rounded-full" />
-          <div className="min-w-0">
-            <p className="font-medium">Building structured result</p>
-            <p className="text-muted-foreground mt-1 text-xs">
-              {workflow?.title ?? "Workflow"} is generating validated JSON. The formatted result
-              will appear here when the stream completes.
-            </p>
+      <div className="rk-draft-state">
+        <span className="rk-draft-pulse" />
+        <div className="min-w-0">
+          <p className="rk-draft-title">Building structured result</p>
+          <p className="rk-draft-sub">
+            {workflow?.title ?? "Workflow"} is generating validated JSON. The formatted result will
+            appear here when the stream completes.
+          </p>
+          <div className="rk-skeleton-lines">
+            <span className="rk-skeleton" style={{ width: "78%" }} />
+            <span className="rk-skeleton" style={{ width: "52%" }} />
           </div>
         </div>
       </div>
     )
   }
 
+  // ─── Badge helpers ──────────────────────────────────────────────────────────
+  const badgeVariant = workflowBadgeVariant(workflowId)
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className={cn("group relative flex w-full flex-col gap-1.5", isUser && "items-end")}>
+    <div className={cn("rk-msg-root group", isUser && "items-end")}>
+      {/* Copy button — AI messages only */}
       {!isUser && (
         <button
           onClick={copyToClipboard}
-          className="hover:bg-surface-2 text-muted-foreground/40 hover:text-foreground hover:border-border absolute -top-1 right-0 rounded-md border border-transparent p-1.5 opacity-0 transition-all group-hover:opacity-100"
+          className={cn("rk-copy-btn", copied && "rk-copy-btn--copied")}
           aria-label="Copy message"
         >
-          {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       )}
-      {showHeader ? (
-        <div
-          className={cn(
-            "text-muted-foreground flex items-center gap-2 font-mono text-[10px] tracking-[0.12em] uppercase",
-            isUser && "ml-auto w-fit flex-row-reverse text-right"
-          )}
-        >
+
+      {/* Message header */}
+      {showHeader && (
+        <div className={cn("rk-msg-header", isUser && "rk-msg-header--user")}>
+          {/* Avatar */}
           <div
-            className={cn(
-              "flex h-6 w-6 shrink-0 items-center justify-center rounded-md border",
-              isUser ? "border-primary/20 bg-primary/20" : "border-primary/20 bg-primary/10"
-            )}
+            className={cn("rk-msg-avatar", isUser ? "rk-msg-avatar--user" : "rk-msg-avatar--ai")}
           >
             {isUser ? (
               <User className="h-3 w-3" />
@@ -293,64 +305,132 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
               <RekdinIcon className="text-primary h-3 w-3" />
             )}
           </div>
-          <span className="font-semibold">{isUser ? "You" : "Rekdin"}</span>
-          {message.metadata?.agentType && !isUser ? (
-            <Badge variant="outline" className="text-[0.65rem] tracking-wide uppercase">
-              {message.metadata.agentType}
-            </Badge>
-          ) : null}
+
+          <span className="rk-msg-name">{isUser ? "You" : "Rekdin"}</span>
+
+          {/* Agent/workflow badge — AI only */}
+          {!isUser && workflowId && (
+            <span
+              className={cn(
+                "rk-agent-badge",
+                badgeVariant === "blue" && "rk-agent-badge--blue",
+                badgeVariant === "purple" && "rk-agent-badge--purple"
+              )}
+            >
+              {workflowBadgeLabel[workflowId] ?? message.metadata?.agentType ?? workflowId}
+            </span>
+          )}
+
+          {/* Fallback agent type badge when no workflowId */}
+          {!isUser && !workflowId && message.metadata?.agentType && (
+            <span className="rk-agent-badge">{message.metadata.agentType}</span>
+          )}
         </div>
-      ) : null}
-      <div
-        className={cn(
-          "overflow-hidden transition",
-          isUser
-            ? "bg-primary text-primary-foreground ml-auto max-w-[82%] rounded-2xl rounded-tr-md px-4 py-3 shadow-sm"
-            : "bg-surface-1/40 border-border/50 w-full rounded-2xl rounded-tl-md border px-4 py-4"
-        )}
-      >
+      )}
+
+      {/* Message body */}
+      <div className={cn("rk-msg-body", isUser ? "rk-msg-body--user" : "rk-msg-body--ai")}>
         <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden">
           {isUser ? (
-            <p className="text-left text-sm wrap-anywhere whitespace-pre-wrap">{message.content}</p>
+            <p className="text-left text-sm leading-relaxed wrap-anywhere whitespace-pre-wrap">
+              {message.content}
+            </p>
           ) : (
             (renderStructuredDraft() ??
             renderStructured() ?? (
-              <Markdown className="max-w-none text-sm wrap-anywhere">
+              <Markdown className="rk-markdown max-w-none text-sm wrap-anywhere">
                 {message.content || "_(no response)_"}
               </Markdown>
             ))
           )}
 
-          {message.attachments && message.attachments.length > 0 ? (
-            <div className={cn("flex flex-wrap gap-2", isUser && "justify-end")}>
+          {/* Attachments */}
+          {message.attachments && message.attachments.length > 0 && (
+            <div className={cn("rk-attach-chips", isUser && "justify-end")}>
               {message.attachments.map((file) => (
-                <a key={file} href={file} target="_blank" rel="noreferrer">
-                  <Badge variant="secondary">{file}</Badge>
+                <a
+                  key={file}
+                  href={file}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rk-attach-chip"
+                >
+                  <span className="rk-attach-icon">⊡</span>
+                  <span className="font-mono text-[10px]">{file}</span>
                 </a>
               ))}
             </div>
-          ) : null}
+          )}
 
+          {/* Tool call chips */}
           {message.toolCalls && message.toolCalls.length > 0 && (
-            <details className="mt-2">
-              <summary className="border-primary/30 text-muted-foreground hover:text-foreground cursor-pointer list-none border-l-2 pl-2 font-mono text-[10px] font-medium tracking-[0.08em] uppercase select-none">
-                {message.toolCalls.length} tool call
-                {message.toolCalls.length > 1 ? "s" : ""}
-              </summary>
-              <div className="border-primary/15 mt-1 flex flex-wrap gap-1.5 border-l-2 pt-1 pl-2">
-                {message.toolCalls.map((call) => (
-                  <span
-                    key={call.id ?? call.name}
-                    className="bg-surface-2 text-muted-foreground rounded-md border px-2 py-0.5 font-mono text-[10px]"
-                  >
-                    {toolLabels[call.name] ?? call.name}
-                  </span>
-                ))}
-              </div>
-            </details>
+            <div className="rk-tool-chips">
+              {message.toolCalls.slice(0, 4).map((call) => (
+                <span key={call.id ?? call.name} className="rk-tool-chip">
+                  <ToolDot name={call.name} />
+                  {toolLabels[call.name] ?? call.name}
+                </span>
+              ))}
+              {message.toolCalls.length > 4 && (
+                <span className="rk-tool-chip rk-tool-chip--overflow">
+                  +{message.toolCalls.length - 4} more
+                </span>
+              )}
+            </div>
           )}
         </div>
       </div>
     </div>
   )
+}
+
+// ─── Small helper components ─────────────────────────────────────────────────
+
+/** Colored dot that maps tool category to the design-system tool color variables */
+function ToolDot({ name }: { name: string }) {
+  const colorVar = toolCategoryColor(name)
+  return (
+    <span
+      className="inline-block h-[5px] w-[5px] shrink-0 rounded-full"
+      style={{ background: colorVar }}
+    />
+  )
+}
+
+function toolCategoryColor(name: string): string {
+  if (/read|write|list|file|search_files/.test(name)) return "var(--tool-code)"
+  if (/browser|navigate|screenshot|click|hover|drag|scroll|type|extract/.test(name))
+    return "var(--tool-browser)"
+  if (/web_search|search/.test(name)) return "var(--tool-search)"
+  if (/shell|exec|run|command|script/.test(name)) return "var(--tool-command)"
+  if (/git|diff|blame|log|branch/.test(name)) return "var(--tool-json)"
+  if (/pdf|doc|archive|artifact/.test(name)) return "var(--tool-doc)"
+  if (/json|hash|base64|text/.test(name)) return "var(--tool-data)"
+  return "var(--tool-generic)"
+}
+
+/** Badge for research-report confidence levels */
+function ConfidenceBadge({ value }: { value: string }) {
+  const v = value.toLowerCase()
+  const cls =
+    v === "high"
+      ? "rk-severity-badge rk-severity-badge--green"
+      : v === "medium"
+        ? "rk-severity-badge rk-severity-badge--amber"
+        : "rk-severity-badge rk-severity-badge--neutral"
+  return <span className={cls}>{value}</span>
+}
+
+/** Badge for repo-audit / diff-review severity levels */
+function SeverityBadge({ value }: { value: string }) {
+  const v = value.toLowerCase()
+  const cls =
+    v === "high" || v === "critical"
+      ? "rk-severity-badge rk-severity-badge--red"
+      : v === "medium"
+        ? "rk-severity-badge rk-severity-badge--amber"
+        : v === "low"
+          ? "rk-severity-badge rk-severity-badge--green"
+          : "rk-severity-badge rk-severity-badge--neutral"
+  return <span className={cls}>{value}</span>
 }

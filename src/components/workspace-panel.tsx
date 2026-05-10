@@ -64,7 +64,7 @@ function isResultEmpty(entry: ToolResultEntry): boolean {
 
 function ToolLoadingSkeleton({ toolName }: { toolName: string }) {
   return (
-    <div className="bg-surface-1 w-full space-y-4 rounded-2xl border p-4">
+    <div className="rk-tool-card w-full space-y-4">
       <div className="flex items-center gap-2">
         <span className="bg-primary h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
         <span className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
@@ -72,11 +72,11 @@ function ToolLoadingSkeleton({ toolName }: { toolName: string }) {
         </span>
       </div>
       <div className="space-y-2.5">
-        <div className="bg-muted h-3 w-4/5 animate-pulse rounded" />
-        <div className="bg-muted h-3 w-3/5 animate-pulse rounded" />
-        <div className="bg-muted h-3 w-11/12 animate-pulse rounded" />
-        <div className="bg-muted h-3 w-2/3 animate-pulse rounded" />
-        <div className="bg-muted h-3 w-3/4 animate-pulse rounded" />
+        <div className="bg-surface-4 h-3 w-4/5 animate-pulse rounded-sm" />
+        <div className="bg-surface-4 h-2 w-3/5 animate-pulse rounded-sm" />
+        <div className="bg-surface-4 h-3 w-11/12 animate-pulse rounded-sm" />
+        <div className="bg-surface-4 h-2 w-2/3 animate-pulse rounded-sm" />
+        <div className="bg-surface-4 h-3 w-3/4 animate-pulse rounded-sm" />
       </div>
     </div>
   )
@@ -337,7 +337,6 @@ export function WorkspacePanel() {
   const { toolResults } = useToolResults()
   const { currentSessionId, messages } = useChat()
   const [selectedIndex, setSelectedIndex] = React.useState(0)
-  const [showTimeline, setShowTimeline] = React.useState(false)
   const [navigationMode, setNavigationMode] = React.useState<"scroll" | "buttons">("buttons")
   const scrollContainerRef = React.useRef<HTMLDivElement | null>(null)
   const [activeTab, setActiveTab] = React.useState<"timeline" | "artifacts" | "replay">("timeline")
@@ -657,89 +656,10 @@ export function WorkspacePanel() {
   }, [backgroundJobs, replayEvents, traces])
 
   return (
-    <div className="rk-panel flex h-full min-w-0 overflow-hidden">
-      <motion.div
-        className="bg-surface-0/80 hidden shrink-0 overflow-y-auto border-r py-3 sm:block"
-        initial={false}
-        animate={{
-          width: showTimeline ? 240 : 56,
-          minWidth: showTimeline ? 200 : 56,
-        }}
-        transition={{ duration: 0.3, ease: "easeInOut" }}
-      >
-        <div className="mb-1 flex w-full items-center justify-between px-2">
-          {showTimeline && (
-            <motion.p
-              className="rk-section-label"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              Timeline
-            </motion.p>
-          )}
-          <Button
-            onClick={() => setShowTimeline(!showTimeline)}
-            size="icon-sm"
-            variant="ghost"
-            className={cn(
-              !showTimeline && "mx-auto",
-              "text-muted-foreground hover:bg-surface-2 hover:text-foreground cursor-pointer"
-            )}
-          >
-            <GalleryVerticalEnd className="size-4" />
-          </Button>
-        </div>
-        <div className="mt-2 space-y-0.5 px-1.5">
-          {toolResults.map((result, index) => {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const resultId = `tool-result-${result.id}`
-            return (
-              <button
-                key={result.id}
-                type="button"
-                className={cn(
-                  "w-full rounded-md border border-transparent px-2.5 py-2 text-left transition-colors",
-                  index === selectedIndex
-                    ? "border-primary/20 bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:bg-surface-2 hover:text-foreground"
-                )}
-                onClick={() => {
-                  handleStepChange(index)
-                }}
-              >
-                {showTimeline ? (
-                  <>
-                    <div className="flex flex-wrap items-center justify-between gap-1">
-                      <span className="font-medium">
-                        {toolLabels[result.toolName] ?? result.toolName}
-                      </span>
-                      {result.status === "running" ? (
-                        <span className="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full" />
-                      ) : (
-                        <span className="font-mono text-[10px]">{result.status}</span>
-                      )}
-                    </div>
-                    <p className="text-muted-foreground font-mono text-[10px]">
-                      {new Date(result.timestamp).toLocaleTimeString()}
-                    </p>
-                  </>
-                ) : (
-                  <div className="flex items-center justify-center gap-1">
-                    <span className="text-xs font-medium">{index + 1}</span>
-                    {result.status === "running" && (
-                      <span className="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full" />
-                    )}
-                  </div>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      </motion.div>
+    <div className="bg-surface-1 flex h-full min-w-0 overflow-hidden">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Header */}
-        <div className="bg-surface-1/90 flex h-12 shrink-0 items-center justify-between border-b px-4">
+        <div className="bg-surface-2 border-border flex h-12 shrink-0 items-center justify-between border-b px-4">
           <div className="flex items-center gap-2">
             <h3 className="text-foreground text-sm font-semibold">
               {activeTab === "timeline"
@@ -753,12 +673,12 @@ export function WorkspacePanel() {
                     : "Activity"}
             </h3>
             {activeTab === "timeline" && toolResults.length > 0 && (
-              <span className="bg-surface-2 text-muted-foreground rounded-full px-2 py-0.5 font-mono text-[10px]">
+              <span className="bg-surface-4 text-muted-foreground rounded-full px-2 py-0.5 font-mono text-[10px]">
                 {toolResults.length}
               </span>
             )}
             {activeTab === "artifacts" && artifacts.length > 0 && (
-              <span className="bg-surface-2 text-muted-foreground rounded-full px-2 py-0.5 font-mono text-[10px]">
+              <span className="bg-surface-4 text-muted-foreground rounded-full px-2 py-0.5 font-mono text-[10px]">
                 {artifacts.length}
               </span>
             )}
@@ -780,7 +700,7 @@ export function WorkspacePanel() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 gap-1 text-xs"
+                  className="h-7 gap-1 rounded-md text-xs"
                   onClick={() => downloadBundle("json")}
                 >
                   <ArrowDownTray className="h-3 w-3" />
@@ -790,7 +710,7 @@ export function WorkspacePanel() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 gap-1 text-xs"
+                  className="h-7 gap-1 rounded-md text-xs"
                   onClick={() => downloadBundle("html")}
                 >
                   <ClipboardDocumentList className="h-3 w-3" />
@@ -802,7 +722,7 @@ export function WorkspacePanel() {
         </div>
 
         {/* Tab bar */}
-        <div className="bg-surface-2/50 flex shrink-0 items-center justify-between border-b px-2 sm:px-4">
+        <div className="bg-surface-2 border-border flex shrink-0 items-center justify-between border-b px-2 sm:px-4">
           <div className="flex min-w-0 flex-1">
             {[
               { id: "timeline", label: "Timeline", icon: GalleryVerticalEnd },
@@ -816,9 +736,9 @@ export function WorkspacePanel() {
                   type="button"
                   onClick={() => setActiveTab(tab.id as typeof activeTab)}
                   className={cn(
-                    "flex h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 border-b-2 px-2 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase transition-colors sm:h-10 sm:flex-none sm:flex-row sm:gap-1.5 sm:px-3",
+                    "flex h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 border-b-2 px-2 text-xs font-medium transition-colors sm:h-10 sm:flex-none sm:flex-row sm:gap-1.5 sm:px-3",
                     activeTab === tab.id
-                      ? "border-primary text-primary"
+                      ? "border-primary text-foreground"
                       : "text-muted-foreground hover:text-foreground border-transparent"
                   )}
                 >
@@ -833,7 +753,7 @@ export function WorkspacePanel() {
               type="button"
               onClick={() => setShowDiagnostics((value) => !value)}
               className={cn(
-                "rounded-md px-2 py-1 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase transition-colors",
+                "rounded-md px-2 py-1 text-xs font-medium transition-colors",
                 showDiagnostics
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:text-foreground"
@@ -844,7 +764,10 @@ export function WorkspacePanel() {
           ) : null}
         </div>
 
-        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-auto px-4 pb-4">
+        <div
+          ref={scrollContainerRef}
+          className="rk-scrollbar min-h-0 flex-1 overflow-auto px-4 pb-4"
+        >
           <AnimatePresence mode="wait">
             {activeTab === "timeline" && toolResults.length === 0 ? (
               <motion.div
@@ -855,7 +778,7 @@ export function WorkspacePanel() {
                 transition={{ duration: 0.15 }}
                 className="flex h-full flex-col items-center justify-center gap-3 text-center"
               >
-                <div className="bg-surface-2/70 rounded-xl border p-4">
+                <div className="bg-surface-3 rounded-lg border p-4">
                   <Globe className="text-muted-foreground/60 h-6 w-6" />
                 </div>
                 <div>
@@ -883,7 +806,7 @@ export function WorkspacePanel() {
                         className={cn(
                           "mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
                           index === selectedIndex
-                            ? "border-primary/20 bg-primary/10 text-primary"
+                            ? "border-primary/30 bg-primary/10 text-primary"
                             : "text-muted-foreground border-transparent"
                         )}
                       >
@@ -910,7 +833,7 @@ export function WorkspacePanel() {
                   transition={{ duration: 0.15, ease: "easeOut" }}
                   className="mt-4"
                 >
-                  <div className="text-muted-foreground border-border/60 bg-surface-2/50 mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1 font-mono text-[10px]">
+                  <div className="text-muted-foreground border-border bg-surface-3 mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1 font-mono text-[10px]">
                     <span>{stepLabel}</span>
                     <span>{toolLabels[activeEntry.toolName] ?? activeEntry.toolName}</span>
                     <span>{new Date(activeEntry.timestamp).toLocaleTimeString()}</span>
@@ -942,7 +865,7 @@ export function WorkspacePanel() {
                       href={artifact.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="group bg-surface-1 hover:border-primary/30 hover:bg-primary/5 block rounded-lg border p-3 transition-colors"
+                      className="group bg-surface-3 hover:bg-surface-4 border-border block rounded-lg border p-3 transition-colors"
                     >
                       <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
                         Artifact
@@ -971,7 +894,7 @@ export function WorkspacePanel() {
                         initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.18, ease: "easeOut", delay: index * 0.04 }}
-                        className="bg-surface-1/80 hover:bg-surface-2/70 rounded-lg border p-3 transition-colors"
+                        className="bg-surface-3 hover:bg-surface-4 border-border rounded-lg border p-3 transition-colors"
                       >
                         <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start sm:justify-between">
                           <div className="flex min-w-0 items-start gap-2 text-sm font-medium wrap-anywhere">
@@ -1014,7 +937,10 @@ export function WorkspacePanel() {
                 {showDiagnostics && traces.length > 0 ? (
                   <div className="space-y-3">
                     {traces.map((trace) => (
-                      <div key={String(trace.id)} className="bg-surface-1/80 rounded-lg border p-3">
+                      <div
+                        key={String(trace.id)}
+                        className="bg-surface-3 border-border rounded-lg border p-3"
+                      >
                         <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
                           Diagnostic trace · {String(trace.mode ?? "general")} ·{" "}
                           {String(trace.model ?? "model")}
@@ -1033,7 +959,7 @@ export function WorkspacePanel() {
                     {replayEvents.map((event, index) => (
                       <div
                         key={`${String(event.id ?? index)}`}
-                        className="bg-surface-1/80 rounded-lg border p-3"
+                        className="bg-surface-3 border-border rounded-lg border p-3"
                       >
                         <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
                           Diagnostic event · {String(event.type ?? "event")}
@@ -1061,7 +987,7 @@ export function WorkspacePanel() {
             )}
           </AnimatePresence>
         </div>
-        <div className="bg-surface-2/50 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-2">
+        <div className="bg-surface-2 border-border flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-2">
           <ToggleGroup
             type="single"
             value={navigationMode}

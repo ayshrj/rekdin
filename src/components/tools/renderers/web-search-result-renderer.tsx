@@ -79,9 +79,9 @@ export const WebSearchResultRenderer: React.FC<WebSearchResultRendererProps> = (
       <div className="border-border bg-muted/50 flex flex-wrap items-center justify-between gap-3 rounded-t-lg border-b px-3 py-2">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="flex shrink-0 space-x-1.5">
-            <div className="bg-tool-search/80 h-3 w-3 rounded-full shadow-sm" />
-            <div className="bg-tool-search/60 h-3 w-3 rounded-full shadow-sm" />
-            <div className="bg-tool-search/40 h-3 w-3 rounded-full shadow-sm" />
+            <div className="bg-tool-search/80 h-3 w-3 rounded-full shadow-none" />
+            <div className="bg-tool-search/60 h-3 w-3 rounded-full shadow-none" />
+            <div className="bg-tool-search/40 h-3 w-3 rounded-full shadow-none" />
           </div>
 
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -107,7 +107,7 @@ export const WebSearchResultRenderer: React.FC<WebSearchResultRendererProps> = (
         </div>
       </div>
 
-      <div className="bg-card max-h-[60vh] space-y-4 overflow-auto p-4">
+      <div className="bg-surface-3 max-h-[60vh] space-y-4 overflow-auto p-4">
         {searchData.results.map((item, index) => (
           <div
             key={index}

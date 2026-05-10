@@ -101,7 +101,7 @@ export const PdfRenderer: React.FC<PdfRendererProps> = ({ part }) => {
 
   return (
     <div className="pdf-renderer w-full min-w-0">
-      <div className="border-border bg-card overflow-hidden rounded-xl border">
+      <div className="border-border bg-surface-3 overflow-hidden rounded-lg border">
         <div className="border-border flex flex-wrap items-center justify-between gap-3 border-b p-4">
           <div className="flex min-w-0 flex-1 items-center space-x-3">
             <div

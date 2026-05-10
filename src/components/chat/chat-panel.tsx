@@ -6,13 +6,6 @@ import { toast } from "sonner"
 import { Markdown } from "@/components/markdown"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogShell } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { useChat } from "@/contexts/chat-context"
 import { buildWorkflowPrompt, parseSlashCommand, renderSlashCommandHelp } from "@/lib/commands"
 import {
@@ -24,10 +17,13 @@ import {
   Eye,
   GalleryVerticalEnd,
   Globe,
+  LockClosed,
   Rekdin as RekdinIcon,
+  XMark,
 } from "@/lib/icons"
 import { parseLLMError } from "@/lib/llm-errors"
 import { getProviderMissingConfigMessage, hasProviderCredentials } from "@/lib/llm-providers"
+import { cn } from "@/lib/utils"
 import { getAllWorkflowPresets } from "@/lib/workflows"
 import type { ToolApprovalRequest, ToolPolicyProfile } from "@/types/runtime"
 
@@ -37,22 +33,30 @@ import { ChatMessage } from "./chat-message"
 const TOOL_POLICY_OPTIONS: Array<{
   value: ToolPolicyProfile
   label: string
+  shortLabel: string
   description: string
+  icon: typeof Eye
 }> = [
   {
     value: "read_only",
     label: "Read only",
+    shortLabel: "Read",
     description: "Inspect without writes, commands, exports, or browser mutations.",
+    icon: Eye,
   },
   {
     value: "balanced",
     label: "Balanced",
+    shortLabel: "Balanced",
     description: "Inspect first, then allow targeted write or browser actions.",
+    icon: LockClosed,
   },
   {
     value: "full_auto",
     label: "Full auto",
+    shortLabel: "Auto",
     description: "Allow the broadest toolset supported by the selected mode.",
+    icon: Bolt,
   },
 ]
 
@@ -96,30 +100,28 @@ function ToolApprovalComposer({
   const secondaryEntries = Object.entries(args).filter(([key]) => !hiddenKeys.has(key))
 
   return (
-    <div className="bg-surface-1 border-status-warning/35 overflow-hidden rounded-xl border shadow-(--shadow-float)">
-      <div className="bg-status-warning/10 border-status-warning/25 border-b px-3 py-2.5">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-status-warning font-mono text-[10px] font-semibold tracking-[0.18em] uppercase">
-            Approval required
-          </p>
-          <span className="rk-status-warning">Manual gate</span>
+    <div className="border-tool-json/40 overflow-hidden rounded-t-xl border-t bg-[#181420]">
+      <div className="border-border/60 px-4 pt-3 pb-2">
+        <div className="flex items-center gap-2">
+          <LockClosed className="text-tool-json h-4 w-4" />
+          <p className="text-tool-json text-sm font-semibold">Action Required</p>
         </div>
-        <p className="text-muted-foreground mt-0.5 text-[11px]">
-          Rekdin wants to run{" "}
-          <span className="text-foreground font-mono font-semibold">{approval.toolName}</span>.
+        <p className="text-muted-foreground mt-1 text-xs">
+          Rekdin wants to run <span className="text-tool-json font-mono">{approval.toolName}</span>.
           {approval.reason ? ` ${approval.reason}` : ""}
         </p>
       </div>
 
-      <div className="max-h-80 space-y-3 overflow-y-auto p-3">
+      <div className="rk-scrollbar max-h-80 space-y-3 overflow-y-auto px-4 py-2">
+        <span className="border-tool-json/35 bg-tool-json/15 text-tool-json inline-flex rounded-sm border px-2 py-0.5 font-mono text-xs">
+          {approval.toolName}
+        </span>
         {primaryEntries.length > 0 ? (
           <div className="grid gap-2">
             {primaryEntries.map(([key, value]) => (
-              <div key={key} className="bg-surface-2/70 rounded-lg border px-3 py-2">
-                <p className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">
-                  {formatApprovalLabel(key)}
-                </p>
-                <p className="text-foreground mt-1 font-mono text-xs break-all">
+              <div key={key} className="border-border border-t py-2">
+                <p className="text-muted-foreground text-xs">{formatApprovalLabel(key)}</p>
+                <p className="text-foreground mt-1 font-mono text-sm break-all">
                   {formatApprovalValue(value)}
                 </p>
               </div>
@@ -128,24 +130,22 @@ function ToolApprovalComposer({
         ) : null}
 
         {contentEntry ? (
-          <div className="overflow-hidden rounded-lg border">
-            <div className="bg-surface-2/70 border-b px-3 py-2">
-              <p className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">
+          <div className="border-border overflow-hidden rounded-md border">
+            <div className="bg-surface-4 border-b px-3 py-2">
+              <p className="text-muted-foreground text-xs">
                 {formatApprovalLabel(contentEntry[0])} preview
               </p>
             </div>
-            <Markdown className="text-foreground max-h-64 overflow-auto p-3 text-xs">
+            <Markdown className="rk-scrollbar text-foreground max-h-25 overflow-auto p-3 text-xs">
               {String(contentEntry[1])}
             </Markdown>
           </div>
         ) : null}
 
         {secondaryEntries.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border">
-            <div className="bg-surface-2/70 border-b px-3 py-2">
-              <p className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">
-                Additional details
-              </p>
+          <div className="border-border overflow-hidden rounded-md border">
+            <div className="bg-surface-4 border-b px-3 py-2">
+              <p className="text-muted-foreground text-xs">Additional details</p>
             </div>
             <div className="divide-y">
               {secondaryEntries.map(([key, value]) => (
@@ -161,11 +161,22 @@ function ToolApprovalComposer({
         ) : null}
       </div>
 
-      <div className="bg-surface-2/70 flex items-center justify-end gap-2 border-t px-3 py-2">
-        <Button type="button" variant="outline" size="sm" onClick={onReject}>
+      <div className="grid grid-cols-2 gap-2 px-4 pt-2 pb-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={onReject}
+        >
           Reject
         </Button>
-        <Button type="button" size="sm" onClick={onApprove}>
+        <Button
+          type="button"
+          size="sm"
+          className="bg-status-success text-black hover:bg-[#2adba0]"
+          onClick={onApprove}
+        >
           Approve
         </Button>
       </div>
@@ -180,6 +191,7 @@ function ToolApprovalComposer({
 export function ChatPanel() {
   const {
     messages,
+    sessions,
     isLoading,
     isThinking,
     sendMessage,
@@ -264,6 +276,12 @@ export function ChatPanel() {
     () => getAllWorkflowPresets(customWorkflows),
     [customWorkflows]
   )
+  const currentSession = sessions.find((session) => session.id === currentSessionId)
+  const sessionTitle = currentSession?.title ?? "New conversation"
+  const selectedPolicy = TOOL_POLICY_OPTIONS.find((option) => option.value === toolPolicy)
+  const selectedWorkflow = selectedWorkflowId
+    ? workflowPresets.find((workflow) => workflow.id === selectedWorkflowId)
+    : null
 
   const missingApiKeyMessage = React.useMemo(() => {
     if (!missingApiKey) return ""
@@ -516,11 +534,11 @@ export function ChatPanel() {
 
   if (!hydrated) {
     return (
-      <div className="rk-panel flex h-full flex-col overflow-hidden">
+      <div className="bg-surface-2 flex h-full flex-col overflow-hidden">
         <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">
           Loading…
         </div>
-        <div className="px-3 pt-1 pb-3 opacity-50">
+        <div className="border-border bg-surface-3 border-t px-4 py-3 opacity-50">
           <ChatInput
             value=""
             onValueChange={() => {}}
@@ -540,56 +558,84 @@ export function ChatPanel() {
   const errorParsed = hasError && lastMsg ? parseLLMError(lastMsg.content ?? "") : null
 
   return (
-    <div ref={panelRef} className="rk-panel flex h-full flex-col overflow-hidden">
+    <div ref={panelRef} className="bg-surface-2 flex h-full flex-col overflow-hidden">
+      <header
+        className={cn(
+          "bg-surface-2 border-border flex h-12 shrink-0 items-center justify-between border-b px-4",
+          isThinking && "rk-running-line"
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          {isThinking ? (
+            <span className="bg-tool-json size-1.5 animate-pulse rounded-full" />
+          ) : null}
+          <h2 className="truncate text-base font-semibold" title={sessionTitle}>
+            {sessionTitle}
+          </h2>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="rounded-md"
+            disabled={!currentSessionId}
+            onClick={() =>
+              currentSessionId &&
+              window.open(
+                `/api/sessions/${currentSessionId}/export`,
+                "_blank",
+                "noopener,noreferrer"
+              )
+            }
+            aria-label="Export current session"
+          >
+            <ClipboardDocumentList className="h-4 w-4" />
+          </Button>
+        </div>
+      </header>
       <div
         ref={scrollViewportRef}
-        className="[&::-webkit-scrollbar-thumb]:bg-border min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent"
+        className="rk-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4"
       >
         <div ref={innerContentRef} className="flex w-full flex-col gap-3">
           {messages.length === 0 ? (
-            /* ── Empty state ─────────────────────────────────── */
-            <div className="mx-auto w-full max-w-lg py-6">
-              {/* Hero row */}
-              <div className="mb-5 flex items-center gap-3">
-                <div className="bg-primary/10 ring-primary/20 shrink-0 rounded-xl p-2.5 ring-1">
-                  <RekdinIcon className="text-primary h-5 w-5" />
+            <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center py-8">
+              <div className="mb-6 text-center">
+                <div className="bg-surface-3 mx-auto mb-4 flex size-12 items-center justify-center rounded-lg border">
+                  <RekdinIcon className="text-primary h-6 w-6" />
                 </div>
-                <div>
-                  <p className="rk-section-label">Ready workspace</p>
-                  <h3 className="text-foreground text-lg font-bold tracking-tight">Rekdin</h3>
-                  <p className="text-muted-foreground text-xs">
-                    AI research &amp; automation workspace
-                  </p>
-                </div>
+                <h3 className="text-2xl font-bold">Rekdin</h3>
+                <p className="text-muted-foreground mx-auto mt-2 max-w-md text-sm leading-relaxed">
+                  Research, automate, inspect tool execution, and keep the workspace trail visible.
+                </p>
               </div>
 
-              {/* API key warning */}
               {missingApiKeyMessage ? (
-                <div className="border-destructive/20 bg-destructive/5 mb-5 rounded-lg border px-4 py-3 text-left text-sm">
+                <div className="border-status-warning/35 bg-status-warning/10 mb-5 rounded-lg border px-4 py-3 text-left text-sm">
                   <div className="flex items-start gap-2">
-                    <span className="bg-primary/10 text-primary mt-0.5 rounded-md p-1">
+                    <span className="text-status-warning mt-0.5">
                       <Cog8Tooth className="h-4 w-4" />
                     </span>
                     <div className="space-y-1">
                       <p className="text-foreground">{missingApiKeyMessage}</p>
                       <p className="text-muted-foreground text-xs">
-                        Open Settings in the top-right corner to add it.
+                        Open Settings to add the provider credentials.
                       </p>
                     </div>
                   </div>
                 </div>
               ) : null}
 
-              {/* Capabilities grid */}
-              <div className="mb-5">
-                <p className="rk-section-label mb-2">What it can do</p>
-                <div className="grid grid-cols-2 gap-1.5">
+              <div className="mb-6">
+                <p className="rk-section-label mb-2">Capabilities</p>
+                <div className="grid grid-cols-2 gap-2">
                   {capabilities.map((cap) => {
                     const Icon = cap.icon
                     return (
                       <div
                         key={cap.label}
-                        className="bg-surface-2/70 border-border/60 flex items-center gap-2 rounded-lg border px-2.5 py-2"
+                        className="bg-surface-3 border-border flex items-center gap-2 rounded-md border px-3 py-2"
                       >
                         <Icon className="text-primary h-3.5 w-3.5 shrink-0" />
                         <span className="text-foreground truncate text-xs font-medium">
@@ -604,21 +650,21 @@ export function ChatPanel() {
               {/* Workflow presets */}
               <div>
                 <p className="rk-section-label mb-2">Workflow presets</p>
-                <div className="space-y-1.5">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {workflowPresets.map((workflow) => (
                     <button
                       key={workflow.id}
                       type="button"
                       disabled={isLoading || isThinking}
                       onClick={() => void launchWorkflow(workflow.id)}
-                      className="border-border/60 bg-surface-1 hover:bg-surface-2/70 w-full cursor-pointer rounded-xl border p-3 text-left transition-colors disabled:pointer-events-none disabled:opacity-50"
+                      className="bg-surface-3 hover:bg-surface-4 border-border h-20 w-full cursor-pointer rounded-lg border p-4 text-left transition-colors disabled:pointer-events-none disabled:opacity-40"
                     >
-                      <div className="mb-0.5 flex items-center justify-between gap-2">
-                        <span className="text-foreground min-w-0 truncate text-xs font-semibold">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <span className="text-foreground min-w-0 truncate text-sm font-medium">
                           {workflow.title}
                         </span>
                         {workflow.supportsBackground ? (
-                          <span className="bg-primary/10 text-primary shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold">
+                          <span className="bg-tool-json/15 text-tool-json shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px] font-medium">
                             BG
                           </span>
                         ) : null}
@@ -658,32 +704,31 @@ export function ChatPanel() {
       </div>
 
       {/* ── Workflow presets bar ───────────────────────────────── */}
-      <div className="bg-surface-1/80 relative shrink-0 border-t">
-        {presetsCanScrollRight && (
-          <div className="from-card pointer-events-none absolute top-0 right-0 z-10 h-full w-10 bg-linear-to-l to-transparent" />
-        )}
-        <div
-          ref={presetsRef}
-          className="flex gap-1 overflow-x-auto px-3 py-1.5 [&::-webkit-scrollbar]:h-0"
-        >
+      <div className="bg-surface-2 border-border relative shrink-0 border-t">
+        {presetsCanScrollRight ? (
+          <div className="bg-surface-2 pointer-events-none absolute top-0 right-0 z-10 h-full w-4" />
+        ) : null}
+        <div ref={presetsRef} className="rk-scrollbar flex gap-2 overflow-x-auto px-4 py-2">
           {workflowPresets.map((workflow) => (
             <div key={workflow.id} className="flex shrink-0 items-center">
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 font-mono text-[10px] tracking-[0.08em] uppercase"
+                className={cn(
+                  "bg-surface-3 border-border text-muted-foreground hover:bg-surface-4 hover:text-foreground h-7 rounded-full border px-3 text-xs transition-colors",
+                  selectedWorkflowId === workflow.id &&
+                    "bg-primary text-primary-foreground border-primary hover:bg-primary hover:text-primary-foreground"
+                )}
                 onClick={() => void launchWorkflow(workflow.id)}
                 disabled={isLoading || isThinking}
               >
                 {workflow.title}
-              </Button>
+              </button>
               {workflow.supportsBackground ? (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="text-muted-foreground h-7 font-mono text-[10px] tracking-[0.08em] uppercase"
+                  className="text-tool-json h-7 rounded-full px-2 font-mono text-[10px]"
                   onClick={() => void queueWorkflow(workflow.id)}
                   disabled={isLoading || isThinking || !currentSessionId}
                 >
@@ -697,11 +742,11 @@ export function ChatPanel() {
 
       {/* ── Error banner ──────────────────────────────────────── */}
       {hasError && lastUserMsg && errorParsed ? (
-        <div className="border-destructive/20 bg-destructive/5 mx-3 mb-2 rounded-lg border px-3 py-2">
+        <div className="border-destructive/35 bg-destructive/10 border-t px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               {errorParsed.code !== null && (
-                <span className="bg-destructive/15 text-destructive shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                <span className="bg-destructive/15 text-destructive shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
                   {errorParsed.code}
                 </span>
               )}
@@ -736,48 +781,83 @@ export function ChatPanel() {
 
       {/* ── Input ─────────────────────────────────────────────── */}
       <div
-        className="bg-surface-1/90 border-t px-3 pt-2 pb-3 backdrop-blur-xl"
+        className="bg-surface-3 border-border border-t px-4 py-3"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
       >
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0">
-            <p className="rk-section-label">Tool policy</p>
-            <p className="text-muted-foreground truncate text-[11px]">
-              {TOOL_POLICY_OPTIONS.find((option) => option.value === toolPolicy)?.description}
-            </p>
-          </div>
-          <Select
-            value={toolPolicy}
-            onValueChange={(value) => setToolPolicy(value as ToolPolicyProfile)}
-            disabled={isLoading || isThinking}
-          >
-            <SelectTrigger
-              size="sm"
-              className="bg-surface-2 h-8 w-36 font-mono text-[10px] uppercase"
+        <div className="bg-surface-2 border-border -mx-4 mb-3 flex items-center justify-between gap-3 border-b px-4 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Globe className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+            <span
+              className={cn(
+                "truncate font-mono text-xs",
+                workspaceRoot ? "text-muted-foreground" : "text-muted-foreground italic"
+              )}
+              title={workspaceRoot || "App root (default)"}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent side="top" align="end">
-              {TOOL_POLICY_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="bg-surface-2/70 text-muted-foreground mb-2 rounded-lg border px-2.5 py-1.5 text-[11px]">
-          <span className="rk-section-label mr-2">Workspace</span>
-          <span className="text-foreground font-mono break-all">
-            {workspaceRoot || "Default app root"}
-          </span>
-        </div>
-        {selectedWorkflowId ? (
-          <div className="bg-primary/10 border-primary/20 text-muted-foreground mb-2 rounded-lg border px-2.5 py-1.5 text-[11px]">
-            <span className="rk-section-label text-primary mr-2">Workflow</span>
-            <span className="text-foreground font-medium">
-              {workflowPresets.find((workflow) => workflow.id === selectedWorkflowId)?.title}
+              {workspaceRoot || "App root (default)"}
             </span>
+          </div>
+          <button
+            type="button"
+            className="text-primary text-xs hover:underline"
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent("rekdin:open-settings", { detail: { tab: "workspace" } })
+              )
+            }
+          >
+            Change
+          </button>
+        </div>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="bg-surface-3 border-border flex rounded-md border p-1">
+            {TOOL_POLICY_OPTIONS.map((option) => {
+              const Icon = option.icon
+              const active = toolPolicy === option.value
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={isLoading || isThinking}
+                  title={option.description}
+                  onClick={() => setToolPolicy(option.value)}
+                  className={cn(
+                    "text-muted-foreground flex h-7 items-center gap-1.5 rounded-sm px-2 text-xs transition-colors disabled:pointer-events-none disabled:opacity-40",
+                    active && option.value === "read_only" && "bg-surface-4 text-foreground",
+                    active &&
+                      option.value === "balanced" &&
+                      "bg-status-warning/15 text-status-warning",
+                    active && option.value === "full_auto" && "bg-primary/15 text-primary"
+                  )}
+                >
+                  <Icon className="h-3 w-3" />
+                  {option.shortLabel}
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-muted-foreground min-w-0 flex-1 truncate text-right text-xs">
+            {selectedPolicy?.description}
+          </p>
+        </div>
+        {selectedWorkflow ? (
+          <div className="border-primary/35 bg-primary/10 mb-3 rounded-lg border p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-foreground text-sm font-medium">{selectedWorkflow.title}</p>
+                <p className="text-muted-foreground mt-1 line-clamp-1 text-xs">
+                  {selectedWorkflow.description}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => setSelectedWorkflowId(null)}
+                aria-label="Clear selected workflow"
+              >
+                <XMark className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         ) : null}
         {pendingToolApproval ? (

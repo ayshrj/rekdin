@@ -18,13 +18,13 @@ import {
 } from "@/components/ui/sheet"
 import { WorkspacePanel } from "@/components/workspace-panel"
 import { useChat } from "@/contexts/chat-context"
-import { Clock, GalleryVerticalEnd, GitHub, PanelLeft, Rekdin, Sparkles } from "@/lib/icons"
+import { Clock, GalleryVerticalEnd, GitHub, Plus, Rekdin, Sparkles } from "@/lib/icons"
 import { getProviderLabel } from "@/lib/llm-providers"
 import { cn } from "@/lib/utils"
 
-const MAIN_LAYOUT = { chat: 38, workspace: 62 }
 const TOUR_SEEN_KEY = "rekdin-tour-seen"
 const PHONE_MEDIA_QUERY = "(max-width: 639px)"
+const MAIN_LAYOUT = { chat: 58, workspace: 42 }
 
 const TOUR_STEPS: TourStep[] = [
   {
@@ -97,33 +97,19 @@ function ConnectionBadge({ connected, label }: { connected: boolean; label: stri
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase transition-colors",
-        connected
-          ? "border-status-success/30 bg-status-success/10 text-status-success"
-          : "border-destructive/25 bg-destructive/10 text-destructive"
+        "bg-surface-3 inline-flex max-w-full items-center gap-2 rounded-full px-2.5 py-1 text-xs transition-colors",
+        connected ? "text-muted-foreground" : "text-muted-foreground"
       )}
     >
-      <span className="relative flex h-1.5 w-1.5 shrink-0">
-        {connected && (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-50" />
-        )}
+      <span className="relative flex size-2 shrink-0">
         <span
           className={cn(
-            "relative inline-flex h-1.5 w-1.5 rounded-full",
-            connected ? "bg-status-success" : "bg-destructive"
+            "relative inline-flex size-2 rounded-full",
+            connected ? "bg-status-success" : "bg-muted-foreground"
           )}
         />
       </span>
-      {connected ? label : "Disconnected"}
-    </span>
-  )
-}
-
-function ThinkingBadge() {
-  return (
-    <span className="border-primary/25 bg-primary/10 text-primary inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase">
-      <span className="bg-primary h-1.5 w-1.5 animate-pulse rounded-full" />
-      Agent thinking
+      <span className="truncate">{connected ? label : "No provider"}</span>
     </span>
   )
 }
@@ -158,24 +144,79 @@ function MobileNavButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-2 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase transition-colors",
+        "relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-2 py-1.5 text-[10px] font-medium transition-colors",
         active ? "text-primary" : "text-muted-foreground hover:text-foreground"
       )}
     >
-      <span
-        className={cn(
-          "absolute inset-x-5 top-0 h-0.5 rounded-full transition-opacity",
-          active ? "bg-primary opacity-100" : "opacity-0"
-        )}
-      />
       <span className="flex h-5 items-center justify-center">{icon}</span>
       <span className="truncate">{label}</span>
     </button>
   )
 }
 
+function DesktopRail({
+  connected,
+  providerLabel,
+  onOpenSessions,
+  onRestartTour,
+}: {
+  connected: boolean
+  providerLabel: string
+  onOpenSessions: () => void
+  onRestartTour: () => void
+}) {
+  return (
+    <aside className="bg-surface-1 border-border hidden h-dvh w-[220px] shrink-0 flex-col border-r sm:flex">
+      <div className="px-4 pt-4">
+        <div className="flex items-center gap-3">
+          <div className="bg-surface-3 flex size-9 items-center justify-center rounded-lg">
+            <Rekdin className="text-primary h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-mono text-[11px] font-black tracking-[0.18em]">REKDIN</p>
+            <p className="text-muted-foreground truncate text-[11px]">Local workspace</p>
+          </div>
+        </div>
+        <div className="mt-3">
+          <ConnectionBadge connected={connected} label={providerLabel} />
+        </div>
+      </div>
+
+      <div className="flex flex-1 flex-col justify-end gap-2 p-4">
+        <button
+          id="tour-sidebar-btn"
+          type="button"
+          onClick={onOpenSessions}
+          aria-label="Open session history"
+          className="rk-icon-button"
+        >
+          <Clock className="h-4 w-4" />
+        </button>
+        <div id="tour-settings">
+          <OpenRouterSettings
+            triggerVariant="ghost"
+            triggerSize="icon"
+            triggerClassName="rk-icon-button"
+            onRestartTour={onRestartTour}
+          />
+        </div>
+        <ThemeToggle />
+        <a
+          href="https://github.com/ayshrj"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="GitHub profile"
+          className="rk-icon-button"
+        >
+          <GitHub className="h-4 w-4" />
+        </a>
+      </div>
+    </aside>
+  )
+}
+
 function HomePageContent() {
-  const { connected, llmProvider, isThinking, sessions, currentSessionId } = useChat()
+  const { connected, llmProvider, createSession } = useChat()
   const isPhone = useIsPhone()
   const viewportReady = isPhone !== null
   const isPhoneLayout = isPhone === true
@@ -201,110 +242,47 @@ function HomePageContent() {
 
   const providerLabel = getProviderLabel(llmProvider)
 
-  const currentSession = sessions?.find((s) => s.id === currentSessionId)
-  const sessionTitle = currentSession?.title ?? "New conversation"
-
   return (
-    <div className="from-background via-surface-0 to-surface-2 dark:via-surface-0 rk-shell-grid flex h-dvh w-dvw flex-col overflow-hidden bg-radial-[at_50%_0%]">
-      <header className="bg-surface-1/90 flex h-14 shrink-0 items-center justify-between border-b px-3 backdrop-blur-xl sm:h-16 sm:px-4">
-        <div className="flex items-center gap-3">
-          <Button
-            id="tour-sidebar-btn"
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground hover:text-foreground border-border/60 bg-surface-2/60 h-9 w-9 rounded-lg border"
-            onClick={() => setSidebarOpen(true)}
-            aria-label="Open session history"
-          >
-            <PanelLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="bg-primary/10 ring-primary/20 flex h-9 w-9 items-center justify-center rounded-lg ring-1">
-              <Rekdin className="text-primary h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-[11px] font-black tracking-[0.2em]">REKDIN</span>
-                <span className="bg-border hidden h-3 w-px sm:block" />
-                <span
-                  className="text-muted-foreground hidden max-w-60 truncate text-xs sm:block"
-                  title={sessionTitle}
-                >
-                  {sessionTitle}
-                </span>
-              </div>
-              <p className="text-muted-foreground hidden font-mono text-[10px] tracking-[0.14em] uppercase sm:block">
-                local research and automation workspace
-              </p>
-            </div>
-          </div>
-          {isThinking && (
-            <span className="hidden sm:inline-flex">
-              <ThinkingBadge />
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="hidden sm:inline-flex">
-            <ConnectionBadge connected={connected} label={`${providerLabel} connected`} />
-          </span>
-          <div className="sm:hidden">
-            <OpenRouterSettings
-              triggerClassName="h-8 w-8 rounded-lg border"
-              onRestartTour={undefined}
-            />
-          </div>
-          <div id="tour-settings" className="hidden sm:block">
-            <OpenRouterSettings onRestartTour={restartTour} />
-          </div>
-          <a
-            href="https://github.com/ayshrj"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="GitHub profile"
-            className="hidden sm:block"
-          >
-            <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg">
-              <GitHub className="h-4 w-4" />
-            </Button>
-          </a>
-          <div className="hidden sm:block">
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
-
+    <div className="bg-background text-foreground flex h-dvh w-dvw overflow-hidden">
       {!viewportReady ? (
-        <main className="min-h-0 flex-1 px-3 pt-3">
-          <div className="rk-panel h-full animate-pulse" />
+        <main className="min-h-0 flex-1">
+          <div className="bg-surface-2 h-full animate-pulse" />
         </main>
       ) : !isPhoneLayout ? (
-        <main className="min-h-0 flex-1 overflow-hidden p-3">
-          <ResizablePanelGroup
-            id="main-workspace"
-            orientation="horizontal"
-            defaultLayout={MAIN_LAYOUT}
-            className="h-full rounded-xl"
-          >
-            <ResizablePanel id="chat" minSize={24} className="min-h-0 min-w-0">
-              <div id="tour-chat-panel" className="h-full">
-                <ChatPanel />
-              </div>
-            </ResizablePanel>
-            <ResizableHandle
-              withHandle
-              className="bg-border/70 data-[resize-handle-state=hover]:bg-primary/50 mx-1 w-px rounded-full"
-            />
-            <ResizablePanel id="workspace" minSize={28} className="min-h-0 min-w-0">
-              <div id="tour-workspace-panel" className="h-full">
-                <WorkspacePanel />
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </main>
-      ) : (
         <>
-          <main className="min-h-0 flex-1 overflow-hidden px-3 pt-3">
+          <DesktopRail
+            connected={connected}
+            providerLabel={providerLabel}
+            onOpenSessions={() => setSidebarOpen(true)}
+            onRestartTour={restartTour}
+          />
+          <main className="min-w-0 flex-1 overflow-hidden">
+            <ResizablePanelGroup
+              id="main-workspace"
+              orientation="horizontal"
+              defaultLayout={MAIN_LAYOUT}
+              className="h-full"
+            >
+              <ResizablePanel id="chat" minSize={34} className="min-h-0 min-w-[340px]">
+                <section id="tour-chat-panel" className="h-full min-h-0 min-w-0">
+                  <ChatPanel />
+                </section>
+              </ResizablePanel>
+              <ResizableHandle
+                withHandle
+                className="bg-border data-[resize-handle-state=hover]:bg-primary/70 w-px"
+              />
+              <ResizablePanel id="workspace" minSize={28} className="min-h-0 min-w-[360px]">
+                <section id="tour-workspace-panel" className="h-full min-h-0 min-w-0">
+                  <WorkspacePanel />
+                </section>
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </main>
+        </>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <main className="min-h-0 flex-1 overflow-hidden">
             {mobilePanel === "chat" ? (
               <div className="h-full">
                 <ChatPanel />
@@ -317,10 +295,10 @@ function HomePageContent() {
           </main>
 
           <nav
-            className="bg-surface-1/95 border-border shrink-0 border-t backdrop-blur-xl"
-            style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.25rem)" }}
+            className="bg-surface-1 border-border shrink-0 border-t"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
-            <div className="flex h-14 items-stretch">
+            <div className="flex h-[52px] items-stretch">
               <MobileNavButton
                 active={mobilePanel === "chat"}
                 icon={<Sparkles className="h-4 w-4" />}
@@ -341,42 +319,42 @@ function HomePageContent() {
               <OpenRouterSettings
                 triggerVariant="ghost"
                 triggerSize="default"
-                triggerClassName="relative h-full min-w-0 flex-1 flex-col gap-1 rounded-none px-2 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+                triggerClassName="relative h-full min-w-0 flex-1 flex-col gap-0.5 rounded-none px-2 py-1.5 text-[10px] font-medium text-muted-foreground hover:bg-transparent data-[variant=ghost]:hover:bg-transparent"
                 triggerAriaLabel="Open settings"
                 triggerChildren={<span className="truncate">Settings</span>}
                 onRestartTour={undefined}
               />
             </div>
           </nav>
-        </>
+        </div>
       )}
 
       {viewportReady && !isPhoneLayout && sidebarOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
-          onClick={() => setSidebarOpen(false)}
-        />
+        <div className="fixed inset-0 z-40 bg-black/70" onClick={() => setSidebarOpen(false)} />
       )}
 
       {viewportReady && !isPhoneLayout ? (
         <aside
           className={cn(
-            "bg-sidebar border-sidebar-border fixed inset-y-0 left-0 z-50 flex w-72 flex-col overflow-hidden border-r shadow-(--shadow-float) transition-transform duration-300 ease-in-out lg:w-80",
+            "bg-surface-2 border-border fixed inset-y-0 left-0 z-50 flex w-[220px] flex-col overflow-hidden border-r shadow-none transition-transform duration-200 ease-out",
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           )}
         >
-          <div className="border-sidebar-border flex h-16 shrink-0 items-center gap-3 border-b px-4">
-            <div className="bg-primary/15 ring-primary/20 flex h-9 w-9 items-center justify-center rounded-lg ring-1">
-              <Rekdin className="text-primary h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-sidebar-foreground font-mono text-[11px] font-black tracking-[0.18em]">
-                REKDIN
-              </p>
-              <p className="text-sidebar-foreground/45 font-mono text-[10px] tracking-[0.14em] uppercase">
-                Session archive
-              </p>
-            </div>
+          <div className="bg-surface-3 border-border flex h-12 shrink-0 items-center justify-between border-b px-3">
+            <p className="text-sm font-semibold">Sessions</p>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              className="rounded-md"
+              onClick={async () => {
+                await createSession()
+                setSidebarOpen(false)
+              }}
+              aria-label="Create a new session from sidebar"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden">
@@ -388,15 +366,11 @@ function HomePageContent() {
       <Sheet open={isPhoneLayout && sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent
           side="bottom"
-          className="bg-sidebar max-h-[75vh] rounded-t-3xl border-t p-0 [&>button]:top-3 [&>button]:right-3"
+          className="bg-surface-2 max-h-[70vh] rounded-t-xl border-t p-0 [&>button]:top-3 [&>button]:right-3"
         >
-          <SheetHeader className="border-b px-4 py-3 text-left">
-            <SheetTitle className="flex items-center gap-2 text-sm tracking-tight">
-              <span className="bg-primary/10 text-primary flex h-7 w-7 items-center justify-center rounded-lg">
-                <Rekdin className="h-4 w-4" />
-              </span>
-              REKDIN
-            </SheetTitle>
+          <div className="bg-surface-5 mx-auto mt-2 h-1 w-8 rounded-full" />
+          <SheetHeader className="bg-surface-3 border-b px-4 py-3 text-left">
+            <SheetTitle className="text-sm tracking-tight">Sessions</SheetTitle>
             <SheetDescription>Open previous sessions or start a new conversation.</SheetDescription>
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-hidden">

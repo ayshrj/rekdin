@@ -140,7 +140,7 @@ export const CommandResultRenderer: React.FC<CommandResultRendererProps> = ({ pa
 
       {/* Command */}
       {command && (
-        <div className="bg-card overflow-x-auto border-b px-3 py-2">
+        <div className="bg-surface-3 overflow-x-auto border-b px-3 py-2">
           <div className="flex items-start gap-2 font-mono text-sm">
             <span className="text-tool-command shrink-0 font-bold select-none">$</span>
             <div className="flex-1">{highlightCommand(command)}</div>
@@ -150,7 +150,7 @@ export const CommandResultRenderer: React.FC<CommandResultRendererProps> = ({ pa
 
       {/* Stdout */}
       {stdout && (
-        <div className="bg-card border-b last:border-b-0">
+        <div className="bg-surface-3 border-b last:border-b-0">
           <div className="border-muted flex items-center justify-between border-b border-dashed px-3 py-1">
             <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
               Output

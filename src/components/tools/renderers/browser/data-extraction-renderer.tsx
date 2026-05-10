@@ -102,7 +102,7 @@ export const DataExtractionRenderer: React.FC<DataExtractionRendererProps> = ({ 
         </BrowserShell>
       ) : null}
 
-      <div className="border-tool-data/20 bg-card overflow-hidden rounded-xl border shadow-sm">
+      <div className="border-tool-data/20 bg-surface-3 overflow-hidden rounded-lg border shadow-none">
         <div className="border-tool-data/20 bg-tool-data/10 flex items-center border-b px-4 py-3">
           <ArrowDownTray className="text-tool-data mr-2.5" size={18} />
           <div className="text-foreground font-medium">Data Extraction</div>

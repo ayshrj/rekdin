@@ -90,7 +90,7 @@ export const ClickActionRenderer: React.FC<ClickActionRendererProps> = ({ part }
         </BrowserShell>
       ) : null}
 
-      <div className="border-tool-action/20 bg-card overflow-hidden rounded-xl border shadow-sm">
+      <div className="border-tool-action/20 bg-surface-3 overflow-hidden rounded-lg border shadow-none">
         <div className="border-tool-action/20 bg-tool-action/10 flex items-center border-b px-4 py-3">
           <MousePointer className="text-tool-action mr-2.5" size={18} />
           <div className="text-foreground font-medium">{clickLabel}</div>

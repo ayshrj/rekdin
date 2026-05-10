@@ -108,7 +108,7 @@ export const BrowserResultRenderer: React.FC<BrowserResultRendererProps> = ({ pa
         ) : null}
 
         <BrowserShell title={title} url={extractedUrl}>
-          <div className="border-border bg-card max-h-[70vh] min-h-50 overflow-auto border-t px-5">
+          <div className="border-border bg-surface-3 max-h-[70vh] min-h-50 overflow-auto border-t px-5">
             {screenshot ? (
               <div className="py-4">
                 <Image

@@ -26,6 +26,47 @@ const TRACES_DIR = path.join(DATA_DIR, "traces")
 const SETTINGS_FILE = path.join(DATA_DIR, "settings.json")
 const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json")
 const BACKGROUND_JOBS_FILE = path.join(DATA_DIR, "background-jobs.json")
+export const BLOCKED_WORKSPACE_DIRECTORIES = [
+  "node_modules",
+  ".git",
+  ".next",
+  ".nuxt",
+  ".turbo",
+  ".cache",
+  ".parcel-cache",
+  ".pytest_cache",
+  ".mypy_cache",
+  ".ruff_cache",
+  "__pycache__",
+  "coverage",
+  "dist",
+  "build",
+  "out",
+  "target",
+  ".gradle",
+  ".venv",
+  "venv",
+] as const
+
+const BLOCKED_WORKSPACE_DIRECTORY_SET = new Set(
+  BLOCKED_WORKSPACE_DIRECTORIES.map((name) => name.toLowerCase())
+)
+const HIGH_CONFIDENCE_FREEFORM_DIRECTORY_SET = new Set([
+  "node_modules",
+  ".git",
+  ".next",
+  ".nuxt",
+  ".turbo",
+  ".cache",
+  ".parcel-cache",
+  ".pytest_cache",
+  ".mypy_cache",
+  ".ruff_cache",
+  "__pycache__",
+  ".gradle",
+  ".venv",
+  "venv",
+])
 
 /**
  * Tests whether a resolved path stays inside the configured workspace boundary.
@@ -33,6 +74,53 @@ const BACKGROUND_JOBS_FILE = path.join(DATA_DIR, "background-jobs.json")
 function isWithinDirectory(baseDir: string, target: string) {
   const relative = path.relative(baseDir, target)
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
+}
+
+export function isBlockedWorkspaceDirectoryName(name: string) {
+  return BLOCKED_WORKSPACE_DIRECTORY_SET.has(name.toLowerCase())
+}
+
+export function findBlockedWorkspacePathSegment(pathValue: string) {
+  const normalized = pathValue.replace(/\\/g, "/")
+  return normalized
+    .split("/")
+    .filter(Boolean)
+    .find((segment) => isBlockedWorkspaceDirectoryName(segment))
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+export function findBlockedWorkspaceDirectoryReference(value: string) {
+  const normalized = value.replace(/\\/g, "/")
+  return BLOCKED_WORKSPACE_DIRECTORIES.find((directoryName) => {
+    const escaped = escapeRegExp(directoryName)
+    const bareTokenAllowed = HIGH_CONFIDENCE_FREEFORM_DIRECTORY_SET.has(directoryName.toLowerCase())
+    const pattern = bareTokenAllowed
+      ? `(^|[\\s"'=:;()])(?:\\./|\\.\\./|/)?${escaped}(/|$|[\\s"'=;()])`
+      : `(^|[\\s"'=:;()])(?:\\./|\\.\\./|/)${escaped}(/|$|[\\s"'=;()])`
+    return new RegExp(pattern, "i").test(normalized)
+  })
+}
+
+export function protectedWorkspaceAccessAllowed() {
+  return getToolExecutionContext()?.allowProtectedWorkspaceAccess === true
+}
+
+export function assertWorkspacePathAllowed(
+  resolvedPath: string,
+  workspaceRoot = getEffectiveWorkspaceRoot()
+) {
+  if (protectedWorkspaceAccessAllowed()) return
+  const relative = path.relative(path.resolve(workspaceRoot), path.resolve(resolvedPath))
+  if (relative === "") return
+  const blockedSegment = findBlockedWorkspacePathSegment(relative)
+  if (blockedSegment) {
+    throw new Error(
+      `Access to protected workspace directory "${blockedSegment}" is blocked. Choose a narrower source path outside generated dependency/build folders.`
+    )
+  }
 }
 
 async function ensureDir(dir: string) {
@@ -121,5 +209,6 @@ export function resolveWorkspacePath(requestedPath: string) {
   if (!isWithinDirectory(workspaceRoot, target)) {
     throw new Error("Path escapes workspace boundaries")
   }
+  assertWorkspacePathAllowed(target, workspaceRoot)
   return target
 }

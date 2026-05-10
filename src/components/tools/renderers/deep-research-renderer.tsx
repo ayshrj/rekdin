@@ -64,7 +64,7 @@ export const DeepResearchRenderer: React.FC<DeepResearchRendererProps> = ({ part
 
   return (
     <div className="space-y-4">
-      <div className="border-border bg-card overflow-hidden rounded-xl border shadow-sm">
+      <div className="border-border bg-surface-3 overflow-hidden rounded-lg border shadow-none">
         <div className="border-border flex items-center justify-between border-b p-4">
           <div className="flex items-center space-x-3">
             <div className="bg-tool-research/10 flex h-8 w-8 items-center justify-center rounded-lg">

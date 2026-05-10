@@ -2,7 +2,8 @@
 
 import React from "react"
 
-import { ChevronDown, ChevronRight, File } from "@/lib/icons"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { ChevronDown, ChevronRight, File, InformationCircle } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 import { type ToolResultContentPart } from "./tool-result-renderer"
@@ -13,6 +14,9 @@ interface FileEntry {
   type: "directory" | "file"
   size: number
   modified: string
+  protected?: boolean
+  skipped?: boolean
+  reason?: string
 }
 
 interface TreeNode {
@@ -21,6 +25,9 @@ interface TreeNode {
   type: "directory" | "file"
   size: number
   modified: string
+  protected?: boolean
+  skipped?: boolean
+  reason?: string
   children: TreeNode[]
 }
 
@@ -84,54 +91,82 @@ function TreeNodeRow({
   defaultOpen: boolean
 }) {
   const [open, setOpen] = React.useState(defaultOpen)
+
   const isDir = node.type === "directory"
   const hasChildren = node.children.length > 0
+  const isSkippedProtectedDirectory = isDir && node.protected && node.skipped
+
+  const tooltipText =
+    node.reason ?? "Skipped by default because this folder is expected to be large."
+
+  const row = (
+    <div
+      className={cn(
+        "group flex items-center gap-1.5 rounded px-2 py-[3px] text-[12px]",
+        isDir
+          ? cn(
+              "text-foreground/80 font-medium",
+              hasChildren ? "hover:bg-muted/40 cursor-pointer" : "hover:bg-muted/30"
+            )
+          : "text-foreground/65 hover:bg-muted/30"
+      )}
+      style={{ paddingLeft: `${8 + depth * 16}px` }}
+      onClick={() => isDir && hasChildren && setOpen((o) => !o)}
+    >
+      <span className="text-muted-foreground/50 w-3 shrink-0">
+        {isDir && hasChildren ? (
+          open ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <ChevronRight className="h-3 w-3" />
+          )
+        ) : null}
+      </span>
+
+      {isDir ? (
+        <FolderIcon
+          open={open}
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 transition-colors",
+            isSkippedProtectedDirectory
+              ? "text-amber-400/35 group-hover:text-amber-500/55"
+              : open
+                ? "text-amber-400"
+                : "text-amber-500/80"
+          )}
+        />
+      ) : (
+        <File className="text-muted-foreground/45 group-hover:text-muted-foreground/65 h-3.5 w-3.5 shrink-0" />
+      )}
+
+      <span className="min-w-0 flex-1 truncate font-mono">{node.name}</span>
+
+      {isSkippedProtectedDirectory ? (
+        <InformationCircle className="text-muted-foreground/35 group-hover:text-muted-foreground/60 h-3 w-3 shrink-0" />
+      ) : null}
+
+      {!isDir && node.size > 0 ? (
+        <span className="text-muted-foreground/40 shrink-0 text-[10px]">
+          {formatSize(node.size)}
+        </span>
+      ) : null}
+    </div>
+  )
 
   return (
     <>
-      <div
-        className={cn(
-          "group flex items-center gap-1.5 rounded px-2 py-[3px] text-[12px]",
-          isDir
-            ? "text-foreground/80 hover:bg-muted/40 cursor-pointer font-medium"
-            : "text-foreground/65 hover:bg-muted/30"
-        )}
-        style={{ paddingLeft: `${8 + depth * 16}px` }}
-        onClick={() => isDir && hasChildren && setOpen((o) => !o)}
-      >
-        {/* Expand chevron */}
-        <span className="w-3 shrink-0">
-          {isDir && hasChildren ? (
-            open ? (
-              <ChevronDown className="h-3 w-3" />
-            ) : (
-              <ChevronRight className="h-3 w-3" />
-            )
-          ) : null}
-        </span>
+      {isSkippedProtectedDirectory ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{row}</TooltipTrigger>
+          <TooltipContent side="right" align="center" className="max-w-xs text-xs">
+            {tooltipText}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        row
+      )}
 
-        {/* Icon */}
-        {isDir ? (
-          <FolderIcon
-            open={open}
-            className={cn("h-3.5 w-3.5 shrink-0", open ? "text-amber-400" : "text-amber-500/80")}
-          />
-        ) : (
-          <File className="text-muted-foreground/60 h-3.5 w-3.5 shrink-0" />
-        )}
-
-        {/* Name */}
-        <span className="min-w-0 flex-1 truncate font-mono">{node.name}</span>
-
-        {/* Size (files only) */}
-        {!isDir && node.size > 0 && (
-          <span className="text-muted-foreground/40 shrink-0 text-[10px]">
-            {formatSize(node.size)}
-          </span>
-        )}
-      </div>
-
-      {isDir && open && hasChildren && (
+      {isDir && open && hasChildren ? (
         <>
           {node.children.map((child) => (
             <TreeNodeRow
@@ -142,7 +177,7 @@ function TreeNodeRow({
             />
           ))}
         </>
-      )}
+      ) : null}
     </>
   )
 }
@@ -160,6 +195,7 @@ export const ListFilesRenderer: React.FC<{
 
   const totalFiles = files.filter((f) => f.type === "file").length
   const totalDirs = files.filter((f) => f.type === "directory").length
+  const skippedDirs = files.filter((f) => f.type === "directory" && f.skipped).length
 
   return (
     <div className="w-full min-w-0 overflow-hidden rounded-lg">
@@ -182,6 +218,7 @@ export const ListFilesRenderer: React.FC<{
               {totalFiles} file{totalFiles !== 1 ? "s" : ""}
             </span>
           )}
+          {skippedDirs > 0 && <span className="text-status-warning">{skippedDirs} skipped</span>}
         </div>
       </div>
 

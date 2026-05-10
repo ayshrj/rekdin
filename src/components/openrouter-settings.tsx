@@ -63,6 +63,9 @@ type WorkspaceDirectory = {
   name: string
   path: string
   hidden: boolean
+  protected?: boolean
+  skipped?: boolean
+  reason?: string
 }
 
 type WorkspaceBrowseResponse = {
@@ -676,7 +679,7 @@ export function OpenRouterSettings({
         </Button>
       </DialogTrigger>
       <DialogShell
-        className="bg-surface-1 w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] border shadow-(--shadow-float) sm:w-auto sm:max-w-3xl"
+        className="bg-surface-2 w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] border shadow-none sm:w-[560px] sm:max-w-[560px]"
         footer={
           <>
             {onRestartTour ? (
@@ -710,9 +713,7 @@ export function OpenRouterSettings({
           </>
         }
         title={"Settings"}
-        description={
-          "Configure model, workspace, workflow, and upload settings for this local Rekdin server."
-        }
+        description={"Configure model, workspace, workflow, and upload settings."}
       >
         <input
           ref={fileInputRef}
@@ -723,16 +724,16 @@ export function OpenRouterSettings({
         />
 
         {/* Tab bar */}
-        <div className="bg-surface-2/40 flex shrink-0 border-b px-6">
+        <div className="bg-surface-2 border-border flex shrink-0 border-b px-6">
           {(["model", "workspace", "workflows", "uploads"] as const).map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setSettingsTab(tab)}
               className={cn(
-                "-mb-px border-b-2 px-4 py-3 font-mono text-[10px] font-semibold tracking-[0.12em] uppercase transition-colors",
+                "-mb-px border-b-2 px-4 py-3 text-sm font-medium transition-colors",
                 settingsTab === tab
-                  ? "border-primary text-primary"
+                  ? "border-primary text-foreground"
                   : "text-muted-foreground hover:text-foreground border-transparent"
               )}
             >
@@ -748,7 +749,7 @@ export function OpenRouterSettings({
         </div>
 
         {settingsTab === "model" ? (
-          <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">
+          <div className="rk-scrollbar min-w-0 space-y-4 overflow-y-auto px-6 py-5">
             <div className="space-y-2">
               <Label>LLM provider</Label>
               <Select
@@ -772,7 +773,7 @@ export function OpenRouterSettings({
               </p>
             </div>
 
-            <div className="bg-surface-2/50 flex items-center justify-between gap-6 rounded-lg border px-3 py-2">
+            <div className="bg-surface-3 border-border flex items-center justify-between gap-6 rounded-lg border px-3 py-2">
               <div className="min-w-0">
                 <Label className="text-sm">Live mode</Label>
                 <p className="text-muted-foreground text-xs">
@@ -826,7 +827,7 @@ export function OpenRouterSettings({
                       {isLoadingModels ? "Fetching..." : "Fetch models"}
                     </Button>
 
-                    <Command className="bg-surface-1 w-full max-w-full min-w-0 rounded-lg border shadow-md">
+                    <Command className="bg-surface-3 border-border w-full max-w-full min-w-0 rounded-lg border shadow-none">
                       <CommandInput placeholder="Search models..." />
                       <CommandList className="max-w-full">
                         {models.length === 0 && (
@@ -932,7 +933,7 @@ export function OpenRouterSettings({
                       {isLoadingOpenAIModels ? "Fetching..." : "Fetch models"}
                     </Button>
 
-                    <Command className="bg-surface-1 w-full max-w-full min-w-0 rounded-lg border shadow-md">
+                    <Command className="bg-surface-3 border-border w-full max-w-full min-w-0 rounded-lg border shadow-none">
                       <CommandInput placeholder="Search models..." />
                       <CommandList className="max-w-full">
                         {openAIModels.length === 0 && (
@@ -1090,8 +1091,8 @@ export function OpenRouterSettings({
             )}
           </div>
         ) : settingsTab === "workspace" ? (
-          <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">
-            <div className="bg-surface-2/50 rounded-lg border px-3 py-3">
+          <div className="rk-scrollbar min-w-0 space-y-4 overflow-y-auto px-6 py-5">
+            <div className="bg-surface-3 border-border rounded-lg border px-3 py-3">
               <Label className="text-sm">Selected workspace</Label>
               <p className="text-muted-foreground mt-1 font-mono text-xs break-all">
                 {workspaceRootDraft || "Default app root"}
@@ -1121,8 +1122,8 @@ export function OpenRouterSettings({
               </p>
             </div>
 
-            <div className="bg-surface-1 overflow-hidden rounded-xl border">
-              <div className="bg-surface-2/50 flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
+            <div className="bg-surface-3 border-border overflow-hidden rounded-lg border">
+              <div className="bg-surface-4 border-border flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold">Folder browser</p>
                   <p className="text-muted-foreground truncate font-mono text-xs">
@@ -1174,7 +1175,9 @@ export function OpenRouterSettings({
                       <button
                         key={directory.path}
                         type="button"
-                        className="hover:bg-surface-2/70 flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors"
+                        disabled={directory.protected}
+                        title={directory.reason}
+                        className="hover:bg-surface-4 disabled:bg-status-warning/5 disabled:text-muted-foreground disabled:hover:bg-status-warning/5 flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed"
                         onClick={() => void browseWorkspace(directory.path)}
                       >
                         <span className="min-w-0 truncate">
@@ -1182,8 +1185,16 @@ export function OpenRouterSettings({
                           {directory.hidden ? (
                             <span className="text-muted-foreground ml-2 text-xs">hidden</span>
                           ) : null}
+                          {directory.protected ? (
+                            <span className="text-status-warning ml-2 text-xs">skipped: large</span>
+                          ) : null}
                         </span>
-                        <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
+                        <ChevronRight
+                          className={cn(
+                            "text-muted-foreground h-4 w-4 shrink-0",
+                            directory.protected ? "opacity-30" : ""
+                          )}
+                        />
                       </button>
                     ))}
                   </div>
@@ -1205,7 +1216,7 @@ export function OpenRouterSettings({
             </div>
           </div>
         ) : settingsTab === "workflows" ? (
-          <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">
+          <div className="rk-scrollbar min-w-0 space-y-4 overflow-y-auto px-6 py-5">
             <div className="space-y-1">
               <div className="text-sm font-semibold">Custom workflow presets</div>
               <p className="text-muted-foreground text-xs">
@@ -1214,7 +1225,7 @@ export function OpenRouterSettings({
               </p>
             </div>
 
-            <div className="bg-surface-1 space-y-2 rounded-xl border p-3">
+            <div className="bg-surface-3 border-border space-y-3 rounded-lg border p-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="workflow-title">Title</Label>
@@ -1305,7 +1316,7 @@ export function OpenRouterSettings({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex flex-col items-start gap-3 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="border-border flex flex-col items-start gap-3 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <Label className="text-sm">Background capable</Label>
                     <p className="text-muted-foreground text-xs">Allow queueing this workflow.</p>
@@ -1326,12 +1337,15 @@ export function OpenRouterSettings({
 
             <div className="space-y-2">
               {customWorkflowsDraft.length === 0 ? (
-                <div className="text-muted-foreground rounded-xl border px-3 py-6 text-center text-sm">
+                <div className="text-muted-foreground border-border rounded-lg border px-3 py-6 text-center text-sm">
                   No custom workflows yet.
                 </div>
               ) : (
                 customWorkflowsDraft.map((workflow) => (
-                  <div key={workflow.id} className="bg-surface-1 rounded-xl border p-3">
+                  <div
+                    key={workflow.id}
+                    className="bg-surface-3 border-border rounded-lg border p-3"
+                  >
                     <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -1370,7 +1384,7 @@ export function OpenRouterSettings({
             </div>
           </div>
         ) : (
-          <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">
+          <div className="rk-scrollbar min-w-0 space-y-4 overflow-y-auto px-6 py-5">
             <div className="space-y-1">
               <div className="text-sm font-semibold">Cloudinary uploads</div>
               <p className="text-muted-foreground text-xs">

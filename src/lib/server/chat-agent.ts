@@ -27,6 +27,10 @@ import { LlmProvider, ProviderSettings, ToolPolicyProfile } from "@/types/runtim
 import { getToolApprovalReason, requiresToolApproval } from "./runtime/tool-policy"
 import { runWithToolExecutionContext } from "./tool-execution-context"
 import { createToolset } from "./tools"
+import {
+  findBlockedWorkspaceDirectoryReference,
+  findBlockedWorkspacePathSegment,
+} from "./workspace"
 
 type AgentEventHandlers = {
   onToolStart?: (tool: Partial<ToolCall> & { id: string }) => void | Promise<void>
@@ -62,6 +66,58 @@ const GEMINI_UNSUPPORTED_TOOL_NAMES = new Set([
   "json_patch",
   "yaml_patch",
 ])
+
+const PROTECTED_WORKSPACE_ACCESS_ARGUMENT_KEYS: Record<string, string[]> = {
+  file_read: ["path"],
+  list_files: ["path"],
+  file_search: ["path"],
+  write_file: ["path"],
+  file_replace: ["path"],
+  json_patch: ["path"],
+  yaml_patch: ["path"],
+  archive_create: ["paths"],
+  archive_extract: ["outputDir"],
+  extract_todos: ["path"],
+  git_diff_summary: ["path"],
+  git_blame: ["path"],
+  git_file_history: ["path"],
+  execute_command: ["command", "cwd"],
+  shell_execute: ["command", "cwd"],
+  node_execute: ["code"],
+  python_execute: ["code"],
+  node_codeact: ["code"],
+  python_codeact: ["code"],
+  shell_codeact: ["code"],
+}
+const FREEFORM_PROTECTED_WORKSPACE_ARGUMENT_KEYS = new Set(["command", "code"])
+
+function findProtectedWorkspaceAccessReference(key: string, value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return FREEFORM_PROTECTED_WORKSPACE_ARGUMENT_KEYS.has(key)
+      ? findBlockedWorkspaceDirectoryReference(value)
+      : findBlockedWorkspacePathSegment(value)
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const blockedDirectory = findProtectedWorkspaceAccessReference(key, item)
+      if (blockedDirectory) return blockedDirectory
+    }
+  }
+  return undefined
+}
+
+function getProtectedWorkspaceAccessReason(toolName: string, args: unknown) {
+  const keys = PROTECTED_WORKSPACE_ACCESS_ARGUMENT_KEYS[toolName]
+  if (!keys || !args || typeof args !== "object") return undefined
+  const argRecord = args as Record<string, unknown>
+  for (const key of keys) {
+    const blockedDirectory = findProtectedWorkspaceAccessReference(key, argRecord[key])
+    if (blockedDirectory) {
+      return `This tool references protected workspace directory "${blockedDirectory}". Rekdin skips generated dependency/build folders by default; explicit access needs approval.`
+    }
+  }
+  return undefined
+}
 
 /**
  * Truncates large strings before they are sent back to the model or persisted as tool output.
@@ -548,7 +604,18 @@ export async function runAgent({
           let result: unknown
           let error: string | undefined
           try {
+            const approvalReasons: string[] = []
             if (toolPolicy && requiresToolApproval(toolName, toolPolicy)) {
+              approvalReasons.push(getToolApprovalReason(toolName, toolPolicy))
+            }
+            const protectedWorkspaceAccessReason = getProtectedWorkspaceAccessReason(
+              toolName,
+              call.args
+            )
+            if (protectedWorkspaceAccessReason) {
+              approvalReasons.push(protectedWorkspaceAccessReason)
+            }
+            if (approvalReasons.length > 0) {
               const approved = await onApprovalRequired?.({
                 sessionId,
                 toolName,
@@ -556,13 +623,18 @@ export async function runAgent({
                   call.args && typeof call.args === "object"
                     ? (call.args as Record<string, unknown>)
                     : { value: call.args },
-                reason: getToolApprovalReason(toolName, toolPolicy),
+                reason: approvalReasons.join(" "),
               })
               if (!approved) {
                 throw new Error(`Tool execution rejected by approval gate: ${toolName}`)
               }
             }
-            result = await tool.invoke(call.args)
+            result = protectedWorkspaceAccessReason
+              ? await runWithToolExecutionContext(
+                  { sessionId, workspaceRoot, allowProtectedWorkspaceAccess: true },
+                  async () => await tool.invoke(call.args)
+                )
+              : await tool.invoke(call.args)
           } catch (err) {
             status = "error"
             error = err instanceof Error ? err.message : "Unknown error"

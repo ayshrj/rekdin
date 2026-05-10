@@ -228,7 +228,7 @@ export function ToolResultRenderer({
   className?: string
 }) {
   if (!content || content.length === 0) {
-    return <div className="text-muted-foreground p-4 text-sm italic">No content to display</div>
+    return <div className="rk-empty-state p-4">No content to display</div>
   }
 
   const getAccent = (toolName?: string, type?: string, rendererKey?: string) => {
@@ -395,13 +395,13 @@ export function ToolResultRenderer({
             key={index}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             id={`tool-result-${(part as any).id ?? index}`}
-            className={`bg-surface-1 w-full min-w-0 space-y-3 rounded-2xl border p-3 shadow-sm ${accentClass}`}
+            className={`rk-tool-card space-y-3 ${accentClass}`}
           >
             <div className="w-full min-w-0">
               <Renderer part={part} onAction={onAction} />
             </div>
             {normalizedSteps.length > 0 ? (
-              <div className="border-t pt-3">
+              <div className="border-border border-t pt-3">
                 <div className="rk-section-label mb-2">Steps</div>
                 <ol className="space-y-3">
                   {normalizedSteps.map((step, stepIndex) => {

@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from "async_hooks"
 type ToolExecutionContext = {
   sessionId?: string
   workspaceRoot?: string
+  allowProtectedWorkspaceAccess?: boolean
 }
 
 const storage = new AsyncLocalStorage<ToolExecutionContext>()

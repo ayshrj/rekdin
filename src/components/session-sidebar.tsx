@@ -22,14 +22,14 @@ import { cn } from "@/lib/utils"
 
 function SessionSkeleton() {
   return (
-    <div className="space-y-0.5 px-2 py-1">
+    <div className="space-y-0 px-0 py-1">
       {[75, 55, 68, 48].map((w, i) => (
-        <div key={i} className="rounded-md px-3 py-2.5">
+        <div key={i} className="border-border/50 px-3 py-3">
           <div
-            className="bg-sidebar-accent/50 mb-1.5 h-3 animate-pulse rounded"
+            className="bg-surface-4 mb-1.5 h-3 animate-pulse rounded-sm"
             style={{ width: `${w}%` }}
           />
-          <div className="bg-sidebar-accent/30 h-2 w-14 animate-pulse rounded" />
+          <div className="bg-surface-4 h-2 w-14 animate-pulse rounded-sm" />
         </div>
       ))}
     </div>
@@ -71,37 +71,30 @@ export function SessionSidebar({
 
   return (
     <div className={cn("flex h-full flex-col", className)}>
-      {/* Search bar */}
-      <div className="px-3 pt-3 pb-2">
+      <div className="px-3 py-3">
         <div className="relative flex items-center">
-          <Search className="text-sidebar-foreground/40 pointer-events-none absolute left-2.5 h-3.5 w-3.5" />
+          <Search className="text-muted-foreground pointer-events-none absolute left-2.5 h-3.5 w-3.5" />
           <Input
             placeholder="Search sessions…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className="border-sidebar-border bg-sidebar-accent/60 text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-sidebar-ring h-9 w-full rounded-lg pl-8 text-xs"
+            className="h-9 w-full rounded-md pl-8 text-xs"
           />
         </div>
       </div>
 
-      {/* Sessions list */}
       <ScrollArea className="no-scroll-min-width min-h-0 flex-1 overflow-auto">
         {!hydrated ? (
           <SessionSkeleton />
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
-            <div className="bg-sidebar-accent/60 rounded-xl p-3">
-              <Plus className="text-sidebar-foreground/35 h-5 w-5" />
-            </div>
-            <p className="text-sidebar-foreground/60 text-xs font-medium">
+          <div className="flex h-full min-h-60 flex-col items-center justify-center gap-2 px-4 text-center">
+            <Plus className="text-muted-foreground/40 h-8 w-8" />
+            <p className="text-muted-foreground text-xs">
               {query ? "No sessions match" : "No sessions yet"}
-            </p>
-            <p className="text-sidebar-foreground/35 text-[11px] leading-relaxed">
-              {query ? "Try a different search term" : "Create one using the button below"}
             </p>
           </div>
         ) : (
-          <div className="space-y-0.5 px-2 py-1">
+          <div className="py-1">
             {filtered.map((session) => {
               const firstUserMsg = session.messages?.find((m) => m.role === "user")?.content ?? ""
               const preview =
@@ -111,7 +104,7 @@ export function SessionSidebar({
               return (
                 <div key={session.id} className="relative">
                   {session.id === currentSessionId && (
-                    <span className="bg-sidebar-primary absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-full" />
+                    <span className="bg-primary absolute inset-y-2 left-0 w-0.5 rounded-full" />
                   )}
                   <div
                     role="button"
@@ -130,37 +123,41 @@ export function SessionSidebar({
                       }
                     }}
                     className={cn(
-                      "group flex w-full cursor-pointer items-center justify-between rounded-xl border py-3 pr-1.5 pl-3 text-left transition-colors",
+                      "group flex h-16 w-full cursor-pointer items-start justify-between gap-2 border-y border-transparent py-2 pr-2 text-left transition-colors duration-150 ease-out",
                       session.id === currentSessionId
-                        ? "border-sidebar-primary/30 bg-sidebar-primary/15 text-sidebar-foreground"
-                        : "text-sidebar-foreground/70 hover:border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-foreground border-transparent"
+                        ? "bg-surface-3 text-foreground pl-3"
+                        : "text-muted-foreground hover:bg-surface-3 hover:text-foreground pl-3"
                     )}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm leading-snug font-semibold">{session.title}</p>
+                      <p
+                        className={cn(
+                          "truncate text-sm leading-snug",
+                          session.id === currentSessionId ? "font-semibold" : "font-medium"
+                        )}
+                      >
+                        {session.title}
+                      </p>
                       {preview ? (
-                        <p className="text-sidebar-foreground/40 mt-0.5 truncate text-[11px] leading-tight">
+                        <p className="text-muted-foreground mt-0.5 truncate text-[11px] leading-tight">
                           {preview}
                         </p>
                       ) : null}
-                      <div className="text-sidebar-foreground/35 mt-2 flex items-center gap-1.5 font-mono text-[10px]">
+                      <div className="text-muted-foreground mt-1.5 flex items-center gap-1.5 font-mono text-[10px]">
                         <span>
                           {formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true })}
                         </span>
-                        {msgCount > 0 && (
-                          <>
-                            <span>·</span>
-                            <span>
-                              {msgCount} msg{msgCount === 1 ? "" : "s"}
-                            </span>
-                          </>
-                        )}
                       </div>
                     </div>
+                    {msgCount > 0 ? (
+                      <span className="bg-surface-4 text-muted-foreground mt-7 shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px]">
+                        {msgCount}
+                      </span>
+                    ) : null}
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="text-sidebar-foreground/30 hover:text-destructive h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100"
+                      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 absolute top-2 right-1 h-5 w-5 shrink-0 rounded-md opacity-0 group-hover:opacity-100"
                       onClick={(event) => {
                         event.stopPropagation()
                         setSessionToDelete(session.id)
@@ -176,8 +173,7 @@ export function SessionSidebar({
         )}
       </ScrollArea>
 
-      {/* Bottom: New session button */}
-      <div className="border-sidebar-border shrink-0 border-t px-3 py-3">
+      <div className="border-border shrink-0 border-t px-3 py-3">
         <Button
           onClick={async () => {
             await createSession()
@@ -185,7 +181,7 @@ export function SessionSidebar({
           }}
           disabled={isLoading}
           variant="ghost"
-          className="bg-sidebar-accent/60 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground h-10 w-full justify-start gap-2 rounded-lg text-sm"
+          className="bg-surface-3 text-muted-foreground hover:bg-surface-4 hover:text-foreground h-9 w-full justify-start gap-2 rounded-md text-sm"
         >
           {isLoading ? <Loader className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           New session

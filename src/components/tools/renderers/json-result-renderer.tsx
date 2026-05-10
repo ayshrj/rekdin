@@ -86,9 +86,9 @@ export const JsonResultRenderer: React.FC<JsonResultRendererProps> = ({ part }) 
       <div className="border-border bg-muted/50 flex flex-wrap items-center justify-between gap-3 rounded-t-lg border-b px-3 py-2">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="flex shrink-0 space-x-1.5">
-            <div className="bg-tool-json/80 h-3 w-3 rounded-full shadow-sm" />
-            <div className="bg-tool-json/60 h-3 w-3 rounded-full shadow-sm" />
-            <div className="bg-tool-json/40 h-3 w-3 rounded-full shadow-sm" />
+            <div className="bg-tool-json/80 h-3 w-3 rounded-full shadow-none" />
+            <div className="bg-tool-json/60 h-3 w-3 rounded-full shadow-none" />
+            <div className="bg-tool-json/40 h-3 w-3 rounded-full shadow-none" />
           </div>
 
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -148,7 +148,7 @@ export const JsonResultRenderer: React.FC<JsonResultRendererProps> = ({ part }) 
         </div>
       </div>
 
-      <div className="bg-card text-foreground max-h-[60vh] overflow-auto">
+      <div className="bg-surface-3 text-foreground max-h-[60vh] overflow-auto">
         {canRenderTree && viewMode === "tree" ? (
           <JsonTreeViewer json={jsonData as JsonValue} />
         ) : (
