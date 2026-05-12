@@ -15,6 +15,7 @@ import {
   Bolt,
   ClipboardDocumentList,
   Cog8Tooth,
+  ContextUsageRingIcon,
   CursorArrowRays,
   Eye,
   GalleryVerticalEnd,
@@ -24,7 +25,7 @@ import {
   XMark,
 } from "@/lib/icons"
 import { parseLLMError } from "@/lib/llm-errors"
-import { getProviderMissingConfigMessage, hasProviderCredentials } from "@/lib/llm-providers"
+import { hasProviderCredentials } from "@/lib/llm-providers"
 import { cn } from "@/lib/utils"
 import { getAllWorkflowPresets } from "@/lib/workflows"
 import type { ToolApprovalRequest, ToolPolicyProfile } from "@/types/runtime"
@@ -400,26 +401,12 @@ function ContextUsageRing({
             )}
             aria-label="Context usage — click to compact"
           >
-            <svg className="absolute h-5 w-5 -rotate-90" viewBox="0 0 20 20" fill="none">
-              <circle
-                cx="10"
-                cy="10"
-                r={radius}
-                strokeWidth="2"
-                stroke="currentColor"
-                className="opacity-20"
-              />
-              <circle
-                cx="10"
-                cy="10"
-                r={radius}
-                strokeWidth="2"
-                stroke="currentColor"
-                strokeDasharray={circumference}
-                strokeDashoffset={strokeDashoffset}
-                strokeLinecap="round"
-              />
-            </svg>
+            <ContextUsageRingIcon
+              className="absolute h-5 w-5 -rotate-90"
+              radius={radius}
+              circumference={circumference}
+              strokeDashoffset={strokeDashoffset}
+            />
             <span className="relative z-10 font-mono text-[6px] leading-none font-bold tabular-nums">
               {displayPct}
             </span>
@@ -538,8 +525,15 @@ export function ChatPanel() {
     azureOpenAIEndpoint,
     azureOpenAIApiVersion,
     azureOpenAIDeployment,
+    contextBudget,
     workspaceRoot,
     applyCompaction,
+    stopGeneration,
+    editMessage,
+    toggleStarredMessage,
+    forkSessionFromMessage,
+    appendStatusMessage,
+    updateLlmSettings,
   } = useChat()
 
   // ── Refs ────────────────────────────────────────────────────────────────────
@@ -561,6 +555,12 @@ export function ChatPanel() {
   const [showCommandHelp, setShowCommandHelp] = React.useState(false)
   const [showWorkspaceSelector, setShowWorkspaceSelector] = React.useState(false)
   const [isCompacting, setIsCompacting] = React.useState(false)
+  const [dismissedAutoCompactSession, setDismissedAutoCompactSession] = React.useState<
+    string | null
+  >(null)
+  const [searchOpen, setSearchOpen] = React.useState(false)
+  const [searchQuery, setSearchQuery] = React.useState("")
+  const [activeSearchIndex, setActiveSearchIndex] = React.useState(0)
 
   // ── Context usage ───────────────────────────────────────────────────────────
   const contextPct = React.useMemo(() => {
@@ -574,8 +574,8 @@ export function ChatPanel() {
         )
         return sum + contentTokens + toolTokens
       }, 0)
-    return used / CONTEXT_TOKEN_BUDGET
-  }, [messages])
+    return used / (contextBudget || CONTEXT_TOKEN_BUDGET)
+  }, [contextBudget, messages])
 
   // ── Derived ─────────────────────────────────────────────────────────────────
   const missingApiKey = React.useMemo(
@@ -625,6 +625,19 @@ export function ChatPanel() {
   const selectedWorkflow = selectedWorkflowId
     ? workflowPresets.find((wf) => wf.id === selectedWorkflowId)
     : null
+  const searchMatches = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return []
+    return messages
+      .map((message, index) => ({ message, index }))
+      .filter(({ message }) => message.content.toLowerCase().includes(q))
+  }, [messages, searchQuery])
+  const activeSearchMessageId = searchMatches[activeSearchIndex]?.message.id
+  const contextNearFull =
+    contextPct >= 0.9 &&
+    messages.length > 0 &&
+    currentSessionId !== dismissedAutoCompactSession &&
+    !messages.some((message) => message.metadata?.compactionMarker)
 
   const activeModel = React.useMemo(() => {
     switch (llmProvider) {
@@ -785,6 +798,66 @@ export function ChatPanel() {
     return () => window.removeEventListener("rekdin:open-workspace", openWorkspace)
   }, [])
 
+  React.useEffect(() => {
+    if (!activeSearchMessageId) return
+    scrollViewportRef.current
+      ?.querySelector(`[data-message-id="${CSS.escape(activeSearchMessageId)}"]`)
+      ?.scrollIntoView({ block: "center" })
+  }, [activeSearchMessageId])
+
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isMod = event.metaKey || event.ctrlKey
+      if (event.key === "Escape" && (isLoading || isThinking)) {
+        event.preventDefault()
+        stopGeneration()
+        return
+      }
+      if (!isMod) return
+      if (event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        void createSession()
+        return
+      }
+      if (event.key === "/") {
+        event.preventDefault()
+        if (document.activeElement === document.querySelector("textarea")) {
+          setShowCommandHelp(true)
+        } else {
+          chatInputRef.current?.focus()
+        }
+        return
+      }
+      if (event.key.toLowerCase() === "f") {
+        event.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [createSession, isLoading, isThinking, stopGeneration])
+
+  React.useEffect(() => {
+    const viewport = scrollViewportRef.current
+    if (!viewport) return
+    const onDragOver = (event: DragEvent) => {
+      if (!event.dataTransfer?.files?.length) return
+      event.preventDefault()
+    }
+    const onDrop = (event: DragEvent) => {
+      const files = Array.from(event.dataTransfer?.files ?? [])
+      if (files.length === 0) return
+      event.preventDefault()
+      chatInputRef.current?.addFiles(files)
+    }
+    viewport.addEventListener("dragover", onDragOver)
+    viewport.addEventListener("drop", onDrop)
+    return () => {
+      viewport.removeEventListener("dragover", onDragOver)
+      viewport.removeEventListener("drop", onDrop)
+    }
+  }, [])
+
   // ── Workflow helpers ─────────────────────────────────────────────────────────
   const launchWorkflow = React.useCallback(
     (workflowId: string) => {
@@ -859,6 +932,81 @@ export function ChatPanel() {
     [applyCompaction, currentSessionId]
   )
 
+  const retryLastUserMessage = React.useCallback(async () => {
+    const lastUser = [...messages].reverse().find((message) => message.role === "user")
+    if (!lastUser) {
+      toast.error("No user message to retry.")
+      return
+    }
+    await sendMessage(lastUser.content, [], {
+      agentType: lastUser.metadata?.agentType,
+      toolPolicy: isToolPolicyProfile(lastUser.metadata?.toolPolicy)
+        ? lastUser.metadata.toolPolicy
+        : toolPolicy,
+      workflowId: lastUser.metadata?.workflowId,
+      responseSchema: null,
+    })
+  }, [messages, sendMessage, toolPolicy])
+
+  const appendStatus = React.useCallback(async () => {
+    const backgroundCount = await fetch(`/api/background?sessionId=${currentSessionId ?? ""}`)
+      .then((res) => res.json())
+      .then((data) => (Array.isArray(data.jobs) ? data.jobs.length : 0))
+      .catch(() => 0)
+    await appendStatusMessage(
+      [
+        `- Session: ${currentSessionId ?? "none"}`,
+        `- Model: ${llmProvider} / ${activeModel ?? "not set"}`,
+        `- Tool policy: ${toolPolicy}`,
+        `- Context: ~${Math.round(contextPct * 100)}% of ${contextBudget.toLocaleString()} tokens`,
+        `- Messages: ${messages.length}`,
+        `- Background jobs: ${backgroundCount}`,
+        `- Compacted: ${messages.some((message) => message.metadata?.compactionMarker) ? "yes" : "no"}`,
+      ].join("\n")
+    )
+  }, [
+    activeModel,
+    appendStatusMessage,
+    contextBudget,
+    contextPct,
+    currentSessionId,
+    llmProvider,
+    messages,
+    toolPolicy,
+  ])
+
+  const switchModel = React.useCallback(
+    (modelId: string) => {
+      const model = modelId.trim()
+      if (!model) {
+        toast.error("Usage: /model <model-id>")
+        return
+      }
+      switch (llmProvider) {
+        case "openrouter":
+          updateLlmSettings({ openRouterModel: model })
+          break
+        case "openai":
+          updateLlmSettings({ openAIModel: model })
+          break
+        case "gemini":
+          updateLlmSettings({ geminiModel: model })
+          break
+        case "claude":
+          updateLlmSettings({ claudeModel: model })
+          break
+        case "grok":
+          updateLlmSettings({ grokModel: model })
+          break
+        case "azure_openai":
+          updateLlmSettings({ azureOpenAIDeployment: model })
+          break
+      }
+      toast.success(`Model switched to ${model}`)
+    },
+    [llmProvider, updateLlmSettings]
+  )
+
   const handleSend = React.useCallback(
     async (content: string, attachments: File[]) => {
       const slashCommand = parseSlashCommand(content)
@@ -913,6 +1061,18 @@ export function ChatPanel() {
           await triggerCompact(args?.trim() || undefined)
           return
         }
+        if (command.id === "status") {
+          await appendStatus()
+          return
+        }
+        if (command.id === "retry") {
+          await retryLastUserMessage()
+          return
+        }
+        if (command.id === "model") {
+          switchModel(args)
+          return
+        }
       }
 
       const wf = selectedWorkflowId
@@ -934,6 +1094,9 @@ export function ChatPanel() {
       sendMessage,
       toolPolicy,
       triggerCompact,
+      appendStatus,
+      retryLastUserMessage,
+      switchModel,
       workflowPresets,
     ]
   )
@@ -1057,6 +1220,61 @@ export function ChatPanel() {
               </div>
             )}
 
+            {searchOpen && (
+              <div className="border-border bg-surface-3 flex items-center gap-2 border-b px-4 py-2">
+                <input
+                  autoFocus
+                  value={searchQuery}
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value)
+                    setActiveSearchIndex(0)
+                  }}
+                  placeholder="Search this session"
+                  className="bg-surface-2 border-border text-foreground placeholder:text-muted-foreground h-8 min-w-0 flex-1 rounded-md border px-2 text-sm outline-none"
+                />
+                <span className="text-muted-foreground font-mono text-xs">
+                  {searchMatches.length
+                    ? `${activeSearchIndex + 1}/${searchMatches.length}`
+                    : "0/0"}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    setActiveSearchIndex(
+                      (index) => (index - 1 + searchMatches.length) % searchMatches.length
+                    )
+                  }
+                  disabled={searchMatches.length === 0}
+                >
+                  Prev
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    setActiveSearchIndex((index) => (index + 1) % searchMatches.length)
+                  }
+                  disabled={searchMatches.length === 0}
+                >
+                  Next
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => {
+                    setSearchOpen(false)
+                    setSearchQuery("")
+                  }}
+                >
+                  <XMark className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
             {/* Message list */}
             <div
               ref={scrollViewportRef}
@@ -1134,7 +1352,23 @@ export function ChatPanel() {
                       const prev = messages[index - 1]
                       const showHeader = !prev || prev.role !== message.role
                       return (
-                        <ChatMessage key={message.id} message={message} showHeader={showHeader} />
+                        <div key={message.id} data-message-id={message.id}>
+                          <ChatMessage
+                            message={message}
+                            showHeader={showHeader}
+                            searchQuery={searchQuery}
+                            searchActive={message.id === activeSearchMessageId}
+                            onEdit={async (messageId) => {
+                              const content = await editMessage(messageId)
+                              if (content !== null) {
+                                setInputValue(content)
+                                setTimeout(() => chatInputRef.current?.focus(), 0)
+                              }
+                            }}
+                            onToggleStar={(messageId) => void toggleStarredMessage(messageId)}
+                            onFork={(messageId) => void forkSessionFromMessage(messageId)}
+                          />
+                        </div>
                       )
                     })}
 
@@ -1246,6 +1480,36 @@ export function ChatPanel() {
                 </div>
               )}
 
+              {contextNearFull && (
+                <div className="border-status-warning/35 bg-status-warning/8 mx-3 mt-3 rounded-lg border px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-foreground text-xs">
+                      Context nearly full (~{Math.round(contextPct * 100)}% used).
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setDismissedAutoCompactSession(currentSessionId)}
+                      >
+                        Dismiss
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={isCompacting}
+                        onClick={() => void triggerCompact()}
+                      >
+                        Compact now
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* 4. Input — approval replaces it when pending */}
               <div
                 className="px-3 pb-3"
@@ -1264,6 +1528,7 @@ export function ChatPanel() {
                     onValueChange={handleInputChange}
                     onSend={handleSend}
                     isLoading={isLoading || isThinking || isCompacting}
+                    onStop={stopGeneration}
                     disabled={false}
                   />
                 )}

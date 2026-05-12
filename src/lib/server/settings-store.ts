@@ -40,6 +40,12 @@ const DEFAULT_SETTINGS: ServerSettings = {
   azureOpenAIApiVersion: "2024-02-15-preview",
   azureOpenAIDeployment: "",
   liveModeEnabled: true,
+  contextBudget: 12_000,
+  customSystemPrompt: "",
+  extendedThinking: {
+    enabled: false,
+    budgetTokens: 4_000,
+  },
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME ?? "",
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY ?? "",
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET ?? "",
@@ -135,6 +141,22 @@ function normalizeSettings(raw?: Partial<ServerSettings> | null): ServerSettings
       typeof raw?.liveModeEnabled === "boolean"
         ? raw.liveModeEnabled
         : DEFAULT_SETTINGS.liveModeEnabled,
+    contextBudget:
+      typeof raw?.contextBudget === "number" && Number.isFinite(raw.contextBudget)
+        ? Math.min(Math.max(Math.floor(raw.contextBudget), 4_000), 200_000)
+        : DEFAULT_SETTINGS.contextBudget,
+    customSystemPrompt:
+      typeof raw?.customSystemPrompt === "string"
+        ? raw.customSystemPrompt.trim().slice(0, 20_000)
+        : DEFAULT_SETTINGS.customSystemPrompt,
+    extendedThinking: {
+      enabled: Boolean(raw?.extendedThinking?.enabled),
+      budgetTokens:
+        typeof raw?.extendedThinking?.budgetTokens === "number" &&
+        Number.isFinite(raw.extendedThinking.budgetTokens)
+          ? Math.min(Math.max(Math.floor(raw.extendedThinking.budgetTokens), 1_000), 10_000)
+          : DEFAULT_SETTINGS.extendedThinking.budgetTokens,
+    },
     cloudinaryCloudName: raw?.cloudinaryCloudName?.trim() ?? DEFAULT_SETTINGS.cloudinaryCloudName,
     cloudinaryApiKey: raw?.cloudinaryApiKey?.trim() ?? DEFAULT_SETTINGS.cloudinaryApiKey,
     cloudinaryApiSecret: raw?.cloudinaryApiSecret?.trim() ?? DEFAULT_SETTINGS.cloudinaryApiSecret,
@@ -203,6 +225,9 @@ export async function getProviderSettings(
     azureOpenAIEndpoint: settings.azureOpenAIEndpoint,
     azureOpenAIApiVersion: settings.azureOpenAIApiVersion,
     azureOpenAIDeployment: settings.azureOpenAIDeployment,
+    contextBudget: settings.contextBudget,
+    customSystemPrompt: settings.customSystemPrompt,
+    extendedThinking: settings.extendedThinking,
   }
 }
 

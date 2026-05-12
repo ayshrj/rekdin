@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { SLASH_COMMANDS, SlashCommandDefinition } from "@/lib/commands"
-import { Loader, PaperAirplane as Send, PaperClip } from "@/lib/icons"
+import { Loader, PaperAirplane as Send, PaperClip, XMark } from "@/lib/icons"
 
 interface ChatInputProps {
   value: string
@@ -14,10 +14,12 @@ interface ChatInputProps {
   onSend: (content: string, attachments: File[]) => Promise<void> | void
   isLoading: boolean
   disabled?: boolean
+  onStop?: () => void
 }
 
 export interface ChatInputHandle {
   focus(): void
+  addFiles(files: File[]): void
 }
 
 /**
@@ -25,7 +27,7 @@ export interface ChatInputHandle {
  * Imperative focus handle for workflow preset launches.
  */
 export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
-  { value, onValueChange, onSend, isLoading, disabled },
+  { value, onValueChange, onSend, isLoading, disabled, onStop },
   ref
 ) {
   const [attachments, setAttachments] = React.useState<File[]>([])
@@ -70,6 +72,7 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
 
   React.useImperativeHandle(ref, () => ({
     focus: () => textareaRef.current?.focus(),
+    addFiles: (files: File[]) => setAttachments((prev) => [...prev, ...files]),
   }))
 
   // ── Send ─────────────────────────────────────────────────────────────────
@@ -97,6 +100,11 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
 
   // ── Keyboard navigation ──────────────────────────────────────────────────
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Escape" && isLoading && onStop) {
+      e.preventDefault()
+      onStop()
+      return
+    }
     if (showCommandSuggestions) {
       if (e.key === "ArrowDown") {
         e.preventDefault()
@@ -126,6 +134,15 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
       void handleSend()
     }
   }
+
+  const handlePaste = React.useCallback((event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files ?? []).filter((file) =>
+      file.type.startsWith("image/")
+    )
+    if (files.length === 0) return
+    event.preventDefault()
+    setAttachments((prev) => [...prev, ...files])
+  }, [])
 
   const isSendDisabled =
     disabled || isLoading || (value.trim().length === 0 && attachments.length === 0)
@@ -198,9 +215,10 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
             value={value}
             onChange={(e) => onValueChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder="Ask Rekdin to research or run commands…"
             disabled={disabled || isLoading}
-            className="placeholder:text-muted-foreground max-h-40 min-h-[44px] flex-1 resize-none border-0 bg-transparent p-1.5 text-sm leading-relaxed focus-visible:ring-0 focus-visible:outline-none"
+            className="placeholder:text-muted-foreground max-h-40 min-h-11 flex-1 resize-none border-0 bg-transparent p-1.5 text-sm leading-relaxed focus-visible:ring-0 focus-visible:outline-none"
           />
 
           {/* Send */}
@@ -216,6 +234,18 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
               <Send className="h-3.5 w-3.5" />
             )}
           </Button>
+          {isLoading && onStop ? (
+            <Button
+              type="button"
+              onClick={onStop}
+              size="icon"
+              variant="outline"
+              className="h-8 w-8 shrink-0 rounded-md"
+              aria-label="Stop generation"
+            >
+              <XMark className="h-3.5 w-3.5" />
+            </Button>
+          ) : null}
         </div>
 
         {/* Hidden file input */}

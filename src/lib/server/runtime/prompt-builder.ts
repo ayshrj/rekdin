@@ -10,6 +10,7 @@ type PromptInput = {
   toolPolicy: ToolPolicyProfile
   workspaceRoot?: string
   responseSchema?: Record<string, unknown> | null
+  customSystemPrompt?: string | null
 }
 
 const MODE_GUIDANCE: Record<AgentMode, string> = {
@@ -66,6 +67,7 @@ export async function buildSystemPrompt({
   toolPolicy,
   workspaceRoot: inputWorkspaceRoot,
   responseSchema,
+  customSystemPrompt,
 }: PromptInput): Promise<string> {
   const workspaceRoot = inputWorkspaceRoot?.trim()
     ? path.resolve(inputWorkspaceRoot)
@@ -93,6 +95,10 @@ export async function buildSystemPrompt({
       ].join("\n"),
     ],
   ]
+
+  if (customSystemPrompt?.trim()) {
+    sections.push(["User System Prompt", customSystemPrompt.trim()])
+  }
 
   sections.push([
     "Workspace Context",

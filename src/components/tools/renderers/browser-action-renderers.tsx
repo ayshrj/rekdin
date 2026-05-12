@@ -21,6 +21,7 @@ import { ClickableImage } from "@/components/ui/image-lightbox"
 import {
   ArrowDownTray,
   ArrowRight,
+  BrowserDragOverlayIcon,
   Check,
   Clock,
   CursorArrowRays as MousePointer,
@@ -267,49 +268,17 @@ export const DragActionRenderer: React.FC<{
               }}
             />
             {coords && imgSize && (
-              <svg
+              <BrowserDragOverlayIcon
                 className="pointer-events-none absolute inset-0 h-full w-full"
-                viewBox={`0 0 ${imgSize.width} ${imgSize.height}`}
-                preserveAspectRatio="none"
-              >
-                <defs>
-                  <marker
-                    id="drag-arrow"
-                    markerWidth="8"
-                    markerHeight="8"
-                    refX="6"
-                    refY="4"
-                    orient="auto"
-                  >
-                    <path d="M0,0 L8,4 L0,8 z" fill="var(--tool-action)" opacity="0.8" />
-                  </marker>
-                </defs>
-                <line
-                  x1={coords.srcX}
-                  y1={coords.srcY}
-                  x2={coords.tgtX}
-                  y2={coords.tgtY}
-                  stroke="var(--tool-action)"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  markerEnd="url(#drag-arrow)"
-                  opacity="0.8"
-                />
-                <circle
-                  cx={coords.srcX}
-                  cy={coords.srcY}
-                  r="5"
-                  fill="var(--tool-action)"
-                  opacity="0.9"
-                />
-                <circle
-                  cx={coords.tgtX}
-                  cy={coords.tgtY}
-                  r="5"
-                  fill="var(--tool-action)"
-                  opacity="0.6"
-                />
-              </svg>
+                width={imgSize.width}
+                height={imgSize.height}
+                sourceX={coords.srcX}
+                sourceY={coords.srcY}
+                targetX={coords.tgtX}
+                targetY={coords.tgtY}
+                markerId="browser-action-drag-arrow"
+                color="var(--tool-action)"
+              />
             )}
           </div>
         </BrowserShell>

@@ -168,6 +168,7 @@ function createModel({
   azureOpenAIEndpoint,
   azureOpenAIApiVersion,
   azureOpenAIDeployment,
+  extendedThinking,
 }: {
   provider: LlmProvider
   origin?: string
@@ -181,6 +182,7 @@ function createModel({
   azureOpenAIEndpoint?: string
   azureOpenAIApiVersion?: string
   azureOpenAIDeployment?: string
+  extendedThinking?: { enabled: boolean; budgetTokens: number }
 }): ToolCapableChatModel {
   if (provider === "gemini") {
     const apiKey = geminiApiKey
@@ -205,7 +207,15 @@ function createModel({
       apiKey,
       model,
       temperature: 0.2,
-    })
+      ...(extendedThinking?.enabled
+        ? {
+            thinking: {
+              type: "enabled",
+              budget_tokens: extendedThinking.budgetTokens,
+            },
+          }
+        : {}),
+    } as ConstructorParameters<typeof ChatAnthropic>[0])
   }
 
   if (isOpenAICompatibleProvider(provider)) {
@@ -356,6 +366,7 @@ export interface AgentRunOptions extends AgentEventHandlers {
   toolHeaders?: HeadersInit
   allowedToolNames?: string[]
   toolPolicy?: ToolPolicyProfile
+  abortSignal?: AbortSignal
 }
 
 export interface AgentRunResult {
@@ -401,6 +412,7 @@ export function buildLlmFromSettings(
     azureOpenAIEndpoint: providerSettings.azureOpenAIEndpoint,
     azureOpenAIApiVersion: providerSettings.azureOpenAIApiVersion,
     azureOpenAIDeployment: providerSettings.azureOpenAIDeployment,
+    extendedThinking: providerSettings.extendedThinking,
   }) as unknown as InvokableModel
 }
 
@@ -429,7 +441,8 @@ async function streamModelMessage(
     ) => Promise<AsyncIterable<AIMessageChunk> | IterableReadableStream<AIMessageChunk>>
   },
   history: BaseMessage[],
-  onChunk?: (chunk: string) => void
+  onChunk?: (chunk: string) => void,
+  abortSignal?: AbortSignal
 ): Promise<AIMessageChunk> {
   let aggregated: AIMessageChunk | null = null
   let emittedText = ""
@@ -443,6 +456,7 @@ async function streamModelMessage(
 
   const stream = await llmWithTools.stream(history)
   for await (const maybeChunk of stream) {
+    if (abortSignal?.aborted) throw new Error("Generation stopped by user")
     if (!AIMessageChunk.isInstance(maybeChunk)) continue
     chunkCount += 1
 
@@ -508,6 +522,7 @@ export async function runAgent({
   toolHeaders,
   allowedToolNames,
   toolPolicy,
+  abortSignal,
   onToolStart,
   onToolResult,
   onApprovalRequired,
@@ -566,6 +581,7 @@ export async function runAgent({
       azureOpenAIEndpoint: providerSettings.azureOpenAIEndpoint,
       azureOpenAIApiVersion: providerSettings.azureOpenAIApiVersion,
       azureOpenAIDeployment: providerSettings.azureOpenAIDeployment,
+      extendedThinking: providerSettings.extendedThinking,
     })
     let llmWithTools = llm.bindTools(tools)
     const tokenUsageEstimate = createEmptyTokenUsageEstimate()
@@ -582,10 +598,11 @@ export async function runAgent({
     let retryCount = 0
 
     while (iterations < 8) {
+      if (abortSignal?.aborted) throw new Error("Generation stopped by user")
       iterations += 1
       let aiMessage: AIMessageChunk
       try {
-        aiMessage = await streamModelMessage(llmWithTools, history, onChunk)
+        aiMessage = await streamModelMessage(llmWithTools, history, onChunk, abortSignal)
       } catch (err) {
         const message = err instanceof Error ? err.message : ""
         const lowered = typeof message === "string" ? message.toLowerCase() : ""
@@ -614,6 +631,7 @@ export async function runAgent({
             azureOpenAIEndpoint: providerSettings.azureOpenAIEndpoint,
             azureOpenAIApiVersion: providerSettings.azureOpenAIApiVersion,
             azureOpenAIDeployment: providerSettings.azureOpenAIDeployment,
+            extendedThinking: providerSettings.extendedThinking,
           })
           llmWithTools = llm.bindTools(tools)
           iterations -= 1
@@ -629,6 +647,7 @@ export async function runAgent({
       if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
         history.push(aiMessage)
         for (const call of aiMessage.tool_calls) {
+          if (abortSignal?.aborted) throw new Error("Generation stopped by user")
           const toolName = call.name
           if (!toolName) continue
           const tool = tools.find((t) => t.name === toolName)

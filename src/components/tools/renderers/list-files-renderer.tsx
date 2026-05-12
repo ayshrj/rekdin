@@ -4,7 +4,7 @@ import React from "react"
 
 import { FileExtensionIcon } from "@/components/file-extension-icon"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { ChevronDown, ChevronRight, InformationCircle } from "@/lib/icons"
+import { ChevronDown, ChevronRight, FolderTreeIcon, InformationCircle } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 import { CopyButton, InlineToolResult, SearchInput, useToolInvoke } from "./renderer-primitives"
@@ -112,18 +112,6 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function FolderIcon({ open, className }: { open: boolean; className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="currentColor" className={className} aria-hidden="true">
-      {open ? (
-        <path d="M1.5 3A1.5 1.5 0 0 0 0 4.5v8A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-6A1.5 1.5 0 0 0 14.5 5H7.621a1.5 1.5 0 0 1-1.06-.44L5.5 3.5A1.5 1.5 0 0 0 4.44 3H1.5Z" />
-      ) : (
-        <path d="M.54 3.87.5 3a2 2 0 0 1 2-2h3.19a2 2 0 0 1 1.345.513l.984.86A1 1 0 0 0 8.71 2.5H13.5A1.5 1.5 0 0 1 15 4v.63l.54.44A.5.5 0 0 1 16 5.5v8a.5.5 0 0 1-.5.5h-15a.5.5 0 0 1-.5-.5V4a.5.5 0 0 1 .04-.13ZM1.5 4h13v8h-13V4Z" />
-      )}
-    </svg>
-  )
-}
-
 function TreeNodeRow({
   node,
   depth,
@@ -186,7 +174,7 @@ function TreeNodeRow({
       </span>
 
       {isDir ? (
-        <FolderIcon
+        <FolderTreeIcon
           open={open}
           className={cn(
             "h-3.5 w-3.5 shrink-0 transition-colors",
@@ -318,7 +306,7 @@ export const ListFilesRenderer: React.FC<{
     <div className="w-full min-w-0 overflow-hidden rounded-lg">
       {/* Header */}
       <div className="bg-muted/20 flex items-center gap-2 border-b px-3 py-2">
-        <FolderIcon open className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+        <FolderTreeIcon open className="h-3.5 w-3.5 shrink-0 text-amber-400" />
         <span
           className="text-foreground/70 min-w-0 flex-1 truncate font-mono text-[11px]"
           title={rootPath}

@@ -61,6 +61,9 @@ type ChatContextValue = {
   azureOpenAIApiVersion: string
   azureOpenAIDeployment: string
   liveModeEnabled: boolean
+  contextBudget: number
+  customSystemPrompt: string
+  extendedThinking: { enabled: boolean; budgetTokens: number }
   workspaceRoot: string
   customWorkflows: WorkflowPreset[]
   cloudinaryCloudName: string
@@ -69,6 +72,9 @@ type ChatContextValue = {
   pendingToolApproval: ToolApprovalRequest | null
   resolveToolApproval: (approved: boolean) => void
   updateLlmSettings: (next: Partial<LlmSettings>) => void
+  updateRuntimeSettings: (
+    next: Partial<Pick<ServerSettings, "contextBudget" | "customSystemPrompt" | "extendedThinking">>
+  ) => void
   updateWorkspaceSettings: (next: { workspaceRoot?: string }) => void
   updateCustomWorkflows: (customWorkflows: WorkflowPreset[]) => void
   updateCloudinarySettings: (next: {
@@ -89,6 +95,11 @@ type ChatContextValue = {
       workflowId?: string
     }
   ) => Promise<void>
+  stopGeneration: () => void
+  editMessage: (messageId: string) => Promise<string | null>
+  toggleStarredMessage: (messageId: string) => Promise<void>
+  forkSessionFromMessage: (messageId: string) => Promise<void>
+  appendStatusMessage: (content: string) => Promise<void>
   applyCompaction: (sessionId: string, summary: string) => void
   refreshSessions: () => Promise<void>
 }
@@ -125,6 +136,9 @@ type LlmSettings = {
   azureOpenAIApiVersion: string
   azureOpenAIDeployment: string
   liveModeEnabled: boolean
+  contextBudget: number
+  customSystemPrompt: string
+  extendedThinking: { enabled: boolean; budgetTokens: number }
 }
 
 /**
@@ -327,6 +341,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [azureOpenAIApiVersion, setAzureOpenAIApiVersion] = React.useState("2024-02-15-preview")
   const [azureOpenAIDeployment, setAzureOpenAIDeployment] = React.useState("")
   const [liveModeEnabled, setLiveModeEnabled] = React.useState(true)
+  const [contextBudget, setContextBudget] = React.useState(12_000)
+  const [customSystemPrompt, setCustomSystemPrompt] = React.useState("")
+  const [extendedThinking, setExtendedThinking] = React.useState({
+    enabled: false,
+    budgetTokens: 4_000,
+  })
   const [workspaceRoot, setWorkspaceRoot] = React.useState("")
   const [customWorkflows, setCustomWorkflows] = React.useState<WorkflowPreset[]>([])
   const [cloudinaryCloudName, setCloudinaryCloudName] = React.useState("")
@@ -350,6 +370,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const uploadedDataUrlsRef = React.useRef(new Map<string, string>())
   const pendingUploadsRef = React.useRef(new Map<string, Promise<string>>())
   const draftPersistRef = React.useRef(new Map<string, number>())
+  const abortControllerRef = React.useRef<AbortController | null>(null)
 
   const requestToolApproval = React.useCallback((approval: ToolApprovalRequest) => {
     return new Promise<boolean>((resolve) => {
@@ -627,6 +648,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             ? serverSettings.liveModeEnabled
             : true
         )
+        setContextBudget(serverSettings.contextBudget || 12_000)
+        setCustomSystemPrompt(serverSettings.customSystemPrompt || "")
+        setExtendedThinking(
+          serverSettings.extendedThinking ?? { enabled: false, budgetTokens: 4_000 }
+        )
         setCloudinaryCloudName(serverSettings.cloudinaryCloudName || "")
         setCloudinaryApiKey(serverSettings.cloudinaryApiKey || "")
         setCloudinaryApiSecret(serverSettings.cloudinaryApiSecret || "")
@@ -757,6 +783,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (typeof next.liveModeEnabled === "boolean") {
       setLiveModeEnabled(next.liveModeEnabled)
     }
+    if (typeof next.contextBudget === "number") {
+      setContextBudget(next.contextBudget)
+    }
+    if (typeof next.customSystemPrompt === "string") {
+      setCustomSystemPrompt(next.customSystemPrompt)
+    }
+    if (next.extendedThinking) {
+      setExtendedThinking(next.extendedThinking)
+    }
     void saveServerSettings({
       ...(typeof next.provider === "string"
         ? { llmProvider: normalizeLlmProvider(next.provider) }
@@ -798,11 +833,34 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       ...(typeof next.liveModeEnabled === "boolean"
         ? { liveModeEnabled: next.liveModeEnabled }
         : {}),
+      ...(typeof next.contextBudget === "number" ? { contextBudget: next.contextBudget } : {}),
+      ...(typeof next.customSystemPrompt === "string"
+        ? { customSystemPrompt: next.customSystemPrompt }
+        : {}),
+      ...(next.extendedThinking ? { extendedThinking: next.extendedThinking } : {}),
     }).catch((err) => {
       logger.error("Failed to save LLM settings to server", err)
       toast.error("Unable to save model settings")
     })
   }, [])
+
+  const updateRuntimeSettings = React.useCallback(
+    (
+      next: Partial<
+        Pick<ServerSettings, "contextBudget" | "customSystemPrompt" | "extendedThinking">
+      >
+    ) => {
+      if (typeof next.contextBudget === "number") setContextBudget(next.contextBudget)
+      if (typeof next.customSystemPrompt === "string")
+        setCustomSystemPrompt(next.customSystemPrompt)
+      if (next.extendedThinking) setExtendedThinking(next.extendedThinking)
+      void saveServerSettings(next).catch((err) => {
+        logger.error("Failed to save runtime settings to server", err)
+        toast.error("Unable to save runtime settings")
+      })
+    },
+    []
+  )
 
   const updateCloudinarySettings = React.useCallback(
     (next: { cloudName?: string; apiKey?: string; apiSecret?: string }) => {
@@ -969,6 +1027,175 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     await hydrateFromIdb()
   }, [hydrateFromIdb])
 
+  const stopGeneration = React.useCallback(() => {
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    if (currentSessionId) {
+      updateMessages(currentSessionId, (prev) =>
+        prev.map((message) =>
+          message.metadata?.thinking
+            ? { ...message, metadata: { ...(message.metadata ?? {}), thinking: false } }
+            : message
+        )
+      )
+    }
+    setIsLoading(false)
+    setIsThinking(false)
+    toast.message("Generation stopped")
+  }, [currentSessionId, updateMessages])
+
+  const syncServerSessionMessages = React.useCallback(
+    async (sessionId: string, messages: ChatMessage[], title?: string) => {
+      await fetch(`/api/sessions/${sessionId}/messages`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, messages }),
+      }).catch((err) => {
+        logger.warn("Failed to sync server session messages", err)
+      })
+    },
+    []
+  )
+
+  const persistSessionMessages = React.useCallback(
+    async (sessionId: string, messages: ChatMessage[]) => {
+      const current = sessions.find((session) => session.id === sessionId)
+      const timestamp = messages[messages.length - 1]?.timestamp ?? new Date().toISOString()
+      const nextSession: ChatSession = {
+        id: sessionId,
+        title: current?.title ?? "New Conversation",
+        createdAt: current?.createdAt ?? timestamp,
+        updatedAt: timestamp,
+        messages,
+        metadata: {
+          ...(current?.metadata ?? {}),
+          messageCount: messages.length,
+          totalTokens: messages.reduce(
+            (total, message) => total + (message.metadata?.tokens ?? 0),
+            0
+          ),
+          model: [...messages].reverse().find((message) => message.metadata?.model)?.metadata
+            ?.model,
+        },
+      }
+      await saveSession(nextSession)
+      await syncServerSessionMessages(sessionId, messages, nextSession.title)
+      setSessions((prev) =>
+        [nextSession, ...prev.filter((session) => session.id !== sessionId)].sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        )
+      )
+    },
+    [sessions, syncServerSessionMessages]
+  )
+
+  const editMessage = React.useCallback(
+    async (messageId: string) => {
+      if (!currentSessionId) return null
+      const current = messagesBySession[currentSessionId] ?? []
+      const index = current.findIndex(
+        (message) => message.id === messageId && message.role === "user"
+      )
+      if (index === -1) return null
+      const edited = current[index]!
+      const nextMessages = current.slice(0, index)
+      setMessagesBySession((prev) => ({ ...prev, [currentSessionId]: nextMessages }))
+      setToolResults(extractToolResults(nextMessages))
+      await persistSessionMessages(currentSessionId, nextMessages)
+      await saveToolResults(currentSessionId, extractToolResults(nextMessages))
+      return edited.content
+    },
+    [currentSessionId, messagesBySession, persistSessionMessages]
+  )
+
+  const toggleStarredMessage = React.useCallback(
+    async (messageId: string) => {
+      if (!currentSessionId) return
+      const current = messagesBySession[currentSessionId] ?? []
+      const nextMessages = current.map((message) =>
+        message.id === messageId
+          ? {
+              ...message,
+              metadata: {
+                ...(message.metadata ?? {}),
+                starred: !message.metadata?.starred,
+              },
+            }
+          : message
+      )
+      setMessagesBySession((prev) => ({ ...prev, [currentSessionId]: nextMessages }))
+      const changed = nextMessages.find((message) => message.id === messageId)
+      if (changed) await replaceMessage(currentSessionId, changed)
+      await syncServerSessionMessages(
+        currentSessionId,
+        nextMessages,
+        sessions.find((session) => session.id === currentSessionId)?.title
+      )
+    },
+    [currentSessionId, messagesBySession, sessions, syncServerSessionMessages]
+  )
+
+  const forkSessionFromMessage = React.useCallback(
+    async (messageId: string) => {
+      if (!currentSessionId) return
+      const current = messagesBySession[currentSessionId] ?? []
+      const index = current.findIndex((message) => message.id === messageId)
+      if (index === -1) return
+      const now = new Date().toISOString()
+      const newSessionId = crypto.randomUUID()
+      const forkedMessages = current.slice(0, index + 1).map((message) => ({
+        ...message,
+        id: crypto.randomUUID(),
+        sessionId: newSessionId,
+      }))
+      const sourceTitle = sessions.find((session) => session.id === currentSessionId)?.title
+      const fork: ChatSession = {
+        id: newSessionId,
+        title: `Fork: ${sourceTitle ?? "Conversation"}`,
+        createdAt: now,
+        updatedAt: forkedMessages[forkedMessages.length - 1]?.timestamp ?? now,
+        messages: forkedMessages,
+        metadata: {
+          messageCount: forkedMessages.length,
+          totalTokens: forkedMessages.reduce(
+            (total, message) => total + (message.metadata?.tokens ?? 0),
+            0
+          ),
+        },
+      }
+      await saveSession(fork)
+      await syncServerSessionMessages(newSessionId, forkedMessages, fork.title)
+      setSessions((prev) => [fork, ...prev])
+      setMessagesBySession((prev) => ({ ...prev, [newSessionId]: forkedMessages }))
+      setCurrentSessionId(newSessionId)
+      setToolResults(extractToolResults(forkedMessages))
+      toast.success("Conversation forked")
+    },
+    [currentSessionId, messagesBySession, sessions, syncServerSessionMessages]
+  )
+
+  const appendStatusMessage = React.useCallback(
+    async (content: string) => {
+      if (!currentSessionId) return
+      const message: ChatMessage = {
+        id: crypto.randomUUID(),
+        sessionId: currentSessionId,
+        role: "system",
+        content,
+        timestamp: new Date().toISOString(),
+        metadata: { statusMarker: true },
+      }
+      updateMessages(currentSessionId, (prev) => [...prev, message])
+      await appendMessage(currentSessionId, message)
+      await syncServerSessionMessages(
+        currentSessionId,
+        [...(messagesBySession[currentSessionId] ?? []), message],
+        sessions.find((session) => session.id === currentSessionId)?.title
+      )
+    },
+    [currentSessionId, messagesBySession, sessions, syncServerSessionMessages, updateMessages]
+  )
+
   const sendMessage = React.useCallback(
     async (
       content: string,
@@ -982,6 +1209,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     ) => {
       if (!content.trim()) return
       if (isLoading) return
+      const abortController = new AbortController()
+      abortControllerRef.current = abortController
       const hasLlmConfig = hasProviderCredentials(llmProvider, {
         openRouterModel,
         openRouterApiKey,
@@ -1126,6 +1355,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: abortController.signal,
           body: JSON.stringify({
             sessionId: targetSession,
             message: trimmed,
@@ -1360,6 +1590,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           }
         })
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          logger.info("Chat request aborted")
+          return
+        }
+        if (err instanceof Error && err.message.includes("Generation stopped by user")) {
+          logger.info("Chat generation stopped")
+          return
+        }
         const raw = err instanceof Error ? err.message : "Request failed"
         const parsed = parseLLMError(raw)
         toast.error(parsed.title, {
@@ -1379,6 +1617,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           logger.warn("Failed to persist catch error message to IndexedDB", e)
         })
       } finally {
+        if (abortControllerRef.current === abortController) {
+          abortControllerRef.current = null
+        }
         setIsLoading(false)
         setIsThinking(false)
       }
@@ -1447,6 +1688,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       azureOpenAIApiVersion,
       azureOpenAIDeployment,
       liveModeEnabled,
+      contextBudget,
+      customSystemPrompt,
+      extendedThinking,
       workspaceRoot,
       customWorkflows,
       cloudinaryCloudName,
@@ -1455,6 +1699,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       pendingToolApproval: pendingApprovalRequest,
       resolveToolApproval: resolvePendingToolApproval,
       updateLlmSettings,
+      updateRuntimeSettings,
       updateWorkspaceSettings,
       updateCustomWorkflows,
       updateCloudinarySettings,
@@ -1462,6 +1707,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       joinSession,
       deleteSession,
       sendMessage,
+      stopGeneration,
+      editMessage,
+      toggleStarredMessage,
+      forkSessionFromMessage,
+      appendStatusMessage,
       applyCompaction,
       refreshSessions,
     }),
@@ -1472,14 +1722,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       azureOpenAIDeployment,
       azureOpenAIEndpoint,
       connected,
+      contextBudget,
       createSession,
       currentSessionId,
+      customSystemPrompt,
       cloudinaryApiKey,
       cloudinaryApiSecret,
       cloudinaryCloudName,
       customWorkflows,
       workspaceRoot,
       deleteSession,
+      editMessage,
+      extendedThinking,
+      forkSessionFromMessage,
       isLoading,
       isThinking,
       joinSession,
@@ -1495,16 +1750,20 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       openAIModel,
       openRouterApiKey,
       openRouterModel,
+      appendStatusMessage,
       pendingApprovalRequest,
       liveModeEnabled,
       resolvePendingToolApproval,
       refreshSessions,
       sendMessage,
       sessions,
+      stopGeneration,
+      toggleStarredMessage,
       toolResults,
       updateCloudinarySettings,
       updateCustomWorkflows,
       updateLlmSettings,
+      updateRuntimeSettings,
       updateWorkspaceSettings,
     ]
   )

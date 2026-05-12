@@ -74,8 +74,13 @@ try {
   await page.waitForTimeout(8_000)
 
   const toasts = await getToastTexts(page)
-  const messages = await page.locator("[data-role='chat-message']").allInnerTexts().catch(() => [])
-  const errorBlocks = await page.locator("text=/Invalid JSON payload|GoogleGenerativeAI Error/i").allInnerTexts()
+  const messages = await page
+    .locator("[data-role='chat-message']")
+    .allInnerTexts()
+    .catch(() => [])
+  const errorBlocks = await page
+    .locator("text=/Invalid JSON payload|GoogleGenerativeAI Error/i")
+    .allInnerTexts()
 
   console.log(
     JSON.stringify(

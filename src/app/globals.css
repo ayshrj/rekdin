@@ -578,8 +578,20 @@
 
   .rk-markdown ul,
   .rk-markdown ol {
-    padding-left: 18px;
-    margin-bottom: 8px;
+    padding-inline-start: 1.6rem;
+    margin: 0.5rem 0 0.5rem;
+    list-style-position: outside;
+    overflow: visible;
+  }
+
+  .rk-markdown li {
+    margin-bottom: 0.25rem;
+    padding-inline-start: 0.15rem;
+    overflow: visible;
+  }
+
+  .rk-markdown li::marker {
+    color: var(--muted-foreground);
   }
 
   .rk-markdown li {

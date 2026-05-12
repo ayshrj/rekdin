@@ -14,7 +14,7 @@ import { type ToolResultContentPart } from "./tool-result-renderer"
 
 export function SettingsSummaryRenderer({ part }: { part: ToolResultContentPart }) {
   const result = part.toolResult as Record<string, unknown> | undefined
-  const [tab, setTab] = useState<"providers" | "workspace" | "workflows">("providers")
+  const [tab, setTab] = useState<"providers" | "runtime" | "workspace" | "workflows">("providers")
 
   const providerLabel = result?.selectedProviderLabel
     ? String(result.selectedProviderLabel)
@@ -31,6 +31,10 @@ export function SettingsSummaryRenderer({ part }: { part: ToolResultContentPart 
   const workspaceRoot = result?.workspaceRoot ? String(result.workspaceRoot) : undefined
   const currentSessionId = result?.currentSessionId ? String(result.currentSessionId) : undefined
   const liveModeEnabled = result?.liveModeEnabled === true
+  const runtime =
+    result?.runtime && typeof result.runtime === "object" && !Array.isArray(result.runtime)
+      ? (result.runtime as Record<string, unknown>)
+      : {}
 
   const uploads =
     result?.uploads && typeof result.uploads === "object" && !Array.isArray(result.uploads)
@@ -68,6 +72,9 @@ export function SettingsSummaryRenderer({ part }: { part: ToolResultContentPart 
       <RendererTabBar>
         <RendererTab active={tab === "providers"} onClick={() => setTab("providers")}>
           Providers
+        </RendererTab>
+        <RendererTab active={tab === "runtime"} onClick={() => setTab("runtime")}>
+          Runtime
         </RendererTab>
         <RendererTab active={tab === "workspace"} onClick={() => setTab("workspace")}>
           Workspace
@@ -108,6 +115,36 @@ export function SettingsSummaryRenderer({ part }: { part: ToolResultContentPart 
               )
             })
           )}
+        </div>
+      )}
+
+      {tab === "runtime" && (
+        <div className="rk-scrollbar max-h-[45vh] divide-y overflow-auto">
+          {(
+            [
+              ["context budget", runtime.contextBudget],
+              [
+                "system prompt",
+                runtime.customSystemPromptConfigured === true ? "configured" : "off",
+              ],
+              ["prompt chars", runtime.customSystemPromptChars],
+              [
+                "extended thinking",
+                runtime.extendedThinkingEnabled === true
+                  ? `${String(runtime.extendedThinkingBudgetTokens ?? "")} tokens`
+                  : "off",
+              ],
+            ] as [string, unknown][]
+          ).map(([label, value]) => (
+            <div key={label} className="hover:bg-surface-4 flex items-center gap-2 px-3 py-1.5">
+              <span className="text-muted-foreground w-32 min-w-0 shrink-0 font-mono text-[10px]">
+                {label}
+              </span>
+              <span className="text-foreground/70 min-w-0 flex-1 truncate font-mono text-[11px]">
+                {String(value ?? "not set")}
+              </span>
+            </div>
+          ))}
         </div>
       )}
 

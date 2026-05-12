@@ -41,6 +41,14 @@ const requestSchema = z.object({
   azureOpenAIApiVersion: z.string().optional(),
   azureOpenAIDeployment: z.string().optional(),
   liveModeEnabled: z.boolean().optional(),
+  contextBudget: z.number().int().positive().optional(),
+  customSystemPrompt: z.string().optional(),
+  extendedThinking: z
+    .object({
+      enabled: z.boolean(),
+      budgetTokens: z.number().int().positive(),
+    })
+    .optional(),
   cloudinaryCloudName: z.string().optional(),
   cloudinaryApiKey: z.string().optional(),
   cloudinaryApiSecret: z.string().optional(),

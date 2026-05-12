@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowDownTray, ArrowTopRightOnSquare } from "@/lib/icons"
+import { ArrowDownTray, ArrowTopRightOnSquare, NpmLogoIcon } from "@/lib/icons"
 
 import { type ToolResultContentPart } from "./tool-result-renderer"
 
@@ -45,9 +45,7 @@ export function NpmPackageRenderer({ part }: { part: ToolResultContentPart }) {
       {/* Header */}
       <div className="bg-muted/20 flex items-center gap-2 border-b px-3 py-2">
         {/* npm badge */}
-        <span className="shrink-0 rounded bg-red-500/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-red-500">
-          npm
-        </span>
+        <NpmLogoIcon height={36} width={36} />
         <span className="text-foreground min-w-0 flex-1 truncate font-mono text-sm font-semibold">
           {name}
         </span>

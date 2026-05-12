@@ -43,6 +43,11 @@ export interface ChatMessage {
     errorCode?: number | null
     errorAction?: string | null
     compactionMarker?: boolean
+    statusMarker?: boolean
+    starred?: boolean
+    completionTokens?: number
+    inputTokens?: number
+    estimatedCostUsd?: number
   }
 }
 
@@ -56,6 +61,7 @@ export interface ChatSession {
     totalTokens?: number
     messageCount?: number
     model?: string
+    customSystemPrompt?: string
   }
 }
 

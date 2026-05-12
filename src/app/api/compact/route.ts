@@ -15,6 +15,7 @@ const RequestSchema = z.object({
 function formatTranscript(messages: ChatMessage[]): string {
   return messages
     .filter((m) => !m.metadata?.compactionMarker)
+    .filter((m) => !m.metadata?.starred)
     .map((m) => {
       if (m.role === "user") {
         return `USER: ${m.content}`
@@ -50,6 +51,10 @@ export async function POST(req: NextRequest) {
     }
 
     const transcript = formatTranscript(session.messages)
+    const pinned = session.messages
+      .filter((message) => message.metadata?.starred)
+      .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+      .join("\n\n")
     if (!transcript.trim()) {
       return NextResponse.json({ error: "No messages to summarize" }, { status: 400 })
     }
@@ -60,6 +65,11 @@ export async function POST(req: NextRequest) {
       "Be faithful and complete. Output plain prose, no headers or bullet points.",
     ]
     if (focus) systemParts.push(`Pay special attention to: ${focus}`)
+    if (pinned) {
+      systemParts.push(
+        "Pinned messages were excluded from compaction and remain available separately. Do not summarize them unless needed for continuity."
+      )
+    }
 
     const llm = buildLlmFromSettings(providerSettings)
     const result = await llm.invoke([

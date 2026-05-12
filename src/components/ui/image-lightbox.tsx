@@ -4,6 +4,14 @@ import React, { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 
 import { Image, type ImageProps } from "@/components/ui/image"
+import {
+  LightboxCloseIcon as IcoClose,
+  LightboxDownloadIcon as IcoDownload,
+  LightboxResetIcon as IcoReset,
+  LightboxRotateIcon as IcoRotate,
+  LightboxZoomInIcon as IcoZoomIn,
+  LightboxZoomOutIcon as IcoZoomOut,
+} from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 // ── module-level event bus ────────────────────────────────────────────────────
@@ -84,93 +92,6 @@ function TBtn({
     </button>
   )
 }
-
-// ── Inline SVG icons (lightbox-only) ─────────────────────────────────────────
-
-const IcoZoomIn = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.8}
-    className="h-4 w-4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="11" cy="11" r="8" />
-    <path d="m21 21-4.35-4.35M11 8v6M8 11h6" />
-  </svg>
-)
-const IcoZoomOut = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.8}
-    className="h-4 w-4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="11" cy="11" r="8" />
-    <path d="m21 21-4.35-4.35M8 11h6" />
-  </svg>
-)
-const IcoRotate = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.8}
-    className="h-4 w-4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-    <path d="M21 3v5h-5" />
-  </svg>
-)
-const IcoReset = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.8}
-    className="h-4 w-4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-    <path d="M3 3v5h5" />
-  </svg>
-)
-const IcoDownload = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.8}
-    className="h-4 w-4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="7 10 12 15 17 10" />
-    <line x1="12" y1="15" x2="12" y2="3" />
-  </svg>
-)
-const IcoClose = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.8}
-    className="h-4 w-4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M18 6 6 18M6 6l12 12" />
-  </svg>
-)
 
 // ── LightboxModal ─────────────────────────────────────────────────────────────
 
@@ -360,23 +281,23 @@ function LightboxModal() {
             {Math.round(t.scale * 100)}%
           </span>
           <TBtn onClick={() => zoomBy(-SCALE_BTN)} title="Zoom out (−)">
-            <IcoZoomOut />
+            <IcoZoomOut className="h-4 w-4" />
           </TBtn>
           <TBtn onClick={() => zoomBy(SCALE_BTN)} title="Zoom in (+)">
-            <IcoZoomIn />
+            <IcoZoomIn className="h-4 w-4" />
           </TBtn>
           <TBtn onClick={rotate} title="Rotate 90° (R)">
-            <IcoRotate />
+            <IcoRotate className="h-4 w-4" />
           </TBtn>
           <TBtn onClick={reset} title="Reset (0)" active={!isTransformed}>
-            <IcoReset />
+            <IcoReset className="h-4 w-4" />
           </TBtn>
           <TBtn onClick={download} title="Download">
-            <IcoDownload />
+            <IcoDownload className="h-4 w-4" />
           </TBtn>
           <div className="mx-1 h-4 w-px bg-white/15" />
           <TBtn onClick={close} title="Close (Esc)">
-            <IcoClose />
+            <IcoClose className="h-4 w-4" />
           </TBtn>
         </div>
       </div>

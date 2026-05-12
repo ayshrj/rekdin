@@ -12,6 +12,9 @@ export type SlashCommandId =
   | "clear"
   | "help"
   | "compact"
+  | "status"
+  | "retry"
+  | "model"
 
 export interface SlashCommandDefinition {
   id: SlashCommandId
@@ -94,6 +97,27 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
     label: "Compact",
     usage: "/compact [focus]",
     description: "Summarize conversation history to free up context window space.",
+    handlerType: "client_action",
+  },
+  {
+    id: "status",
+    label: "Status",
+    usage: "/status",
+    description: "Show current session, model, policy, token, compaction, and background status.",
+    handlerType: "client_action",
+  },
+  {
+    id: "retry",
+    label: "Retry",
+    usage: "/retry",
+    description: "Re-send the last user message.",
+    handlerType: "client_action",
+  },
+  {
+    id: "model",
+    label: "Model",
+    usage: "/model <model-id>",
+    description: "Switch the active model for the selected provider.",
     handlerType: "client_action",
   },
 ]

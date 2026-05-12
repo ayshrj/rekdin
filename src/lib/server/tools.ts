@@ -5903,6 +5903,13 @@ export const settingsSummaryTool = tool(
       selectedProviderReady: settingsHaveProviderCredentials(settings),
       selectedModel: getProviderModel(settings.llmProvider, settings) || null,
       liveModeEnabled: settings.liveModeEnabled,
+      runtime: {
+        contextBudget: settings.contextBudget,
+        customSystemPromptConfigured: settings.customSystemPrompt.trim().length > 0,
+        customSystemPromptChars: settings.customSystemPrompt.length,
+        extendedThinkingEnabled: settings.extendedThinking.enabled,
+        extendedThinkingBudgetTokens: settings.extendedThinking.budgetTokens,
+      },
       uploads: {
         cloudinaryConfigured: Boolean(
           settings.cloudinaryCloudName && settings.cloudinaryApiKey && settings.cloudinaryApiSecret

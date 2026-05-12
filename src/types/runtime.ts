@@ -12,6 +12,12 @@ export interface ServerSettings extends ProviderCredentialFields {
   llmProvider: LlmProvider
   customWorkflows: WorkflowPreset[]
   liveModeEnabled: boolean
+  contextBudget: number
+  customSystemPrompt: string
+  extendedThinking: {
+    enabled: boolean
+    budgetTokens: number
+  }
   cloudinaryCloudName: string
   cloudinaryApiKey: string
   cloudinaryApiSecret: string
@@ -19,6 +25,12 @@ export interface ServerSettings extends ProviderCredentialFields {
 
 export interface ProviderSettings extends ProviderCredentialFields {
   provider: LlmProvider
+  contextBudget?: number
+  customSystemPrompt?: string
+  extendedThinking?: {
+    enabled: boolean
+    budgetTokens: number
+  }
 }
 
 export interface ArtifactRef {

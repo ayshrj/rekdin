@@ -170,7 +170,7 @@ export function JsonTreeViewer({
 }) {
   return (
     <div className={cn("min-w-0 p-4", className)}>
-      <div className="from-background to-muted/40 overflow-x-auto rounded-lg border bg-gradient-to-br p-3 shadow-sm">
+      <div className="from-background to-muted/40 overflow-x-auto rounded-lg border bg-linear-to-br p-3 shadow-sm">
         <JsonTreeNode data={json} depth={0} showOnlyKeys={showOnlyKeys} />
       </div>
     </div>

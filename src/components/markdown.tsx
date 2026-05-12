@@ -41,13 +41,24 @@ export function Markdown({ children, className }: { children: string; className?
             ) : null
           },
           ul: ({ className: ulClassName, ...props }) => (
-            <ul className={cn("my-2 list-disc pl-5", ulClassName)} {...props} />
+            <ul
+              className={cn("my-2 list-outside list-disc overflow-visible ps-6", ulClassName)}
+              {...props}
+            />
           ),
+
           ol: ({ className: olClassName, ...props }) => (
-            <ol className={cn("my-2 list-decimal pl-5", olClassName)} {...props} />
+            <ol
+              className={cn("my-2 list-outside list-decimal overflow-visible ps-6", olClassName)}
+              {...props}
+            />
           ),
+
           li: ({ className: liClassName, ...props }) => (
-            <li className={cn("my-1", liClassName)} {...props} />
+            <li
+              className={cn("marker:text-muted-foreground my-1 overflow-visible ps-1", liClassName)}
+              {...props}
+            />
           ),
           blockquote: ({ className: bqClassName, ...props }) => (
             <blockquote

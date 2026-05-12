@@ -49,7 +49,7 @@ function normalizeToolPolicy(value?: string | null): ToolPolicyProfile {
  * Keeps the most recent useful conversation context within the model budget and inserts a system
  * note when older context was compacted away.
  */
-function trimHistory(messages: ChatMessage[]) {
+function trimHistory(messages: ChatMessage[], contextBudget = DEFAULT_CONTEXT_TOKEN_BUDGET) {
   let totalTokens = 0
   const selected: ChatMessage[] = []
 
@@ -69,7 +69,7 @@ function trimHistory(messages: ChatMessage[]) {
       ].join("\n")
     )
     if (selected.length >= MAX_CONTEXT_MESSAGES) break
-    if (selected.length > 0 && totalTokens + messageTokens > DEFAULT_CONTEXT_TOKEN_BUDGET) break
+    if (selected.length > 0 && totalTokens + messageTokens > contextBudget) break
     totalTokens += messageTokens
     selected.push(message)
   }
@@ -144,6 +144,9 @@ type RunChatTurnOptions = {
   requestedToolPolicy?: string | null
   workflowId?: string | null
   responseSchema?: Record<string, unknown> | null
+  contextBudget?: number
+  customSystemPrompt?: string | null
+  abortSignal?: AbortSignal
   onToolStart?: Parameters<typeof runAgent>[0]["onToolStart"]
   onToolResult?: Parameters<typeof runAgent>[0]["onToolResult"]
   onApprovalRequired?: Parameters<typeof runAgent>[0]["onApprovalRequired"]
@@ -177,6 +180,9 @@ export async function runChatTurn({
   requestedToolPolicy,
   workflowId,
   responseSchema,
+  contextBudget,
+  customSystemPrompt,
+  abortSignal,
   onToolStart,
   onToolResult,
   onApprovalRequired,
@@ -190,8 +196,12 @@ export async function runChatTurn({
     toolPolicy,
     workspaceRoot,
     responseSchema,
+    customSystemPrompt,
   })
-  const preparedMessages = withCurrentWorkspaceContext(trimHistory(contextMessages), workspaceRoot)
+  const preparedMessages = withCurrentWorkspaceContext(
+    trimHistory(contextMessages, contextBudget),
+    workspaceRoot
+  )
   const allowedToolNames = resolveWorkflowAllowedToolNames(mode, toolPolicy, workflowId)
   let retryPrompt = baseSystemPrompt
   let agentResult: AgentRunResult | null = null
@@ -210,6 +220,7 @@ export async function runChatTurn({
       }),
       allowedToolNames,
       toolPolicy,
+      abortSignal,
       onToolStart,
       onToolResult,
       onApprovalRequired,

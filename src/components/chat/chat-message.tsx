@@ -1,10 +1,19 @@
 "use client"
 
+import * as React from "react"
 import { useState } from "react"
 
 import { Markdown } from "@/components/markdown"
 import { toolLabels } from "@/components/tools/tool-labels"
-import { Check, ClipboardDocumentList as Copy, RekdinIcon, User } from "@/lib/icons"
+import {
+  ArrowRight,
+  Check,
+  ClipboardDocumentList as Copy,
+  PencilSquare,
+  Plus,
+  RekdinIcon,
+  User,
+} from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { getWorkflowPreset, parseStructuredWorkflowContent } from "@/lib/workflows"
 import { ChatMessage as ChatMessageType } from "@/types/chat"
@@ -12,6 +21,11 @@ import { ChatMessage as ChatMessageType } from "@/types/chat"
 interface ChatMessageProps {
   message: ChatMessageType
   showHeader?: boolean
+  searchQuery?: string
+  searchActive?: boolean
+  onEdit?: (messageId: string) => void
+  onToggleStar?: (messageId: string) => void
+  onFork?: (messageId: string) => void
 }
 
 function looksLikeJsonDraft(content: string) {
@@ -62,11 +76,41 @@ function CompactionBanner({ summary }: { summary: string }) {
   )
 }
 
+function highlightText(text: string, query?: string) {
+  const q = query?.trim()
+  if (!q) return text
+  const lower = text.toLowerCase()
+  const needle = q.toLowerCase()
+  const parts: React.ReactNode[] = []
+  let cursor = 0
+  let index = lower.indexOf(needle)
+  while (index !== -1) {
+    if (index > cursor) parts.push(text.slice(cursor, index))
+    parts.push(
+      <mark key={`${index}-${needle}`} className="bg-status-warning/35 rounded-sm px-0.5">
+        {text.slice(index, index + needle.length)}
+      </mark>
+    )
+    cursor = index + needle.length
+    index = lower.indexOf(needle, cursor)
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor))
+  return parts
+}
+
 /**
  * Renders a persisted chat message, including workflow-aware structured output blocks for
  * selected assistant responses.
  */
-export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  showHeader = true,
+  searchQuery,
+  searchActive,
+  onEdit,
+  onToggleStar,
+  onFork,
+}: ChatMessageProps) {
   const [copied, setCopied] = useState(false)
   const isUser = message.role === "user"
   const workflowId = message.metadata?.workflowId
@@ -307,9 +351,28 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
     return <CompactionBanner summary={message.content} />
   }
 
+  if (message.metadata?.statusMarker) {
+    return (
+      <div className="border-tool-data/30 bg-surface-3/70 my-2 rounded-lg border px-3 py-2">
+        <p className="text-tool-data mb-1 font-mono text-[10px] font-semibold tracking-wider uppercase">
+          Status
+        </p>
+        <Markdown className="rk-markdown max-w-none text-xs wrap-anywhere">
+          {message.content}
+        </Markdown>
+      </div>
+    )
+  }
+
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className={cn("rk-msg-root group", isUser && "items-end")}>
+    <div
+      className={cn(
+        "rk-msg-root group",
+        isUser && "items-end",
+        searchActive && "ring-status-warning/40 rounded-lg ring-1"
+      )}
+    >
       {/* Copy button — AI messages only */}
       {!isUser && (
         <button
@@ -320,6 +383,39 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       )}
+
+      <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        {isUser && onEdit ? (
+          <button
+            type="button"
+            onClick={() => onEdit(message.id)}
+            className="rk-copy-btn"
+            aria-label="Edit and rerun message"
+          >
+            <PencilSquare className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+        {onToggleStar ? (
+          <button
+            type="button"
+            onClick={() => onToggleStar(message.id)}
+            className={cn("rk-copy-btn", message.metadata?.starred && "rk-copy-btn--copied")}
+            aria-label={message.metadata?.starred ? "Unpin message" : "Pin message"}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+        {onFork ? (
+          <button
+            type="button"
+            onClick={() => onFork(message.id)}
+            className="rk-copy-btn"
+            aria-label="Fork conversation from here"
+          >
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
 
       {/* Message header */}
       {showHeader && (
@@ -354,6 +450,21 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
           {!isUser && !workflowId && message.metadata?.agentType && (
             <span className="rk-agent-badge">{message.metadata.agentType}</span>
           )}
+          {!isUser && message.metadata?.tokens ? (
+            <span
+              className="text-muted-foreground font-mono text-[10px] opacity-0 transition-opacity group-hover:opacity-100"
+              title={
+                message.metadata.estimatedCostUsd
+                  ? `Estimated cost $${message.metadata.estimatedCostUsd.toFixed(4)}`
+                  : undefined
+              }
+            >
+              ~{message.metadata.tokens.toLocaleString()} tok
+              {message.metadata.estimatedCostUsd
+                ? ` · $${message.metadata.estimatedCostUsd.toFixed(4)}`
+                : ""}
+            </span>
+          ) : null}
         </div>
       )}
 
@@ -362,7 +473,7 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
         <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden">
           {isUser ? (
             <p className="text-left text-sm leading-relaxed wrap-anywhere whitespace-pre-wrap">
-              {message.content}
+              {highlightText(message.content, searchQuery)}
             </p>
           ) : (
             (renderStructuredDraft() ??

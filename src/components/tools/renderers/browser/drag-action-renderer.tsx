@@ -4,7 +4,7 @@ import { motion } from "motion/react"
 import React, { useEffect, useMemo, useRef, useState } from "react"
 
 import { ClickableImage } from "@/components/ui/image-lightbox"
-import { ArrowRight, Check, Move, XMark } from "@/lib/icons"
+import { ArrowRight, BrowserDragOverlayIcon, Check, Move, XMark } from "@/lib/icons"
 
 import { BrowserShell } from "../browser-shell"
 import { ToolResultContentPart } from "../tool-result-renderer"
@@ -68,49 +68,25 @@ export const DragActionRenderer: React.FC<DragActionRendererProps> = ({ part }) 
 
             {coords && imageSize ? (
               <div className="pointer-events-none absolute inset-0">
-                <svg
+                <BrowserDragOverlayIcon
                   className="h-full w-full"
-                  viewBox={`0 0 ${imageSize.width} ${imageSize.height}`}
-                  preserveAspectRatio="none"
-                >
-                  <defs>
-                    <marker
-                      id="arrow"
-                      markerWidth="12"
-                      markerHeight="12"
-                      refX="10"
-                      refY="6"
-                      orient="auto"
-                    >
-                      <path d="M0,0 L12,6 L0,12 z" fill="var(--color-tool-action)" />
-                    </marker>
-                  </defs>
-                  <line
-                    x1={coords.srcX}
-                    y1={coords.srcY}
-                    x2={coords.tgtX}
-                    y2={coords.tgtY}
-                    stroke="var(--color-tool-action)"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    markerEnd="url(#arrow)"
-                    opacity="0.8"
-                  />
-                  <circle
-                    cx={coords.srcX}
-                    cy={coords.srcY}
-                    r="8"
-                    fill="var(--color-tool-action)"
-                    opacity="0.9"
-                  />
-                  <circle
-                    cx={coords.tgtX}
-                    cy={coords.tgtY}
-                    r="8"
-                    fill="var(--color-tool-action)"
-                    opacity="0.6"
-                  />
-                </svg>
+                  width={imageSize.width}
+                  height={imageSize.height}
+                  sourceX={coords.srcX}
+                  sourceY={coords.srcY}
+                  targetX={coords.tgtX}
+                  targetY={coords.tgtY}
+                  markerId="browser-drag-action-arrow"
+                  color="var(--color-tool-action)"
+                  strokeWidth={4}
+                  sourceRadius={8}
+                  targetRadius={8}
+                  markerWidth={12}
+                  markerHeight={12}
+                  markerRefX={10}
+                  markerRefY={6}
+                  markerPath="M0,0 L12,6 L0,12 z"
+                />
               </div>
             ) : null}
           </div>

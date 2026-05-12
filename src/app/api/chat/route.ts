@@ -2,6 +2,7 @@ import crypto from "crypto"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
+import { estimateLlmCostUsd } from "@/lib/llm-pricing"
 import { getProviderModel, normalizeLlmProvider } from "@/lib/llm-providers"
 import { getReplayStore } from "@/lib/server/replay-store"
 import { runChatTurn } from "@/lib/server/runtime/agent-runtime"
@@ -120,6 +121,9 @@ export async function POST(req: Request) {
         requestedToolPolicy: toolPolicy,
         workflowId,
         responseSchema: parsed.data.responseSchema ?? null,
+        contextBudget: settings.contextBudget,
+        customSystemPrompt: settings.customSystemPrompt,
+        abortSignal: req.signal,
         onWarning: async (warning) => {
           warnings.push(warning)
           await replayStore.record(sessionId, "assistant_message", { warning })
@@ -176,6 +180,15 @@ export async function POST(req: Request) {
         toolCalls: agentResult.toolCalls,
         metadata: {
           tokens: agentResult.usageTokens,
+          inputTokens: agentResult.tokenUsageEstimate.totalPromptTokens,
+          completionTokens: agentResult.tokenUsageEstimate.completionTokens,
+          estimatedCostUsd:
+            estimateLlmCostUsd({
+              provider: providerSettings.provider,
+              model: agentResult.model,
+              inputTokens: agentResult.tokenUsageEstimate.totalPromptTokens,
+              outputTokens: agentResult.tokenUsageEstimate.completionTokens,
+            }) ?? undefined,
           agentType: agentResult.mode,
           toolPolicy: agentResult.toolPolicy,
           model: agentResult.model,

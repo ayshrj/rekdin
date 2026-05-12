@@ -75,6 +75,9 @@ type SettingsExport = {
   azureOpenAIApiVersion: string
   azureOpenAIDeployment: string
   liveModeEnabled: boolean
+  contextBudget: number
+  customSystemPrompt: string
+  extendedThinking: { enabled: boolean; budgetTokens: number }
   workspaceRoot: string
   customWorkflows?: WorkflowPreset[]
   cloudinaryCloudName: string
@@ -126,12 +129,16 @@ export function OpenRouterSettings({
     azureOpenAIApiVersion,
     azureOpenAIDeployment,
     liveModeEnabled,
+    contextBudget,
+    customSystemPrompt,
+    extendedThinking,
     workspaceRoot,
     customWorkflows,
     cloudinaryCloudName,
     cloudinaryApiKey,
     cloudinaryApiSecret,
     updateLlmSettings,
+    updateRuntimeSettings,
     updateWorkspaceSettings,
     updateCustomWorkflows,
     updateCloudinarySettings,
@@ -164,6 +171,12 @@ export function OpenRouterSettings({
   const [azureOpenAIApiVersionDraft, setAzureOpenAIApiVersionDraft] = React.useState("")
   const [azureOpenAIDeploymentDraft, setAzureOpenAIDeploymentDraft] = React.useState("")
   const [liveModeDraft, setLiveModeDraft] = React.useState(true)
+  const [contextBudgetDraft, setContextBudgetDraft] = React.useState(12_000)
+  const [customSystemPromptDraft, setCustomSystemPromptDraft] = React.useState("")
+  const [extendedThinkingDraft, setExtendedThinkingDraft] = React.useState({
+    enabled: false,
+    budgetTokens: 4_000,
+  })
   const [workspaceRootDraft, setWorkspaceRootDraft] = React.useState("")
   const [cloudNameDraft, setCloudNameDraft] = React.useState("")
   const [cloudKeyDraft, setCloudKeyDraft] = React.useState("")
@@ -172,7 +185,9 @@ export function OpenRouterSettings({
   const [isLoadingModels, setIsLoadingModels] = React.useState(false)
   const [openAIModels, setOpenAIModels] = React.useState<OpenAIModel[]>([])
   const [isLoadingOpenAIModels, setIsLoadingOpenAIModels] = React.useState(false)
-  const [settingsTab, setSettingsTab] = React.useState<"model" | "workflows" | "uploads">("model")
+  const [settingsTab, setSettingsTab] = React.useState<
+    "model" | "runtime" | "workflows" | "uploads"
+  >("model")
   const [customWorkflowsDraft, setCustomWorkflowsDraft] = React.useState<WorkflowPreset[]>([])
   const [workflowTitleDraft, setWorkflowTitleDraft] = React.useState("")
   const [workflowDescriptionDraft, setWorkflowDescriptionDraft] = React.useState("")
@@ -203,6 +218,9 @@ export function OpenRouterSettings({
     setAzureOpenAIApiVersionDraft(azureOpenAIApiVersion)
     setAzureOpenAIDeploymentDraft(azureOpenAIDeployment)
     setLiveModeDraft(liveModeEnabled)
+    setContextBudgetDraft(contextBudget)
+    setCustomSystemPromptDraft(customSystemPrompt)
+    setExtendedThinkingDraft(extendedThinking)
     setWorkspaceRootDraft(workspaceRoot)
     setCustomWorkflowsDraft(customWorkflows)
     setCloudNameDraft(cloudinaryCloudName)
@@ -226,6 +244,9 @@ export function OpenRouterSettings({
     azureOpenAIApiVersion,
     azureOpenAIDeployment,
     liveModeEnabled,
+    contextBudget,
+    customSystemPrompt,
+    extendedThinking,
     workspaceRoot,
     customWorkflows,
     cloudinaryCloudName,
@@ -241,7 +262,12 @@ export function OpenRouterSettings({
         return
       }
       setOpen(true)
-      if (detail?.tab === "model" || detail?.tab === "workflows" || detail?.tab === "uploads") {
+      if (
+        detail?.tab === "model" ||
+        detail?.tab === "runtime" ||
+        detail?.tab === "workflows" ||
+        detail?.tab === "uploads"
+      ) {
         setSettingsTab(detail.tab)
       }
     }
@@ -329,6 +355,11 @@ export function OpenRouterSettings({
       apiKey: cloudKeyDraft,
       apiSecret: cloudSecretDraft,
     })
+    updateRuntimeSettings({
+      contextBudget: contextBudgetDraft,
+      customSystemPrompt: customSystemPromptDraft,
+      extendedThinking: extendedThinkingDraft,
+    })
     updateWorkspaceSettings({
       workspaceRoot: workspaceRootDraft,
     })
@@ -357,7 +388,11 @@ export function OpenRouterSettings({
     cloudNameDraft,
     cloudKeyDraft,
     cloudSecretDraft,
+    contextBudgetDraft,
+    customSystemPromptDraft,
+    extendedThinkingDraft,
     updateLlmSettings,
+    updateRuntimeSettings,
     updateWorkspaceSettings,
     updateCustomWorkflows,
     updateCloudinarySettings,
@@ -380,6 +415,9 @@ export function OpenRouterSettings({
     setAzureOpenAIApiVersionDraft("2024-02-15-preview")
     setAzureOpenAIDeploymentDraft("")
     setLiveModeDraft(true)
+    setContextBudgetDraft(12_000)
+    setCustomSystemPromptDraft("")
+    setExtendedThinkingDraft({ enabled: false, budgetTokens: 4_000 })
     setWorkspaceRootDraft("")
     setCustomWorkflowsDraft([])
     setCloudNameDraft("")
@@ -403,11 +441,22 @@ export function OpenRouterSettings({
       azureOpenAIDeployment: "",
       liveModeEnabled: true,
     })
+    updateRuntimeSettings({
+      contextBudget: 12_000,
+      customSystemPrompt: "",
+      extendedThinking: { enabled: false, budgetTokens: 4_000 },
+    })
     updateCloudinarySettings({ cloudName: "", apiKey: "", apiSecret: "" })
     updateWorkspaceSettings({ workspaceRoot: "" })
     updateCustomWorkflows([])
     toast.success("Cleared saved settings")
-  }, [updateCloudinarySettings, updateCustomWorkflows, updateLlmSettings, updateWorkspaceSettings])
+  }, [
+    updateCloudinarySettings,
+    updateCustomWorkflows,
+    updateLlmSettings,
+    updateRuntimeSettings,
+    updateWorkspaceSettings,
+  ])
 
   const exportSettings = React.useCallback(() => {
     const settings: SettingsExport = {
@@ -427,6 +476,9 @@ export function OpenRouterSettings({
       azureOpenAIApiVersion: azureOpenAIApiVersionDraft,
       azureOpenAIDeployment: azureOpenAIDeploymentDraft,
       liveModeEnabled: liveModeDraft,
+      contextBudget: contextBudgetDraft,
+      customSystemPrompt: customSystemPromptDraft,
+      extendedThinking: extendedThinkingDraft,
       workspaceRoot: workspaceRootDraft,
       customWorkflows: customWorkflowsDraft,
       cloudinaryCloudName: cloudNameDraft,
@@ -462,6 +514,9 @@ export function OpenRouterSettings({
     azureOpenAIApiVersionDraft,
     azureOpenAIDeploymentDraft,
     liveModeDraft,
+    contextBudgetDraft,
+    customSystemPromptDraft,
+    extendedThinkingDraft,
     workspaceRootDraft,
     customWorkflowsDraft,
     cloudNameDraft,
@@ -495,6 +550,11 @@ export function OpenRouterSettings({
         setAzureOpenAIApiVersionDraft(settings.azureOpenAIApiVersion || "")
         setAzureOpenAIDeploymentDraft(settings.azureOpenAIDeployment || "")
         setLiveModeDraft(settings.liveModeEnabled ?? true)
+        setContextBudgetDraft(settings.contextBudget || 12_000)
+        setCustomSystemPromptDraft(settings.customSystemPrompt || "")
+        setExtendedThinkingDraft(
+          settings.extendedThinking ?? { enabled: false, budgetTokens: 4_000 }
+        )
         setWorkspaceRootDraft(settings.workspaceRoot || "")
         setCustomWorkflowsDraft(settings.customWorkflows ?? [])
         setCloudNameDraft(settings.cloudinaryCloudName || "")
@@ -673,7 +733,7 @@ export function OpenRouterSettings({
 
         {/* Tab bar */}
         <div className="bg-surface-2 border-border sticky top-0 z-10 flex shrink-0 border-b px-6">
-          {(["model", "workflows", "uploads"] as const).map((tab) => (
+          {(["model", "runtime", "workflows", "uploads"] as const).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -685,7 +745,13 @@ export function OpenRouterSettings({
                   : "text-muted-foreground hover:text-foreground border-transparent"
               )}
             >
-              {tab === "model" ? "Model" : tab === "workflows" ? "Workflows" : "Uploads"}
+              {tab === "model"
+                ? "Model"
+                : tab === "runtime"
+                  ? "Runtime"
+                  : tab === "workflows"
+                    ? "Workflows"
+                    : "Uploads"}
             </button>
           ))}
         </div>
@@ -1031,6 +1097,72 @@ export function OpenRouterSettings({
                 </div>
               </>
             )}
+          </div>
+        ) : settingsTab === "runtime" ? (
+          <div className="min-w-0 space-y-4 px-6 py-5">
+            <div className="space-y-1">
+              <div className="text-sm font-semibold">Runtime behavior</div>
+              <p className="text-muted-foreground text-xs">
+                Controls that affect how future turns are framed and trimmed.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="context-budget">Context budget</Label>
+              <Input
+                id="context-budget"
+                type="number"
+                min={4000}
+                max={200000}
+                step={1000}
+                value={contextBudgetDraft}
+                onChange={(event) => setContextBudgetDraft(Number(event.target.value) || 12_000)}
+              />
+            </div>
+
+            <div className="bg-surface-3 border-border flex items-center justify-between gap-6 rounded-lg border px-3 py-2">
+              <div className="min-w-0">
+                <Label className="text-sm">Claude extended thinking</Label>
+                <p className="text-muted-foreground text-xs">
+                  Used only when Claude is the active provider.
+                </p>
+              </div>
+              <Switch
+                checked={extendedThinkingDraft.enabled}
+                onCheckedChange={(enabled) =>
+                  setExtendedThinkingDraft((prev) => ({ ...prev, enabled }))
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="thinking-budget">Thinking budget tokens</Label>
+              <Input
+                id="thinking-budget"
+                type="number"
+                min={1000}
+                max={10000}
+                step={1000}
+                value={extendedThinkingDraft.budgetTokens}
+                onChange={(event) =>
+                  setExtendedThinkingDraft((prev) => ({
+                    ...prev,
+                    budgetTokens: Number(event.target.value) || 4_000,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="custom-system-prompt">Custom system prompt</Label>
+              <Textarea
+                id="custom-system-prompt"
+                className="min-h-36 font-mono text-xs"
+                value={customSystemPromptDraft}
+                onChange={(event) => setCustomSystemPromptDraft(event.target.value)}
+                placeholder="Additional persistent instructions prepended to Rekdin's system prompt."
+              />
+            </div>
           </div>
         ) : settingsTab === "workflows" ? (
           <div className="min-w-0 space-y-4 px-6 py-5">
