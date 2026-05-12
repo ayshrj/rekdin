@@ -19,12 +19,28 @@ import TurndownService from "turndown"
 import { pathToFileURL } from "url"
 import { z } from "zod"
 
-import { ArtifactRef } from "@/types/runtime"
+import {
+  getProviderApiKey,
+  getProviderLabel,
+  getProviderModel,
+  hasProviderCredentials as hasLlmProviderCredentials,
+} from "@/lib/llm-providers"
+import { getAllWorkflowPresets } from "@/lib/workflows"
+import { ChatMessage, ReplayEvent, ToolCall } from "@/types/chat"
+import { ArtifactRef, BackgroundJob, ServerSettings, TurnTrace } from "@/types/runtime"
 
 import { storeArtifact } from "./artifact-store"
+import { getBackgroundJobStore } from "./background-job-store"
 import { getBrowserSessionManager } from "./browser-session-manager"
+import { getReplayStore } from "./replay-store"
+import { getSessionStore } from "./session-store"
+import {
+  getSettingsStore,
+  hasProviderCredentials as settingsHaveProviderCredentials,
+} from "./settings-store"
 import { estimateTokens } from "./token-budget"
 import { getToolExecutionContext } from "./tool-execution-context"
+import { getTraceStore } from "./trace-store"
 import { searchPublicWeb } from "./web-search"
 import {
   assertWorkspacePathAllowed,
@@ -267,6 +283,204 @@ async function centerOfSelector(page: Page, selector: string) {
 function truncateString(value: string, max = 4000) {
   if (value.length <= max) return value
   return `${value.slice(0, max)}\n\n...(truncated, ${value.length} chars total)`
+}
+
+function boundedLimit(value: unknown, fallback: number, max: number) {
+  const parsed = typeof value === "number" ? Math.floor(value) : Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback
+  return Math.min(parsed, max)
+}
+
+function previewString(value: unknown, max = 300) {
+  const text = typeof value === "string" ? value : value == null ? "" : String(value)
+  const normalized = text.replace(/\s+/g, " ").trim()
+  if (normalized.length <= max) return normalized
+  return `${normalized.slice(0, max)}...`
+}
+
+function hashUnknown(value: unknown) {
+  let text: string
+  try {
+    text = typeof value === "string" ? value : JSON.stringify(value)
+  } catch {
+    text = String(value)
+  }
+  return crypto
+    .createHash("sha256")
+    .update(text ?? "")
+    .digest("hex")
+    .slice(0, 16)
+}
+
+function getMessageToolCalls(message: ChatMessage) {
+  return Array.isArray(message.toolCalls) ? message.toolCalls : []
+}
+
+function compactToolCall(call: ToolCall) {
+  return {
+    id: call.id,
+    name: call.name,
+    status: call.status,
+    timestamp: call.timestamp,
+    duration: call.duration,
+    argumentKeys: Object.keys(call.arguments ?? {}),
+    resultType:
+      call.result && typeof call.result === "object" && typeof call.result.type === "string"
+        ? call.result.type
+        : undefined,
+    error: call.error ? previewString(call.error, 240) : undefined,
+  }
+}
+
+function compactMessage(message: ChatMessage) {
+  const toolCalls = getMessageToolCalls(message)
+  return {
+    id: message.id,
+    role: message.role,
+    timestamp: message.timestamp,
+    contentPreview: previewString(message.content, 500),
+    contentChars: message.content.length,
+    attachmentsCount: message.attachments?.length ?? 0,
+    toolCallCount: toolCalls.length,
+    toolCalls: toolCalls.slice(0, 12).map(compactToolCall),
+    omittedToolCalls: Math.max(toolCalls.length - 12, 0),
+    metadata: {
+      tokens: message.metadata?.tokens,
+      agentType: message.metadata?.agentType,
+      model: message.metadata?.model,
+      toolPolicy: message.metadata?.toolPolicy,
+      workflowId: message.metadata?.workflowId,
+      backgroundJobId: message.metadata?.backgroundJobId,
+      errorCode: message.metadata?.errorCode,
+    },
+  }
+}
+
+function replayToolCall(event: ReplayEvent) {
+  const data = event.data ?? {}
+  const toolCall = data.toolCall
+  return toolCall && typeof toolCall === "object" ? (toolCall as Record<string, unknown>) : null
+}
+
+function replayEventText(event: ReplayEvent) {
+  try {
+    return JSON.stringify(event)
+  } catch {
+    return `${event.type} ${event.id}`
+  }
+}
+
+function compactReplayEvent(event: ReplayEvent) {
+  const toolCall = replayToolCall(event)
+  return {
+    id: event.id,
+    type: event.type,
+    timestamp: event.timestamp,
+    toolName: typeof toolCall?.name === "string" ? toolCall.name : undefined,
+    status: typeof toolCall?.status === "string" ? toolCall.status : undefined,
+    duration: typeof toolCall?.duration === "number" ? toolCall.duration : undefined,
+    dataPreview: previewString(replayEventText(event), 700),
+    dataHash: hashUnknown(event.data),
+  }
+}
+
+function compactTrace(trace: TurnTrace) {
+  return {
+    id: trace.id,
+    startedAt: trace.startedAt,
+    completedAt: trace.completedAt,
+    mode: trace.mode,
+    toolPolicy: trace.toolPolicy,
+    provider: trace.provider,
+    model: trace.model,
+    workflowId: trace.workflowId,
+    success: trace.success,
+    toolCount: trace.toolCount,
+    totalToolDurationMs: trace.totalToolDurationMs,
+    retryCount: trace.retryCount,
+    responseSchemaApplied: trace.responseSchemaApplied,
+    warnings: trace.warnings.slice(0, 8).map((warning) => previewString(warning, 240)),
+    omittedWarnings: Math.max(trace.warnings.length - 8, 0),
+    error: trace.error ? previewString(trace.error, 300) : undefined,
+    tokenUsageEstimate: trace.tokenUsageEstimate,
+  }
+}
+
+function aggregateTokenUsage(traces: TurnTrace[]) {
+  return traces.reduce(
+    (total, trace) => {
+      const usage = trace.tokenUsageEstimate
+      if (!usage) return total
+      total.systemPromptTokens += usage.systemPromptTokens
+      total.historyTokens += usage.historyTokens
+      total.toolSchemaTokens += usage.toolSchemaTokens
+      total.toolResultTokens += usage.toolResultTokens
+      total.originalToolResultTokens += usage.originalToolResultTokens
+      total.savedToolResultTokens += usage.savedToolResultTokens
+      total.completionTokens += usage.completionTokens
+      total.totalPromptTokens += usage.totalPromptTokens
+      total.totalTokens += usage.totalTokens
+      total.tracesWithUsage += 1
+      return total
+    },
+    {
+      tracesWithUsage: 0,
+      systemPromptTokens: 0,
+      historyTokens: 0,
+      toolSchemaTokens: 0,
+      toolResultTokens: 0,
+      originalToolResultTokens: 0,
+      savedToolResultTokens: 0,
+      completionTokens: 0,
+      totalPromptTokens: 0,
+      totalTokens: 0,
+    }
+  )
+}
+
+function compactBackgroundJob(job: BackgroundJob) {
+  return {
+    id: job.id,
+    sessionId: job.sessionId,
+    status: job.status,
+    mode: job.mode,
+    toolPolicy: job.toolPolicy,
+    workflowId: job.workflowId,
+    createdAt: job.createdAt,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    resultMessageId: job.resultMessageId,
+    promptPreview: previewString(job.prompt, 360),
+    promptChars: job.prompt.length,
+    responseSchemaApplied: Boolean(job.responseSchema),
+    errorPreview: job.error ? previewString(job.error, 360) : undefined,
+  }
+}
+
+function configuredProviderSummary(settings: ServerSettings) {
+  const providers = ["openrouter", "openai", "gemini", "claude", "grok", "azure_openai"] as const
+  return providers.map((provider) => ({
+    provider,
+    label: getProviderLabel(provider),
+    selected: settings.llmProvider === provider,
+    configured: hasLlmProviderCredentials(provider, settings),
+    hasApiKey: Boolean(getProviderApiKey(provider, settings)),
+    modelConfigured: Boolean(getProviderModel(provider, settings)),
+    model: getProviderModel(provider, settings) || undefined,
+    endpointConfigured:
+      provider === "azure_openai" ? Boolean(settings.azureOpenAIEndpoint) : undefined,
+  }))
+}
+
+function countBy<T extends string>(values: T[]) {
+  return values.reduce<Record<string, number>>((counts, value) => {
+    counts[value] = (counts[value] ?? 0) + 1
+    return counts
+  }, {})
+}
+
+function lastDefined<T>(values: T[], predicate: (value: T) => boolean) {
+  return [...values].reverse().find(predicate)
 }
 
 function assertNoBlockedDirectoryReference(value: string) {
@@ -5328,6 +5542,401 @@ export const gitApplyPatchTool = tool(
   }
 )
 
+export const sessionListTool = tool(
+  async ({ limit }: { limit?: number }) => {
+    const limitValue = boundedLimit(limit, 20, 100)
+    const sessions = await getSessionStore().listSessions()
+    const selected = sessions.slice(0, limitValue)
+    return {
+      type: "session_list",
+      totalSessions: sessions.length,
+      sessions: selected.map((session) => {
+        const messages = session.messages ?? []
+        const toolCalls = messages.flatMap(getMessageToolCalls)
+        const lastUser = lastDefined(messages, (message) => message.role === "user")
+        const lastAssistant = lastDefined(messages, (message) => message.role === "assistant")
+        const metadataMessage = lastDefined(messages, (message) =>
+          Boolean(message.metadata?.model || message.metadata?.toolPolicy)
+        )
+        return {
+          id: session.id,
+          title: session.title,
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+          messageCount: session.metadata?.messageCount ?? messages.length,
+          totalTokens: session.metadata?.totalTokens ?? 0,
+          model: metadataMessage?.metadata?.model ?? session.metadata?.model,
+          agentType: metadataMessage?.metadata?.agentType,
+          toolPolicy: metadataMessage?.metadata?.toolPolicy,
+          workflowId: metadataMessage?.metadata?.workflowId,
+          lastUserPromptPreview: lastUser ? previewString(lastUser.content, 360) : "",
+          finalAnswerPreview: lastAssistant ? previewString(lastAssistant.content, 360) : "",
+          toolCallCount: toolCalls.length,
+          failedToolCallCount: toolCalls.filter((call) => call.status === "error").length,
+        }
+      }),
+      omittedSessions: Math.max(sessions.length - selected.length, 0),
+    }
+  },
+  {
+    name: "session_list",
+    description:
+      "List recent Rekdin chat sessions with compact metadata, prompt previews, token totals, and tool-call counts.",
+    schema: z.object({
+      limit: z.number().int().positive().max(100).optional(),
+    }),
+  }
+)
+
+export const sessionInspectTool = tool(
+  async ({ sessionId, messageLimit }: { sessionId: string; messageLimit?: number }) => {
+    const limitValue = boundedLimit(messageLimit, 20, 100)
+    const session = await getSessionStore().getSession(sessionId)
+    if (!session) {
+      return {
+        type: "session_inspect",
+        sessionId,
+        found: false,
+        error: "Session not found.",
+      }
+    }
+
+    const messages = session.messages ?? []
+    const selectedMessages = messages.slice(-limitValue)
+    const toolCalls = messages.flatMap(getMessageToolCalls)
+    const finalAssistant = lastDefined(messages, (message) => message.role === "assistant")
+    return {
+      type: "session_inspect",
+      sessionId,
+      found: true,
+      title: session.title,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+      messageCount: messages.length,
+      returnedMessageCount: selectedMessages.length,
+      omittedMessages: Math.max(messages.length - selectedMessages.length, 0),
+      totalTokens: session.metadata?.totalTokens ?? 0,
+      model: session.metadata?.model,
+      attachmentCount: messages.reduce(
+        (total, message) => total + (message.attachments?.length ?? 0),
+        0
+      ),
+      toolCallCount: toolCalls.length,
+      toolCallStatusCounts: countBy(toolCalls.map((call) => call.status)),
+      toolCallNameCounts: countBy(toolCalls.map((call) => call.name)),
+      finalAnswerPreview: finalAssistant ? previewString(finalAssistant.content, 700) : "",
+      messages: selectedMessages.map(compactMessage),
+    }
+  },
+  {
+    name: "session_inspect",
+    description:
+      "Inspect one Rekdin session with compact message previews, metadata, attachments, tool-call counts, and final-answer preview.",
+    schema: z.object({
+      sessionId: z.string().min(1),
+      messageLimit: z.number().int().positive().max(100).optional(),
+    }),
+  }
+)
+
+export const replaySummaryTool = tool(
+  async ({ sessionId }: { sessionId: string }) => {
+    const replay = await getReplayStore().getReplay(sessionId)
+    if (!replay) {
+      return {
+        type: "replay_summary",
+        sessionId,
+        found: false,
+        error: "Replay not found.",
+      }
+    }
+
+    const toolTimeline = replay.events
+      .filter((event) => event.type === "tool_result")
+      .map((event) => compactReplayEvent(event))
+    const warnings = replay.events
+      .filter((event) => {
+        const data = event.data ?? {}
+        return typeof data.warning === "string" || typeof data.error === "string"
+      })
+      .slice(0, 20)
+      .map(compactReplayEvent)
+    return {
+      type: "replay_summary",
+      sessionId,
+      found: true,
+      startTime: replay.startTime,
+      endTime: replay.endTime,
+      durationMs: replay.endTime - replay.startTime,
+      eventCount: replay.events.length,
+      eventTypeCounts: countBy(replay.events.map((event) => event.type)),
+      metadata: replay.metadata,
+      toolTimeline: toolTimeline.slice(0, 60),
+      omittedToolTimeline: Math.max(toolTimeline.length - 60, 0),
+      failedTools: toolTimeline.filter((event) => event.status === "error").slice(0, 20),
+      warnings,
+      slowestSteps: [...toolTimeline]
+        .filter((event) => typeof event.duration === "number")
+        .sort((a, b) => (b.duration ?? 0) - (a.duration ?? 0))
+        .slice(0, 10),
+    }
+  },
+  {
+    name: "replay_summary",
+    description:
+      "Summarize one Rekdin replay into event counts, duration, tool timeline, failed tools, warnings, and slowest steps.",
+    schema: z.object({
+      sessionId: z.string().min(1),
+    }),
+  }
+)
+
+export const replaySearchTool = tool(
+  async ({
+    sessionId,
+    query,
+    eventType,
+    toolName,
+    status,
+    limit,
+  }: {
+    sessionId: string
+    query?: string
+    eventType?: string
+    toolName?: string
+    status?: string
+    limit?: number
+  }) => {
+    const replay = await getReplayStore().getReplay(sessionId)
+    if (!replay) {
+      return {
+        type: "replay_search",
+        sessionId,
+        found: false,
+        error: "Replay not found.",
+      }
+    }
+
+    const limitValue = boundedLimit(limit, 30, 100)
+    const normalizedQuery = query?.trim().toLowerCase()
+    const matches = replay.events.filter((event) => {
+      const call = replayToolCall(event)
+      if (eventType && event.type !== eventType) return false
+      if (toolName && call?.name !== toolName) return false
+      if (status && call?.status !== status) return false
+      if (!normalizedQuery) return true
+      return replayEventText(event).toLowerCase().includes(normalizedQuery)
+    })
+    const selected = matches.slice(0, limitValue)
+    return {
+      type: "replay_search",
+      sessionId,
+      found: true,
+      query: query ?? "",
+      eventType,
+      toolName,
+      status,
+      totalMatches: matches.length,
+      matches: selected.map(compactReplayEvent),
+      omittedMatches: Math.max(matches.length - selected.length, 0),
+    }
+  },
+  {
+    name: "replay_search",
+    description:
+      "Search one Rekdin replay by event type, tool name, status, or text query and return compact event previews.",
+    schema: z.object({
+      sessionId: z.string().min(1),
+      query: z.string().optional(),
+      eventType: z.string().optional(),
+      toolName: z.string().optional(),
+      status: z.string().optional(),
+      limit: z.number().int().positive().max(100).optional(),
+    }),
+  }
+)
+
+export const traceSummaryTool = tool(
+  async ({ sessionId, limit }: { sessionId: string; limit?: number }) => {
+    const limitValue = boundedLimit(limit, 20, 100)
+    const traces = await getTraceStore().list(sessionId)
+    const selected = traces.slice(-limitValue)
+    const warnings = traces.flatMap((trace) => trace.warnings)
+    return {
+      type: "trace_summary",
+      sessionId,
+      traceCount: traces.length,
+      returnedTraceCount: selected.length,
+      omittedTraces: Math.max(traces.length - selected.length, 0),
+      successCount: traces.filter((trace) => trace.success).length,
+      failureCount: traces.filter((trace) => !trace.success).length,
+      providerCounts: countBy(traces.map((trace) => trace.provider)),
+      modelCounts: countBy(traces.map((trace) => trace.model)),
+      workflowCounts: countBy(traces.map((trace) => trace.workflowId ?? "none")),
+      totalToolCount: traces.reduce((total, trace) => total + trace.toolCount, 0),
+      totalToolDurationMs: traces.reduce(
+        (total, trace) => total + (trace.totalToolDurationMs ?? 0),
+        0
+      ),
+      totalRetries: traces.reduce((total, trace) => total + trace.retryCount, 0),
+      warnings: warnings.slice(0, 20).map((warning) => previewString(warning, 240)),
+      omittedWarnings: Math.max(warnings.length - 20, 0),
+      errors: traces
+        .filter((trace) => trace.error)
+        .slice(0, 20)
+        .map((trace) => ({
+          traceId: trace.id,
+          startedAt: trace.startedAt,
+          error: previewString(trace.error, 360),
+        })),
+      tokenUsage: aggregateTokenUsage(traces),
+      traces: selected.map(compactTrace),
+    }
+  },
+  {
+    name: "trace_summary",
+    description:
+      "Summarize runtime traces for one session with provider/model, duration, tools, token estimates, retries, warnings, and errors.",
+    schema: z.object({
+      sessionId: z.string().min(1),
+      limit: z.number().int().positive().max(100).optional(),
+    }),
+  }
+)
+
+export const tokenUsageReportTool = tool(
+  async ({ sessionId, limit }: { sessionId?: string; limit?: number }) => {
+    const limitValue = boundedLimit(limit, 20, 100)
+    const sessions = sessionId
+      ? [await getSessionStore().getSession(sessionId)].filter((session) => Boolean(session))
+      : (await getSessionStore().listSessions()).slice(0, limitValue)
+    const allTraces: TurnTrace[] = []
+    const bySession = []
+
+    for (const session of sessions) {
+      if (!session) continue
+      const traces = await getTraceStore().list(session.id)
+      allTraces.push(...traces)
+      bySession.push({
+        sessionId: session.id,
+        title: session.title,
+        updatedAt: session.updatedAt,
+        sessionTotalTokens: session.metadata?.totalTokens ?? 0,
+        messageCount: session.metadata?.messageCount ?? session.messages.length,
+        traceCount: traces.length,
+        traceTokenUsage: aggregateTokenUsage(traces),
+      })
+    }
+
+    return {
+      type: "token_usage_report",
+      sessionId: sessionId ?? null,
+      sessionCount: bySession.length,
+      traceCount: allTraces.length,
+      totalSessionTokens: bySession.reduce(
+        (total, session) => total + session.sessionTotalTokens,
+        0
+      ),
+      traceTokenUsage: aggregateTokenUsage(allTraces),
+      bySession,
+    }
+  },
+  {
+    name: "token_usage_report",
+    description:
+      "Aggregate trace/session token metadata across recent sessions or one session without dumping message bodies.",
+    schema: z.object({
+      sessionId: z.string().min(1).optional(),
+      limit: z.number().int().positive().max(100).optional(),
+    }),
+  }
+)
+
+export const backgroundJobsSummaryTool = tool(
+  async ({ sessionId, limit }: { sessionId?: string; limit?: number }) => {
+    const limitValue = boundedLimit(limit, 20, 100)
+    const jobs = sessionId
+      ? await getBackgroundJobStore().listBySession(sessionId)
+      : await getBackgroundJobStore().list()
+    const selected = jobs.slice(0, limitValue)
+    return {
+      type: "background_jobs_summary",
+      sessionId: sessionId ?? null,
+      totalJobs: jobs.length,
+      statusCounts: countBy(jobs.map((job) => job.status)),
+      workflowCounts: countBy(jobs.map((job) => job.workflowId ?? "none")),
+      jobs: selected.map(compactBackgroundJob),
+      omittedJobs: Math.max(jobs.length - selected.length, 0),
+    }
+  },
+  {
+    name: "background_jobs_summary",
+    description:
+      "List Rekdin background jobs globally or by session with status, workflow, timestamps, error preview, and prompt preview.",
+    schema: z.object({
+      sessionId: z.string().min(1).optional(),
+      limit: z.number().int().positive().max(100).optional(),
+    }),
+  }
+)
+
+export const settingsSummaryTool = tool(
+  async () => {
+    const settings = await getSettingsStore().load()
+    const allWorkflows = getAllWorkflowPresets(settings.customWorkflows)
+    const customWorkflows = settings.customWorkflows.slice(0, 20).map((workflow) => ({
+      id: workflow.id,
+      title: workflow.title,
+      mode: workflow.mode,
+      toolPolicy: workflow.toolPolicy,
+      category: workflow.category,
+      supportsBackground: Boolean(workflow.supportsBackground),
+      responseSchemaConfigured: Boolean(workflow.responseSchema),
+      promptChars: workflow.prompt.length,
+    }))
+    return {
+      type: "settings_summary",
+      currentSessionId: settings.currentSessionId ?? null,
+      workspaceRoot: settings.workspaceRoot,
+      selectedProvider: settings.llmProvider,
+      selectedProviderLabel: getProviderLabel(settings.llmProvider),
+      selectedProviderReady: settingsHaveProviderCredentials(settings),
+      selectedModel: getProviderModel(settings.llmProvider, settings) || null,
+      liveModeEnabled: settings.liveModeEnabled,
+      uploads: {
+        cloudinaryConfigured: Boolean(
+          settings.cloudinaryCloudName && settings.cloudinaryApiKey && settings.cloudinaryApiSecret
+        ),
+        cloudNameConfigured: Boolean(settings.cloudinaryCloudName),
+        apiKeyConfigured: Boolean(settings.cloudinaryApiKey),
+        apiSecretConfigured: Boolean(settings.cloudinaryApiSecret),
+      },
+      providers: configuredProviderSummary(settings),
+      workflows: {
+        builtInCount: allWorkflows.filter((workflow) => !workflow.custom).length,
+        customCount: settings.customWorkflows.length,
+        totalCount: allWorkflows.length,
+        customWorkflows,
+        omittedCustomWorkflows: Math.max(
+          settings.customWorkflows.length - customWorkflows.length,
+          0
+        ),
+      },
+      redaction: {
+        credentials: "redacted",
+        providerSecretsIncluded: false,
+        uploadSecretsIncluded: false,
+      },
+    }
+  },
+  {
+    name: "settings_summary",
+    description:
+      "Return redacted Rekdin runtime settings: selected provider/model presence, workspace root, uploads, workflows, and feature flags.",
+    schema: z.object({}),
+  }
+)
+
 export const npmScriptsTool = tool(
   async () => {
     const pkg = await readPackageJson()
@@ -5940,6 +6549,16 @@ export function createToolset(context?: { headers?: HeadersInit; allowedToolName
     packageCompareTool,
     linkPreviewTool,
     npmPackageInfoTool,
+
+    // Rekdin inspectability
+    sessionListTool,
+    sessionInspectTool,
+    replaySummaryTool,
+    replaySearchTool,
+    traceSummaryTool,
+    tokenUsageReportTool,
+    backgroundJobsSummaryTool,
+    settingsSummaryTool,
 
     // File system + search
     codeMapTool,

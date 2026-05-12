@@ -6,6 +6,7 @@ export { toolLabels } from "../tool-labels"
 
 import { ArchiveRenderer } from "./archive-renderer"
 import { ArtifactRenderer } from "./artifact-renderer"
+import { BackgroundJobsRenderer } from "./background-jobs-renderer"
 import { Base64Renderer } from "./base64-renderer"
 import {
   BrowserEvalRenderer,
@@ -57,14 +58,18 @@ import { ListFilesRenderer } from "./list-files-renderer"
 import { NpmPackageRenderer } from "./npm-package-renderer"
 import { NpmScriptsRenderer } from "./npm-scripts-renderer"
 import { PdfRenderer } from "./pdf-renderer"
+import { ReplaySearchRenderer, ReplaySummaryRenderer } from "./replay-renderer"
 import { RouteMapRenderer } from "./route-map-renderer"
 import { ScriptResultRenderer } from "./script-result-renderer"
 import { SecretScanRenderer } from "./secret-scan-renderer"
 import { SecurityCheckRenderer } from "./security-check-renderer"
+import { SessionInspectRenderer, SessionListRenderer } from "./session-renderer"
+import { SettingsSummaryRenderer } from "./settings-summary-renderer"
 import { SymbolRenderer } from "./symbol-renderer"
 import { TableRenderer } from "./table-renderer"
 import { TextAnalysisRenderer } from "./text-analysis-renderer"
 import { TextOutputRenderer } from "./text-output-renderer"
+import { TokenUsageReportRenderer, TraceSummaryRenderer } from "./trace-renderer"
 import { VisitLinkRenderer } from "./visit-link-renderer"
 import { WebMetadataRenderer } from "./web-metadata-renderer"
 import { WebSearchResultRenderer } from "./web-search-result-renderer"
@@ -324,6 +329,15 @@ const CONTENT_RENDERERS: Record<
   url_safety_check: SecurityCheckRenderer,
   workspace_permissions_scan: SecurityCheckRenderer,
 
+  session_list: SessionListRenderer,
+  session_inspect: SessionInspectRenderer,
+  replay_summary: ReplaySummaryRenderer,
+  replay_search: ReplaySearchRenderer,
+  trace_summary: TraceSummaryRenderer,
+  token_usage_report: TokenUsageReportRenderer,
+  background_jobs_summary: BackgroundJobsRenderer,
+  settings_summary: SettingsSummaryRenderer,
+
   generic: GenericResultRenderer,
 }
 
@@ -487,6 +501,14 @@ const TOOL_ACCENT_MAP: Record<string, string> = {
   url_safety_check: "border-tool-search/25",
   workspace_permissions_scan: "border-tool-data/25",
   download_fetch: "border-tool-json/25",
+  session_list: "border-tool-data/25",
+  session_inspect: "border-tool-data/25",
+  replay_summary: "border-tool-data/25",
+  replay_search: "border-tool-search/25",
+  trace_summary: "border-tool-data/25",
+  token_usage_report: "border-tool-data/25",
+  background_jobs_summary: "border-tool-data/25",
+  settings_summary: "border-tool-json/25",
   generic: "border-tool-generic/25",
 }
 

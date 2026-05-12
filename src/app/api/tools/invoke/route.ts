@@ -86,11 +86,23 @@ const NETWORK_READ_TOOLS = [
   "page_metadata_batch",
 ]
 
+const INSPECTABILITY_TOOLS = [
+  "session_list",
+  "session_inspect",
+  "replay_summary",
+  "replay_search",
+  "trace_summary",
+  "token_usage_report",
+  "background_jobs_summary",
+  "settings_summary",
+]
+
 const ALLOWED_TOOLS = new Set([
   ...WORKSPACE_READ_TOOLS,
   ...REPO_READ_TOOLS,
   ...BROWSER_READ_TOOLS,
   ...NETWORK_READ_TOOLS,
+  ...INSPECTABILITY_TOOLS,
 ])
 
 const requestSchema = z.object({

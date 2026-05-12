@@ -160,4 +160,61 @@ describe("model-facing tool result compaction", () => {
     expect(browserLogs.logs.length).toBeLessThan(100)
     expect(browserLogs.omittedLogs).toBeGreaterThan(0)
   })
+
+  it("compacts inspectability tool outputs for model context", () => {
+    const replay = JSON.parse(
+      createModelToolMessageContent(
+        "replay_summary",
+        {
+          type: "replay_summary",
+          sessionId: "s1",
+          toolTimeline: Array.from({ length: 80 }, (_, index) => ({
+            id: `evt-${index}`,
+            toolName: "file_read",
+            dataPreview: "large event preview ".repeat(400),
+          })),
+          slowestSteps: Array.from({ length: 20 }, (_, index) => ({ id: `slow-${index}` })),
+        },
+        "history"
+      ).content
+    )
+    expect(replay.toolTimeline.length).toBeLessThan(80)
+    expect(replay.omittedToolTimeline).toBeGreaterThan(0)
+    expect(replay.slowestSteps.length).toBeLessThanOrEqual(8)
+
+    const trace = JSON.parse(
+      createModelToolMessageContent(
+        "trace_summary",
+        {
+          type: "trace_summary",
+          sessionId: "s1",
+          traces: Array.from({ length: 60 }, (_, index) => ({
+            id: `trace-${index}`,
+            warnings: ["warning ".repeat(500)],
+          })),
+          tokenUsage: { totalTokens: 123 },
+        },
+        "history"
+      ).content
+    )
+    expect(trace.traces.length).toBeLessThan(60)
+    expect(trace.omittedTraces).toBeGreaterThan(0)
+    expect(trace.tokenUsage.totalTokens).toBe(123)
+
+    const tokens = JSON.parse(
+      createModelToolMessageContent(
+        "token_usage_report",
+        {
+          type: "token_usage_report",
+          bySession: Array.from({ length: 60 }, (_, index) => ({
+            sessionId: `s-${index}`,
+            title: "Session ".repeat(400),
+          })),
+        },
+        "history"
+      ).content
+    )
+    expect(tokens.bySession.length).toBeLessThan(60)
+    expect(tokens.omittedBySession).toBeGreaterThan(0)
+  })
 })

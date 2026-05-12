@@ -297,6 +297,70 @@ function compactArrayKey(result: Record<string, unknown>, key: string, mode: Mod
   }
 }
 
+function sanitizeInspectabilityPayload(value: unknown, depth = 0): unknown {
+  if (depth > 3) return "[truncated: max depth]"
+  if (typeof value === "string") return truncateString(value, 220)
+  if (typeof value === "number" || typeof value === "boolean" || value == null) return value
+  if (Array.isArray(value)) {
+    const slice = value.slice(0, 10).map((item) => sanitizeInspectabilityPayload(item, depth + 1))
+    if (value.length > 10) slice.push(`[truncated: ${value.length - 10} more items]`)
+    return slice
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+    const out: Record<string, unknown> = {}
+    for (const [key, val] of entries.slice(0, 20)) {
+      out[key] = sanitizeInspectabilityPayload(val, depth + 1)
+    }
+    if (entries.length > 20) out.__truncatedKeys = entries.length - 20
+    return out
+  }
+  return String(value)
+}
+
+function compactInspectability(result: Record<string, unknown>, mode: ModelToolResultMode) {
+  const limit = mode === "history" ? 3 : 20
+  const output = sanitizeInspectabilityPayload(result) as Record<string, unknown>
+  for (const key of [
+    "sessions",
+    "messages",
+    "toolTimeline",
+    "failedTools",
+    "warnings",
+    "slowestSteps",
+    "matches",
+    "traces",
+    "jobs",
+    "bySession",
+  ]) {
+    const values = Array.isArray(result[key]) ? result[key] : null
+    if (!values) continue
+    output[key] = values.slice(0, limit).map((item) => sanitizeInspectabilityPayload(item))
+    output[`omitted${key[0].toUpperCase()}${key.slice(1)}`] =
+      Math.max(Number(result[`omitted${key[0].toUpperCase()}${key.slice(1)}`]) || 0, 0) +
+      Math.max(values.length - limit, 0)
+  }
+
+  const workflows = asRecord(result.workflows)
+  const customWorkflows = Array.isArray(workflows.customWorkflows)
+    ? workflows.customWorkflows
+    : null
+  if (customWorkflows) {
+    const compactWorkflows = sanitizeInspectabilityPayload(workflows) as Record<string, unknown>
+    output.workflows = {
+      ...compactWorkflows,
+      customWorkflows: customWorkflows
+        .slice(0, limit)
+        .map((item) => sanitizeInspectabilityPayload(item)),
+      omittedCustomWorkflows:
+        Math.max(Number(workflows.omittedCustomWorkflows) || 0, 0) +
+        Math.max(customWorkflows.length - limit, 0),
+    }
+  }
+
+  return output
+}
+
 function compactGeneric(toolName: string, result: unknown, mode: ModelToolResultMode) {
   const record = asRecord(result)
   const type = typeof record.type === "string" ? record.type : toolName
@@ -360,6 +424,18 @@ function compactGeneric(toolName: string, result: unknown, mode: ModelToolResult
   if (type === "browser_network_log") return compactArrayKey(record, "requests", mode)
   if (type === "secret_scan") return compactArrayKey(record, "findings", mode)
   if (type === "dependency_audit") return sanitizeToolPayload(record)
+  if (
+    type === "session_list" ||
+    type === "session_inspect" ||
+    type === "replay_summary" ||
+    type === "replay_search" ||
+    type === "trace_summary" ||
+    type === "token_usage_report" ||
+    type === "background_jobs_summary" ||
+    type === "settings_summary"
+  ) {
+    return compactInspectability(record, mode)
+  }
   if (toolName.startsWith("browser_") || String(type).startsWith("browser_")) {
     return compactBrowserResult(record, mode)
   }

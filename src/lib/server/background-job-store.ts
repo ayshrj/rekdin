@@ -61,6 +61,11 @@ class BackgroundJobStore {
     const jobs = await this.loadJobs()
     return jobs.filter((job) => job.sessionId === sessionId)
   }
+
+  async list() {
+    const jobs = await this.loadJobs()
+    return [...jobs]
+  }
 }
 
 declare global {
