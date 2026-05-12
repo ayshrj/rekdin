@@ -1545,6 +1545,877 @@ const sections: MockSection[] = [
     ],
   },
   {
+    title: "Inspectability",
+    description:
+      "session_list, session_inspect, replay_summary, replay_search, trace_summary, token_usage_report, background_jobs_summary, settings_summary",
+    parts: [
+      {
+        type: "session_list",
+        toolName: "session_list",
+        toolResult: {
+          totalSessions: 3,
+          omittedSessions: 0,
+          sessions: [
+            {
+              id: "sess_abc",
+              title: "Repo audit run",
+              updatedAt: new Date(Date.now() - 3600000).toISOString(),
+              messageCount: 14,
+              toolCallCount: 22,
+              failedToolCallCount: 1,
+              model: "claude-sonnet-4-6",
+            },
+            {
+              id: "sess_def",
+              title: "Browser automation demo",
+              updatedAt: new Date(Date.now() - 7200000).toISOString(),
+              messageCount: 8,
+              toolCallCount: 11,
+              failedToolCallCount: 0,
+              model: "claude-sonnet-4-6",
+            },
+            {
+              id: "sess_ghi",
+              title: "Background job test",
+              updatedAt: new Date(Date.now() - 14400000).toISOString(),
+              messageCount: 3,
+              toolCallCount: 4,
+              failedToolCallCount: 0,
+            },
+          ],
+        },
+      },
+      {
+        type: "session_inspect",
+        toolName: "session_inspect",
+        toolResult: {
+          found: true,
+          title: "Repo audit run",
+          sessionId: "sess_abc",
+          messageCount: 14,
+          omittedMessages: 9,
+          toolCallCount: 22,
+          model: "claude-sonnet-4-6",
+          finalAnswerPreview:
+            "The audit found 2 high severity issues in lodash and axios dependencies. Recommend upgrading both packages.",
+          messages: [
+            {
+              role: "user",
+              timestamp: new Date(Date.now() - 3700000).toISOString(),
+              contentPreview: "Run a security audit on the demo-repo project",
+              contentChars: 46,
+            },
+            {
+              role: "assistant",
+              timestamp: new Date(Date.now() - 3698000).toISOString(),
+              contentPreview: "I'll audit the dependencies and scan for secrets.",
+              contentChars: 50,
+            },
+            {
+              role: "tool",
+              timestamp: new Date(Date.now() - 3695000).toISOString(),
+              contentPreview: "Found 2 vulnerabilities in lodash@4.17.19 and axios@0.21.0",
+              contentChars: 58,
+            },
+            {
+              role: "assistant",
+              timestamp: new Date(Date.now() - 3690000).toISOString(),
+              contentPreview: "The audit found 2 high severity issues...",
+              contentChars: 284,
+            },
+            {
+              role: "user",
+              timestamp: new Date(Date.now() - 3680000).toISOString(),
+              contentPreview: "Can you also check for exposed secrets?",
+              contentChars: 38,
+            },
+          ],
+          toolCallNameCounts: {
+            dependency_audit: 1,
+            secret_scan: 2,
+            file_read: 8,
+            list_files: 3,
+            git_log_summary: 1,
+          },
+          toolCallStatusCounts: { success: 14, error: 1 },
+        },
+      },
+      {
+        type: "replay_summary",
+        toolName: "replay_summary",
+        toolResult: {
+          found: true,
+          durationMs: 18420,
+          eventCount: 47,
+          toolTimeline: [
+            {
+              toolName: "list_files",
+              status: "success",
+              duration: 120,
+              timestamp: new Date(Date.now() - 18000).toISOString(),
+            },
+            {
+              toolName: "dependency_audit",
+              status: "success",
+              duration: 4210,
+              timestamp: new Date(Date.now() - 17000).toISOString(),
+            },
+            {
+              toolName: "secret_scan",
+              status: "success",
+              duration: 880,
+              timestamp: new Date(Date.now() - 12000).toISOString(),
+            },
+            {
+              toolName: "secret_scan",
+              status: "error",
+              duration: 310,
+              timestamp: new Date(Date.now() - 11000).toISOString(),
+            },
+            {
+              toolName: "file_read",
+              status: "success",
+              duration: 45,
+              timestamp: new Date(Date.now() - 10000).toISOString(),
+            },
+          ],
+          omittedToolTimeline: 3,
+          failedTools: [{ toolName: "secret_scan", status: "error", duration: 310 }],
+          slowestSteps: [
+            { toolName: "dependency_audit", status: "success", duration: 4210 },
+            { toolName: "secret_scan", status: "success", duration: 880 },
+          ],
+          warnings: ["Tool result truncated: secret_scan output exceeded 50KB limit"],
+        },
+      },
+      {
+        type: "replay_search",
+        toolName: "replay_search",
+        toolResult: {
+          found: true,
+          query: "error",
+          toolName: "secret_scan",
+          totalMatches: 2,
+          omittedMatches: 0,
+          matches: [
+            {
+              toolName: "secret_scan",
+              status: "error",
+              timestamp: new Date(Date.now() - 11000).toISOString(),
+              dataPreview: "ENOENT: no such file or directory '/workspace/.env'",
+            },
+            {
+              toolName: "secret_scan",
+              status: "success",
+              timestamp: new Date(Date.now() - 12000).toISOString(),
+              dataPreview: "Scanned 84 files. Found 1 potential secret.",
+            },
+          ],
+        },
+      },
+      {
+        type: "trace_summary",
+        toolName: "trace_summary",
+        toolResult: {
+          traceCount: 3,
+          successCount: 2,
+          failureCount: 1,
+          totalToolCount: 22,
+          totalToolDurationMs: 18420,
+          totalRetries: 1,
+          providerCounts: { openrouter: 3 },
+          modelCounts: { "claude-sonnet-4-6": 3 },
+          workflowCounts: { "repo-audit": 1, general: 2 },
+          warnings: ["Token limit approaching: 85% of context used on turn 3"],
+          omittedWarnings: 0,
+          errors: [{ traceId: "trace_xyz", error: "Tool timeout: secret_scan exceeded 30s limit" }],
+          tokenUsage: {
+            tracesWithUsage: 3,
+            systemPromptTokens: 3840,
+            historyTokens: 12480,
+            toolSchemaTokens: 8200,
+            toolResultTokens: 4120,
+            originalToolResultTokens: 22000,
+            savedToolResultTokens: 17880,
+            completionTokens: 1840,
+            totalPromptTokens: 28640,
+            totalTokens: 30480,
+          },
+        },
+      },
+      {
+        type: "token_usage_report",
+        toolName: "token_usage_report",
+        toolResult: {
+          sessionCount: 2,
+          traceTokenUsage: {
+            tracesWithUsage: 5,
+            systemPromptTokens: 7680,
+            historyTokens: 24960,
+            toolSchemaTokens: 16400,
+            toolResultTokens: 8240,
+            completionTokens: 3680,
+            totalPromptTokens: 57280,
+            totalTokens: 60960,
+          },
+          bySession: [
+            {
+              sessionId: "sess_abc",
+              title: "Repo audit run",
+              messageCount: 14,
+              traceCount: 3,
+              traceTokenUsage: { totalTokens: 30480 },
+            },
+            {
+              sessionId: "sess_def",
+              title: "Browser automation demo",
+              messageCount: 8,
+              traceCount: 2,
+              traceTokenUsage: { totalTokens: 30480 },
+            },
+          ],
+        },
+      },
+      {
+        type: "background_jobs_summary",
+        toolName: "background_jobs_summary",
+        toolResult: {
+          totalJobs: 4,
+          statusCounts: { completed: 2, running: 1, failed: 1 },
+          workflowCounts: { "repo-audit": 2, "research-report": 1, general: 1 },
+          omittedJobs: 0,
+          jobs: [
+            {
+              id: "job_1",
+              status: "completed",
+              workflowId: "repo-audit",
+              mode: "workspace",
+              createdAt: new Date(Date.now() - 7200000).toISOString(),
+              startedAt: new Date(Date.now() - 7190000).toISOString(),
+              completedAt: new Date(Date.now() - 7100000).toISOString(),
+              promptPreview: "Audit the demo-repo dependencies and report findings",
+            },
+            {
+              id: "job_2",
+              status: "running",
+              workflowId: "research-report",
+              mode: "research",
+              createdAt: new Date(Date.now() - 900000).toISOString(),
+              startedAt: new Date(Date.now() - 895000).toISOString(),
+              promptPreview: "Research LangChain streaming best practices",
+            },
+            {
+              id: "job_3",
+              status: "failed",
+              workflowId: "repo-audit",
+              mode: "workspace",
+              createdAt: new Date(Date.now() - 3600000).toISOString(),
+              startedAt: new Date(Date.now() - 3598000).toISOString(),
+              completedAt: new Date(Date.now() - 3560000).toISOString(),
+              promptPreview: "Check for exposed API keys in repository",
+              errorPreview: "Tool timeout: secret_scan exceeded 30s limit",
+            },
+            {
+              id: "job_4",
+              status: "completed",
+              workflowId: "general",
+              mode: "general",
+              createdAt: new Date(Date.now() - 14400000).toISOString(),
+              startedAt: new Date(Date.now() - 14395000).toISOString(),
+              completedAt: new Date(Date.now() - 14300000).toISOString(),
+              promptPreview: "Summarize recent git commits",
+            },
+          ],
+        },
+      },
+      {
+        type: "settings_summary",
+        toolName: "settings_summary",
+        toolResult: {
+          currentSessionId: "sess_abc",
+          workspaceRoot: "/Users/ayush/projects/demo-repo",
+          selectedProvider: "openrouter",
+          selectedProviderLabel: "OpenRouter",
+          selectedProviderReady: true,
+          selectedModel: "claude-sonnet-4-6",
+          liveModeEnabled: false,
+          uploads: {
+            cloudNameConfigured: true,
+            apiKeyConfigured: true,
+            apiSecretConfigured: false,
+          },
+          providers: [
+            {
+              provider: "openrouter",
+              label: "OpenRouter",
+              selected: true,
+              configured: true,
+              model: "claude-sonnet-4-6",
+            },
+            {
+              provider: "anthropic",
+              label: "Anthropic Direct",
+              selected: false,
+              configured: false,
+            },
+            { provider: "openai", label: "OpenAI", selected: false, configured: false },
+          ],
+          workflows: {
+            builtInCount: 6,
+            customCount: 2,
+            totalCount: 8,
+            customWorkflows: [
+              { id: "wf_1", title: "PR Review", mode: "workspace", supportsBackground: true },
+              { id: "wf_2", title: "Quick Summary", mode: "general", supportsBackground: false },
+            ],
+          },
+        },
+      },
+    ],
+  },
+  {
+    title: "Developer Utilities",
+    description:
+      "jwt_decode, regex_match, uuid_generate, url_parse, cron_explain, color_convert, text_diff, json_diff",
+    parts: [
+      {
+        type: "jwt_decode",
+        toolName: "jwt_decode",
+        toolResult: {
+          algorithm: "HS256",
+          expired: false,
+          expiresAt: new Date(Date.now() + 3600000).toISOString(),
+          header: { alg: "HS256", typ: "JWT" },
+          payload: {
+            sub: "user_123",
+            name: "Ayush Raj",
+            iat: Math.floor(Date.now() / 1000),
+            exp: Math.floor(Date.now() / 1000) + 3600,
+            roles: ["admin"],
+          },
+        },
+      },
+      {
+        type: "jwt_decode",
+        toolName: "jwt_decode",
+        toolResult: {
+          algorithm: "RS256",
+          expired: true,
+          expiresAt: new Date(Date.now() - 86400000).toISOString(),
+          header: { alg: "RS256", typ: "JWT" },
+          payload: { sub: "svc_worker", aud: "rekdin-api" },
+        },
+      },
+      {
+        type: "regex_match",
+        toolName: "regex_match",
+        toolResult: {
+          pattern: "(?P<year>\\d{4})-(?P<month>\\d{2})-(?P<day>\\d{2})",
+          flags: "g",
+          matchCount: 3,
+          matches: [
+            {
+              match: "2026-05-12",
+              index: 14,
+              captures: ["2026", "05", "12"],
+              groups: { year: "2026", month: "05", day: "12" },
+            },
+            {
+              match: "2026-04-01",
+              index: 42,
+              captures: ["2026", "04", "01"],
+              groups: { year: "2026", month: "04", day: "01" },
+            },
+            {
+              match: "2025-12-31",
+              index: 70,
+              captures: ["2025", "12", "31"],
+              groups: { year: "2025", month: "12", day: "31" },
+            },
+          ],
+        },
+      },
+      {
+        type: "uuid_generate",
+        toolName: "uuid_generate",
+        toolResult: {
+          uuids: [
+            "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+            "6ba7b811-9dad-11d1-80b4-00c04fd430c8",
+          ],
+        },
+      },
+      {
+        type: "url_parse",
+        toolName: "url_parse",
+        toolResult: {
+          protocol: "https:",
+          host: "api.example.com",
+          pathname: "/v2/users/search",
+          hash: "#results",
+          params: { q: "ayush", limit: "20", sort: "created_at", order: "desc" },
+        },
+      },
+      {
+        type: "cron_explain",
+        toolName: "cron_explain",
+        toolResult: {
+          expression: "0 9 * * MON-FRI",
+          explanation: "At 9:00 AM, Monday through Friday",
+          fields: {
+            minute: "0 (at minute 0)",
+            hour: "9 (at 9 AM)",
+            day: "* (every day)",
+            month: "* (every month)",
+            weekday: "MON-FRI (weekdays only)",
+          },
+        },
+      },
+      {
+        type: "color_convert",
+        toolName: "color_convert",
+        toolResult: {
+          hex: "#6366f1",
+          rgb: "rgb(99, 102, 241)",
+          hsl: "hsl(239, 84%, 67%)",
+          r: 99,
+          g: 102,
+          b: 241,
+        },
+      },
+      {
+        type: "text_diff",
+        toolName: "text_diff",
+        toolResult: {
+          from: "original.txt",
+          to: "revised.txt",
+          additions: 3,
+          deletions: 2,
+          patch: `--- original.txt\n+++ revised.txt\n@@ -1,6 +1,7 @@\n const app = express()\n-app.use(logger)\n+app.use(cors())\n+app.use(logger)\n+app.use(helmet())\n \n app.get('/health', handler)\n-app.listen(3000)\n+app.listen(process.env.PORT ?? 3000)\n`,
+        },
+      },
+      {
+        type: "json_diff",
+        toolName: "json_diff",
+        toolResult: {
+          additions: 2,
+          deletions: 1,
+          identical: false,
+          patch: `--- a.json\n+++ b.json\n@@ -1,7 +1,8 @@\n {\n-  "model": "claude-opus-4",\n+  "model": "claude-sonnet-4-6",\n   "temperature": 0.7,\n-  "maxTokens": 4096\n+  "maxTokens": 8192,\n+  "streaming": true\n }`,
+        },
+      },
+    ],
+  },
+  {
+    title: "Git Write",
+    description: "git_commit, git_checkout, git_stash, git_push",
+    parts: [
+      {
+        type: "git_commit",
+        toolName: "git_commit",
+        toolResult: {
+          hash: "a3f92c1b4d8e7f0a1b2c3d4e5f6a7b8c9d0e1f2a",
+          message: "feat: add JWT decode and regex match tools",
+          author: "Ayush Raj <ayush@example.com>",
+          filesChanged: 3,
+          insertions: 84,
+          deletions: 2,
+          files: [
+            "src/lib/server/tools.ts",
+            "src/lib/server/runtime/tool-policy.ts",
+            "src/components/tools/renderers/utility-renderer.tsx",
+          ],
+        },
+      },
+      {
+        type: "git_checkout",
+        toolName: "git_checkout",
+        toolResult: {
+          branch: "feature/new-tool-cluster",
+          created: true,
+          status: "Switched to a new branch 'feature/new-tool-cluster'",
+        },
+      },
+      {
+        type: "git_stash",
+        toolName: "git_stash",
+        toolResult: {
+          action: "push",
+          stashName: "stash@{0}",
+          filesStashed: 2,
+          entries: ["stash@{0}: WIP on main: a3f92c1 feat: add JWT decode tools"],
+        },
+      },
+      {
+        type: "git_push",
+        toolName: "git_push",
+        toolResult: {
+          remote: "origin",
+          branch: "feature/new-tool-cluster",
+          commitRange: "main..feature/new-tool-cluster",
+          status:
+            "Branch 'feature/new-tool-cluster' set up to track remote branch 'feature/new-tool-cluster' from 'origin'.\nTo github.com:user/repo.git\n   a3f92c1..b4e81d2  feature/new-tool-cluster -> feature/new-tool-cluster",
+        },
+      },
+      {
+        type: "git_commit",
+        toolName: "git_commit",
+        toolResult: {
+          error: "nothing to commit, working tree clean",
+        },
+      },
+    ],
+  },
+  {
+    title: "System & Process",
+    description: "system_info, process_list, clipboard_read, clipboard_write, desktop_notify",
+    parts: [
+      {
+        type: "system_info",
+        toolName: "system_info",
+        toolResult: {
+          platform: "darwin",
+          arch: "arm64",
+          cpuModel: "Apple M3 Pro",
+          cpuCores: 11,
+          nodeVersion: "v22.4.0",
+          uptimeSeconds: 172800,
+          totalMemoryBytes: 18253611008,
+          freeMemoryBytes: 4831838208,
+          diskTotalBytes: 494384795648,
+          diskUsedBytes: 218012172288,
+        },
+      },
+      {
+        type: "process_list",
+        toolName: "process_list",
+        toolResult: {
+          totalCount: 6,
+          filter: "node",
+          processes: [
+            {
+              pid: 12345,
+              name: "node",
+              command: "node /usr/local/lib/node_modules/next/dist/bin/next dev",
+              cpu: 12.4,
+              mem: 3.2,
+            },
+            {
+              pid: 12346,
+              name: "node",
+              command: "node --watch src/lib/server/tools.ts",
+              cpu: 2.1,
+              mem: 1.4,
+            },
+            {
+              pid: 12347,
+              name: "node",
+              command: "node_modules/.bin/vitest run",
+              cpu: 8.7,
+              mem: 2.8,
+            },
+            {
+              pid: 12348,
+              name: "node",
+              command: "node /usr/local/bin/npm run typecheck",
+              cpu: 0.3,
+              mem: 0.9,
+            },
+          ],
+        },
+      },
+      {
+        type: "clipboard_read",
+        toolName: "clipboard_read",
+        toolResult: {
+          content: "npm run typecheck && npm run build",
+          length: 34,
+        },
+      },
+      {
+        type: "clipboard_write",
+        toolName: "clipboard_write",
+        toolResult: { length: 52 },
+      },
+      {
+        type: "desktop_notify",
+        toolName: "desktop_notify",
+        toolResult: {
+          title: "Build Complete",
+          message: "TypeScript compilation succeeded with 0 errors",
+        },
+      },
+    ],
+  },
+  {
+    title: "Network Diagnostics",
+    description: "dns_lookup, ssl_check, ping, whois_lookup",
+    parts: [
+      {
+        type: "dns_lookup",
+        toolName: "dns_lookup",
+        toolResult: {
+          hostname: "anthropic.com",
+          records: {
+            A: ["104.18.32.119", "104.18.33.119"],
+            AAAA: ["2606:4700::6812:2077"],
+            MX: [{ exchange: "mail.anthropic.com", priority: 10 }],
+            TXT: ["v=spf1 include:_spf.google.com ~all"],
+          },
+        },
+      },
+      {
+        type: "ssl_check",
+        toolName: "ssl_check",
+        toolResult: {
+          domain: "anthropic.com",
+          valid: true,
+          daysUntilExpiry: 287,
+          subject: "CN=anthropic.com",
+          issuer: "CN=E6, O=Let's Encrypt, C=US",
+          validFrom: "2025-03-15T00:00:00Z",
+          validTo: "2026-06-13T00:00:00Z",
+          sans: ["anthropic.com", "www.anthropic.com", "api.anthropic.com", "claude.ai"],
+        },
+      },
+      {
+        type: "ssl_check",
+        toolName: "ssl_check",
+        toolResult: {
+          domain: "expired.example.com",
+          valid: false,
+          daysUntilExpiry: -14,
+          subject: "CN=expired.example.com",
+          issuer: "CN=DigiCert TLS RSA SHA256 2020",
+          validFrom: "2024-01-01T00:00:00Z",
+          validTo: "2025-01-01T00:00:00Z",
+          sans: ["expired.example.com"],
+        },
+      },
+      {
+        type: "ping",
+        toolName: "ping",
+        toolResult: {
+          host: "8.8.8.8",
+          reachable: true,
+          packetsSent: 3,
+          packetsReceived: 3,
+          rttMin: 4.21,
+          rttAvg: 5.84,
+          rttMax: 8.12,
+        },
+      },
+      {
+        type: "whois_lookup",
+        toolName: "whois_lookup",
+        toolResult: {
+          domain: "anthropic.com",
+          registrar: "Cloudflare, Inc.",
+          registeredDate: "2016-04-07T00:00:00Z",
+          expiryDate: "2027-04-07T00:00:00Z",
+          updatedDate: "2024-03-10T00:00:00Z",
+          status: ["clientTransferProhibited", "clientDeleteProhibited"],
+          nameservers: ["ns1.cloudflare.com", "ns2.cloudflare.com"],
+        },
+      },
+    ],
+  },
+  {
+    title: "API Development",
+    description: "openapi_inspect, graphql_introspect",
+    parts: [
+      {
+        type: "openapi_inspect",
+        toolName: "openapi_inspect",
+        toolResult: {
+          title: "Anthropic API",
+          version: "2024-01-01",
+          specVersion: "openapi 3.0.3",
+          endpointCount: 8,
+          tagCount: 3,
+          tags: [
+            {
+              name: "Messages",
+              endpoints: [
+                {
+                  method: "POST",
+                  path: "/v1/messages",
+                  summary: "Create a message",
+                  requiresAuth: true,
+                },
+                {
+                  method: "POST",
+                  path: "/v1/messages/batches",
+                  summary: "Create a batch",
+                  requiresAuth: true,
+                },
+                {
+                  method: "GET",
+                  path: "/v1/messages/batches/{id}",
+                  summary: "Get batch",
+                  requiresAuth: true,
+                },
+                {
+                  method: "DELETE",
+                  path: "/v1/messages/batches/{id}",
+                  summary: "Cancel batch",
+                  requiresAuth: true,
+                },
+              ],
+            },
+            {
+              name: "Models",
+              endpoints: [
+                { method: "GET", path: "/v1/models", summary: "List models", requiresAuth: true },
+                {
+                  method: "GET",
+                  path: "/v1/models/{id}",
+                  summary: "Get model",
+                  requiresAuth: true,
+                },
+              ],
+            },
+            {
+              name: "Files",
+              endpoints: [
+                { method: "POST", path: "/v1/files", summary: "Upload file", requiresAuth: true },
+                { method: "GET", path: "/v1/files/{id}", summary: "Get file", requiresAuth: true },
+              ],
+            },
+          ],
+          info: { contact: "support@anthropic.com", license: "Proprietary" },
+        },
+      },
+      {
+        type: "graphql_introspect",
+        toolName: "graphql_introspect",
+        toolResult: {
+          endpoint: "https://api.example.com/graphql",
+          typeCount: 12,
+          queries: [
+            { name: "user", type: "User", description: "Get user by ID" },
+            { name: "users", type: "[User!]!", description: "List all users" },
+            { name: "session", type: "Session", description: "Get current session" },
+          ],
+          mutations: [
+            { name: "createUser", type: "User!", description: "Create a new user" },
+            { name: "updateUser", type: "User!", description: "Update user fields" },
+            { name: "deleteUser", type: "Boolean!", description: "Delete user" },
+          ],
+          types: [
+            { name: "User", kind: "OBJECT", fieldCount: 6 },
+            { name: "Session", kind: "OBJECT", fieldCount: 4 },
+            { name: "CreateUserInput", kind: "INPUT_OBJECT", fieldCount: 3 },
+            { name: "String", kind: "SCALAR", fieldCount: 0 },
+            { name: "Boolean", kind: "SCALAR", fieldCount: 0 },
+          ],
+        },
+      },
+    ],
+  },
+  {
+    title: "Image Tools",
+    description: "image_resize, image_crop",
+    parts: [
+      {
+        type: "image_resize",
+        toolName: "image_resize",
+        toolResult: {
+          url: screenshotDataUrl,
+          originalWidth: 960,
+          originalHeight: 540,
+          width: 480,
+          height: 270,
+          format: "png",
+        },
+      },
+      {
+        type: "image_crop",
+        toolName: "image_crop",
+        toolResult: {
+          url: screenshotDataUrl,
+          left: 32,
+          top: 32,
+          width: 640,
+          height: 200,
+        },
+      },
+    ],
+  },
+  {
+    title: "Data Format",
+    description: "json_schema_validate, csv_to_json, json_to_csv, xml_to_json, xpath_query",
+    parts: [
+      {
+        type: "json_schema_validate",
+        toolName: "json_schema_validate",
+        toolResult: { valid: true, errorCount: 0, errors: [] },
+      },
+      {
+        type: "json_schema_validate",
+        toolName: "json_schema_validate",
+        toolResult: {
+          valid: false,
+          errorCount: 3,
+          errors: [
+            "$.age: expected number, got string",
+            "$.email: does not match pattern ^[\\w.-]+@[\\w.-]+\\.\\w+$",
+            "$.roles: minItems is 1, got 0",
+          ],
+        },
+      },
+      {
+        type: "csv_to_json",
+        toolName: "csv_to_json",
+        toolResult: {
+          rowCount: 3,
+          columns: ["id", "name", "email", "role"],
+          rows: [
+            { id: "1", name: "Alice", email: "alice@example.com", role: "admin" },
+            { id: "2", name: "Bob", email: "bob@example.com", role: "user" },
+            { id: "3", name: "Carol", email: "carol@example.com", role: "user" },
+          ],
+          json: '[{"id":"1","name":"Alice","email":"alice@example.com","role":"admin"},{"id":"2","name":"Bob","email":"bob@example.com","role":"user"},{"id":"3","name":"Carol","email":"carol@example.com","role":"user"}]',
+        },
+      },
+      {
+        type: "json_to_csv",
+        toolName: "json_to_csv",
+        toolResult: {
+          rowCount: 3,
+          csv: "id,name,score\n1,Alice,92.5\n2,Bob,87.0\n3,Carol,95.3\n",
+        },
+      },
+      {
+        type: "xml_to_json",
+        toolName: "xml_to_json",
+        toolResult: {
+          rootTag: "package",
+          nodeCount: 12,
+          json: '{\n  "name": {"#text": "my-app"},\n  "version": {"#text": "1.0.0"},\n  "dependencies": {\n    "react": {"#text": "^18.0.0"},\n    "next": {"#text": "^14.0.0"}\n  }\n}',
+        },
+      },
+      {
+        type: "xpath_query",
+        toolName: "xpath_query",
+        toolResult: {
+          xpath: "//a[@href]",
+          matchCount: 3,
+          nodes: [
+            { tag: "A", text: "Documentation", html: '<a href="/docs">Documentation</a>' },
+            { tag: "A", text: "API Reference", html: '<a href="/api">API Reference</a>' },
+            {
+              tag: "A",
+              text: "GitHub",
+              html: '<a href="https://github.com/example/repo">GitHub</a>',
+            },
+          ],
+        },
+      },
+    ],
+  },
+  {
     title: "Document Extraction & Security Checks",
     description:
       "pdf_extract_text, docx_extract_text, url_safety_check, workspace_permissions_scan",
