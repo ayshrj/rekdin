@@ -3,7 +3,8 @@
 import React, { useState } from "react"
 
 import { Markdown } from "@/components/markdown"
-import { Image } from "@/components/ui/image"
+import { ClickableImage } from "@/components/ui/image-lightbox"
+import { useChat } from "@/contexts/chat-context"
 import { ArrowTopRightOnSquare as ExternalLink, Globe } from "@/lib/icons"
 
 import { BrowserShell } from "./browser-shell"
@@ -11,12 +12,48 @@ import { CopyButton, EmptyState, SegmentedControl } from "./renderer-primitives"
 import { SimpleCodeEditor } from "./simple-code-editor"
 import { ToolResultContentPart } from "./tool-result-renderer"
 
+async function captureFullPage(sessionId: string, url: string): Promise<string> {
+  const res = await fetch("/api/tools/invoke", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sessionId,
+      toolName: "browser_full_page_screenshot",
+      toolInput: { url },
+    }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error ?? "Screenshot failed")
+  const result = typeof data.result === "string" ? JSON.parse(data.result) : data.result
+  const screenshot = result?.screenshot ?? result?.image ?? result?.data
+  if (!screenshot) throw new Error("No screenshot in response")
+  return screenshot
+}
+
 export const BrowserResultRenderer: React.FC<{
   part: ToolResultContentPart
   onAction?: (action: string, data: unknown) => void
 }> = ({ part }) => {
   const { toolResult, toolInput } = part
   const [contentMode, setContentMode] = useState<"preview" | "raw">("preview")
+  const [fullPageShot, setFullPageShot] = useState<string | null>(null)
+  const [fullPageLoading, setFullPageLoading] = useState(false)
+  const [fullPageError, setFullPageError] = useState<string | null>(null)
+  const { currentSessionId } = useChat()
+
+  const handleFullPage = async (pageUrl: string) => {
+    if (!currentSessionId || !pageUrl) return
+    setFullPageLoading(true)
+    setFullPageError(null)
+    try {
+      const shot = await captureFullPage(currentSessionId, pageUrl)
+      setFullPageShot(shot)
+    } catch (err) {
+      setFullPageError(err instanceof Error ? err.message : "Unknown error")
+    } finally {
+      setFullPageLoading(false)
+    }
+  }
 
   const url = toolResult?.url || toolInput?.url || ""
   const content =
@@ -69,16 +106,59 @@ export const BrowserResultRenderer: React.FC<{
           >
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
+          {currentSessionId && (
+            <button
+              type="button"
+              onClick={() => handleFullPage(extractedUrl)}
+              disabled={fullPageLoading}
+              className="rk-flat-button shrink-0 font-mono text-[10px] disabled:opacity-50"
+              title="Capture full page screenshot"
+            >
+              {fullPageLoading ? "Loading…" : "Full page"}
+            </button>
+          )}
         </div>
+      )}
+
+      {/* Full page screenshot result */}
+      {fullPageError && (
+        <p className="text-destructive px-1 font-mono text-[10px]">{fullPageError}</p>
       )}
 
       {/* Browser shell */}
       <BrowserShell title={title} url={extractedUrl}>
         <div className="rk-scrollbar max-h-[65vh] min-h-20 overflow-auto border-t">
-          {screenshot && (
+          {fullPageShot ? (
             <div className="p-3">
-              <Image src={screenshot} alt="Browser screenshot" className="h-auto w-full rounded" />
+              <div className="mb-2 flex items-center justify-between">
+                <span className="rk-section-label">Full page screenshot</span>
+                <div className="flex items-center gap-2">
+                  <CopyButton text={fullPageShot} />
+                  <button
+                    type="button"
+                    onClick={() => setFullPageShot(null)}
+                    className="rk-flat-button font-mono text-[10px]"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+              <ClickableImage
+                src={fullPageShot}
+                alt="Full page screenshot"
+                className="h-auto w-full rounded"
+              />
             </div>
+          ) : (
+            screenshot && (
+              <div className="p-3">
+                <ClickableImage
+                  src={screenshot}
+                  alt="Browser screenshot"
+                  className="h-auto w-full rounded"
+                />
+              </div>
+            )
           )}
 
           {typeof extractedContent === "string" &&

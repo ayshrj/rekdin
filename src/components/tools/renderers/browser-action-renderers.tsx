@@ -17,7 +17,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react"
 
-import { Image } from "@/components/ui/image"
+import { ClickableImage } from "@/components/ui/image-lightbox"
 import {
   ArrowDownTray,
   ArrowRight,
@@ -88,7 +88,7 @@ export const ClickActionRenderer: React.FC<{
       {screenshot && (
         <BrowserShell>
           <div className="relative">
-            <Image
+            <ClickableImage
               ref={imgRef}
               src={screenshot}
               alt="Click action"
@@ -166,7 +166,7 @@ export const HoverActionRenderer: React.FC<{
       {screenshot && (
         <BrowserShell>
           <div className="relative">
-            <Image
+            <ClickableImage
               ref={imgRef}
               src={screenshot}
               alt="Hover action"
@@ -253,7 +253,7 @@ export const DragActionRenderer: React.FC<{
       {screenshot && (
         <BrowserShell>
           <div className="relative">
-            <Image
+            <ClickableImage
               ref={imgRef}
               src={screenshot}
               alt="Drag action"
@@ -365,7 +365,11 @@ export const FormFillRenderer: React.FC<{
     <div className="w-full min-w-0 space-y-2">
       {screenshot && (
         <BrowserShell>
-          <Image src={screenshot} alt="Form fill" className="h-auto w-full object-contain" />
+          <ClickableImage
+            src={screenshot}
+            alt="Form fill"
+            className="h-auto w-full object-contain"
+          />
         </BrowserShell>
       )}
 
@@ -412,7 +416,11 @@ export const WaitActionRenderer: React.FC<{
     <div className="w-full min-w-0 space-y-2">
       {screenshot && (
         <BrowserShell>
-          <Image src={screenshot} alt="Wait action" className="h-auto w-full object-contain" />
+          <ClickableImage
+            src={screenshot}
+            alt="Wait action"
+            className="h-auto w-full object-contain"
+          />
         </BrowserShell>
       )}
 
@@ -477,7 +485,11 @@ export const DataExtractionRenderer: React.FC<{
     <div className="w-full min-w-0 space-y-2">
       {screenshot && (
         <BrowserShell>
-          <Image src={screenshot} alt="Data extraction" className="h-auto w-full object-contain" />
+          <ClickableImage
+            src={screenshot}
+            alt="Data extraction"
+            className="h-auto w-full object-contain"
+          />
         </BrowserShell>
       )}
 

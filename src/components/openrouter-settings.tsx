@@ -627,7 +627,7 @@ export function OpenRouterSettings({
         </Button>
       </DialogTrigger>
       <DialogShell
-        className="bg-surface-2 w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] border shadow-none sm:w-[560px] sm:max-w-[560px]"
+        className="bg-surface-2 w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] border shadow-none sm:w-140 sm:max-w-140"
         footer={
           <>
             {onRestartTour ? (

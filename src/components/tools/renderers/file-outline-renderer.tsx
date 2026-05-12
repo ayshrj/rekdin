@@ -6,12 +6,18 @@ import { FileExtensionIcon } from "@/components/file-extension-icon"
 import { ChevronDown, ChevronRight } from "@/lib/icons"
 
 import {
+  CopyButton,
   EmptyState,
+  InlineToolResult,
   RawPayloadDisclosure,
   ToolRendererShell,
   ToolStatusBadge,
+  useToolInvoke,
 } from "./renderer-primitives"
+import { SimpleCodeEditor } from "./simple-code-editor"
 import { type ToolResultContentPart } from "./tool-result-renderer"
+
+type FileReadResult = { path?: string; content?: string; truncated?: boolean }
 
 interface OutlineSymbol {
   name: string
@@ -81,21 +87,42 @@ function countAll(symbols: OutlineSymbol[]): number {
   return symbols.reduce((n, s) => n + 1 + countAll(s.children ?? []), 0)
 }
 
-function SymbolRow({ symbol, depth }: { symbol: OutlineSymbol; depth: number }) {
+function SymbolRow({
+  symbol,
+  depth,
+  onSymbolClick,
+  activeLine,
+}: {
+  symbol: OutlineSymbol
+  depth: number
+  onSymbolClick?: (line: number) => void
+  activeLine?: number | null
+}) {
   const [open, setOpen] = useState(true)
   const hasChildren = (symbol.children?.length ?? 0) > 0
   const color = kindColor(symbol.kind)
   const label = kindLabel(symbol.kind)
+  const isActive = symbol.line != null && symbol.line === activeLine
 
   return (
     <>
       <div
-        className="hover:bg-surface-4 flex items-center gap-1.5 py-0.75"
+        className={`flex items-center gap-1.5 py-0.75 transition-colors ${
+          isActive ? "bg-primary/10" : "hover:bg-surface-4"
+        } ${symbol.line != null ? "cursor-pointer" : ""}`}
         style={{ paddingLeft: `${12 + depth * 16}px`, paddingRight: "12px" }}
+        onClick={() => symbol.line != null && onSymbolClick?.(symbol.line)}
       >
         <span className="text-muted-foreground/50 w-3 shrink-0">
           {hasChildren ? (
-            <button type="button" onClick={() => setOpen((v) => !v)} className="flex items-center">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpen((v) => !v)
+              }}
+              className="flex items-center"
+            >
               {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             </button>
           ) : null}
@@ -117,7 +144,15 @@ function SymbolRow({ symbol, depth }: { symbol: OutlineSymbol; depth: number }) 
       </div>
       {open &&
         hasChildren &&
-        symbol.children?.map((child, i) => <SymbolRow key={i} symbol={child} depth={depth + 1} />)}
+        symbol.children?.map((child, i) => (
+          <SymbolRow
+            key={i}
+            symbol={child}
+            depth={depth + 1}
+            onSymbolClick={onSymbolClick}
+            activeLine={activeLine}
+          />
+        ))}
     </>
   )
 }
@@ -133,6 +168,29 @@ export function FileOutlineRenderer({ part }: { part: ToolResultContentPart }) {
   const rawSymbols = result?.symbols ?? result?.outline ?? result?.items ?? result
   const symbols = normalizeSymbols(Array.isArray(rawSymbols) ? rawSymbols : [])
   const total = countAll(symbols)
+
+  const {
+    loading,
+    result: fileResult,
+    error: fileError,
+    invoke,
+    reset,
+  } = useToolInvoke<FileReadResult>("file_read")
+  const [activeLine, setActiveLine] = useState<number | null>(null)
+
+  const handleSymbolClick = async (line: number) => {
+    if (activeLine === line) {
+      reset()
+      setActiveLine(null)
+      return
+    }
+    setActiveLine(line)
+    if (!fileResult) await invoke({ path })
+  }
+
+  const fileContent = fileResult?.content ?? ""
+  const ext = path.split(".").pop()?.toLowerCase() ?? ""
+  const fileName = path.split("/").pop() ?? path
 
   return (
     <ToolRendererShell
@@ -157,9 +215,46 @@ export function FileOutlineRenderer({ part }: { part: ToolResultContentPart }) {
       ) : (
         <div className="rk-scrollbar max-h-[50vh] overflow-auto py-1">
           {symbols.map((s, i) => (
-            <SymbolRow key={i} symbol={s} depth={0} />
+            <SymbolRow
+              key={i}
+              symbol={s}
+              depth={0}
+              onSymbolClick={handleSymbolClick}
+              activeLine={activeLine}
+            />
           ))}
         </div>
+      )}
+
+      {(activeLine != null || loading) && (
+        <InlineToolResult
+          title={loading && !fileContent ? `Loading ${path}…` : `${path} :${activeLine}`}
+          onDismiss={() => {
+            reset()
+            setActiveLine(null)
+          }}
+          error={fileError}
+        >
+          {fileContent && (
+            <div>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <span className="text-muted-foreground font-mono text-[10px]">
+                  {fileContent.split("\n").length} lines · jump to :{activeLine}
+                </span>
+                <CopyButton text={fileContent} />
+              </div>
+              <SimpleCodeEditor
+                code={fileContent}
+                language={ext}
+                fileName={fileName}
+                showHeader={false}
+                maxHeight="40vh"
+                fontSize={12}
+                readOnly
+              />
+            </div>
+          )}
+        </InlineToolResult>
       )}
     </ToolRendererShell>
   )

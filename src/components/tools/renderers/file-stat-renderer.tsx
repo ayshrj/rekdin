@@ -1,17 +1,23 @@
 "use client"
 
+import { useCallback, useState } from "react"
+
 import { FileExtensionIcon } from "@/components/file-extension-icon"
 
 import {
   CopyButton,
   EmptyState,
+  InlineToolResult,
   RawPayloadDisclosure,
   ToolMetaRow,
   ToolRendererShell,
   ToolStatusBadge,
+  useToolInvoke,
 } from "./renderer-primitives"
 import { SimpleCodeEditor } from "./simple-code-editor"
 import { type ToolResultContentPart } from "./tool-result-renderer"
+
+type FileReadResult = { path?: string; content?: string; truncated?: boolean }
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -63,6 +69,27 @@ export function FileStatRenderer({ part }: { part: ToolResultContentPart }) {
     (part.toolInput as { path?: string } | undefined)?.path ??
     (result?.path as string | undefined) ??
     ""
+
+  // Hooks must be called unconditionally before any early return
+  const {
+    loading: readLoading,
+    result: readResult,
+    error: readError,
+    invoke: readInvoke,
+    reset: readReset,
+  } = useToolInvoke<FileReadResult>("file_read")
+  const [readOpen, setReadOpen] = useState(false)
+
+  const handleRead = useCallback(async () => {
+    const path = (result?.path ?? inputPath) as string
+    if (readOpen) {
+      readReset()
+      setReadOpen(false)
+      return
+    }
+    setReadOpen(true)
+    await readInvoke({ path })
+  }, [readOpen, readInvoke, readReset, result, inputPath])
 
   // ── file_head_tail ────────────────────────────────────────────────────────
   if (type === "file_head_tail") {
@@ -141,6 +168,10 @@ export function FileStatRenderer({ part }: { part: ToolResultContentPart }) {
           ? String(size)
           : undefined
 
+  const fileContent = readResult?.content ?? ""
+  const ext = path.split(".").pop()?.toLowerCase() ?? ""
+  const fileName = path.split("/").pop() ?? path
+
   return (
     <ToolRendererShell
       header={
@@ -155,6 +186,16 @@ export function FileStatRenderer({ part }: { part: ToolResultContentPart }) {
           <ToolStatusBadge variant="neutral">{isDir ? "directory" : "file"}</ToolStatusBadge>
           {displaySize && (
             <span className="text-muted-foreground font-mono text-[10px]">{displaySize}</span>
+          )}
+          {!isDir && path && (
+            <button
+              type="button"
+              onClick={handleRead}
+              disabled={readLoading}
+              className="rk-flat-button ml-auto font-mono text-[10px] disabled:opacity-50"
+            >
+              {readLoading ? "Loading…" : readOpen ? "Dismiss" : "Read file"}
+            </button>
           )}
         </>
       }
@@ -200,6 +241,38 @@ export function FileStatRenderer({ part }: { part: ToolResultContentPart }) {
             </ToolMetaRow>
           )}
         </div>
+      )}
+
+      {readOpen && (
+        <InlineToolResult
+          title={readLoading ? `Loading ${path}…` : path}
+          onDismiss={() => {
+            readReset()
+            setReadOpen(false)
+          }}
+          error={readError}
+        >
+          {fileContent && (
+            <div>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <span className="text-muted-foreground font-mono text-[10px]">
+                  {fileContent.split("\n").length} lines
+                  {readResult?.truncated ? " (truncated)" : ""}
+                </span>
+                <CopyButton text={fileContent} />
+              </div>
+              <SimpleCodeEditor
+                code={fileContent}
+                language={ext}
+                fileName={fileName}
+                showHeader={false}
+                maxHeight="40vh"
+                fontSize={12}
+                readOnly
+              />
+            </div>
+          )}
+        </InlineToolResult>
       )}
     </ToolRendererShell>
   )

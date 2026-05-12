@@ -1,10 +1,18 @@
 "use client"
 
-import React from "react"
+import React, { useCallback, useState } from "react"
 
+import { Markdown } from "@/components/markdown"
 import { ArrowTopRightOnSquare as ExternalLink, Clock, Search } from "@/lib/icons"
 
-import { EmptyState, RawPayloadDisclosure, ToolRendererShell } from "./renderer-primitives"
+import {
+  CopyButton,
+  EmptyState,
+  InlineToolResult,
+  RawPayloadDisclosure,
+  ToolRendererShell,
+  useToolInvoke,
+} from "./renderer-primitives"
 import { ToolResultContentPart } from "./tool-result-renderer"
 
 interface WebSearchResult {
@@ -37,6 +45,15 @@ function formatDate(s: string) {
   }
 }
 
+type VisitLinkResult = {
+  url?: string
+  content?: string
+  markdown?: string
+  text?: string
+  body?: string
+  title?: string
+}
+
 export const WebSearchResultRenderer: React.FC<{
   part: ToolResultContentPart
   onAction?: (action: string, data: unknown) => void
@@ -55,6 +72,36 @@ export const WebSearchResultRenderer: React.FC<{
   const args = part.toolInput || raw.args || {}
   const query: string = args.query || data.query || ""
   const results = Array.isArray(data.results) ? data.results : []
+
+  const {
+    loading,
+    result: previewResult,
+    error: previewError,
+    invoke,
+    reset,
+  } = useToolInvoke<VisitLinkResult>("visit_link")
+  const [activeUrl, setActiveUrl] = useState<string | null>(null)
+
+  const handlePreview = useCallback(
+    async (url: string) => {
+      if (activeUrl === url) {
+        reset()
+        setActiveUrl(null)
+        return
+      }
+      setActiveUrl(url)
+      await invoke({ url })
+    },
+    [activeUrl, invoke, reset]
+  )
+
+  const previewContent =
+    previewResult?.content ??
+    previewResult?.markdown ??
+    previewResult?.text ??
+    previewResult?.body ??
+    ""
+  const previewTitle = previewResult?.title ?? activeUrl ?? ""
 
   return (
     <ToolRendererShell
@@ -86,21 +133,33 @@ export const WebSearchResultRenderer: React.FC<{
         <div className="rk-scrollbar max-h-[60vh] divide-y overflow-auto">
           {results.map((item, i) => {
             const domain = item.domain || getDomain(item.url)
+            const isActive = activeUrl === item.url
             return (
               <div
                 key={i}
-                className="hover:bg-surface-4 px-3 py-2.5 transition-colors duration-100"
+                className={`px-3 py-2.5 transition-colors duration-100 ${isActive ? "bg-surface-4" : "hover:bg-surface-4"}`}
               >
-                {/* Title */}
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-tool-search mb-1 block font-mono text-[11px] leading-snug font-semibold hover:underline"
-                >
-                  {item.title}
-                  <ExternalLink className="ml-1 inline h-2.5 w-2.5 align-[-1px] opacity-50" />
-                </a>
+                {/* Title + preview button */}
+                <div className="mb-1 flex items-start gap-2">
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-tool-search min-w-0 flex-1 font-mono text-[11px] leading-snug font-semibold hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {item.title}
+                    <ExternalLink className="ml-1 inline h-2.5 w-2.5 align-[-1px] opacity-50" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => handlePreview(item.url)}
+                    className={`rk-flat-button shrink-0 font-mono text-[10px] ${isActive ? "text-foreground" : ""}`}
+                    title="Preview page content"
+                  >
+                    {loading && isActive ? "Loading…" : isActive ? "Dismiss" : "Preview"}
+                  </button>
+                </div>
                 {/* Meta */}
                 <div className="mb-1 flex items-center gap-2">
                   <span className="rk-meta-chip">{domain}</span>
@@ -121,6 +180,30 @@ export const WebSearchResultRenderer: React.FC<{
             )
           })}
         </div>
+      )}
+
+      {/* Inline page preview */}
+      {(activeUrl || loading) && (
+        <InlineToolResult
+          title={loading && !previewContent ? `Fetching ${activeUrl ?? ""}…` : previewTitle}
+          onDismiss={() => {
+            reset()
+            setActiveUrl(null)
+          }}
+          error={previewError}
+        >
+          {previewContent && (
+            <div>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <span className="rk-meta-chip truncate">{activeUrl}</span>
+                <CopyButton text={previewContent} />
+              </div>
+              <div className="rk-scrollbar max-h-[50vh] overflow-auto px-4 py-3">
+                <Markdown className="max-w-none wrap-break-word">{previewContent}</Markdown>
+              </div>
+            </div>
+          )}
+        </InlineToolResult>
       )}
     </ToolRendererShell>
   )

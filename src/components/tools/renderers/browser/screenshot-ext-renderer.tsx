@@ -1,6 +1,6 @@
 "use client"
 
-import { Image } from "@/components/ui/image"
+import { ClickableImage } from "@/components/ui/image-lightbox"
 
 import { BrowserShell } from "../browser-shell"
 import {
@@ -257,7 +257,7 @@ export function BrowserScreenshotExtRenderer({ part }: { part: ToolResultContent
         <EmptyState>No screenshot</EmptyState>
       ) : (
         <BrowserShell>
-          <Image
+          <ClickableImage
             src={
               screenshot.startsWith("data:") ? screenshot : `data:image/png;base64,${screenshot}`
             }

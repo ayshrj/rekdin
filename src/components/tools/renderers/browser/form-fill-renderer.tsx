@@ -3,7 +3,7 @@
 import { motion } from "motion/react"
 import React from "react"
 
-import { Image } from "@/components/ui/image"
+import { ClickableImage } from "@/components/ui/image-lightbox"
 import { Check, PencilSquare as Edit3, XMark } from "@/lib/icons"
 
 import { BrowserShell } from "../browser-shell"
@@ -26,7 +26,7 @@ export const FormFillRenderer: React.FC<FormFillRendererProps> = ({ part }) => {
     <div className="space-y-4">
       {screenshot ? (
         <BrowserShell>
-          <Image
+          <ClickableImage
             src={screenshot}
             alt="Form fill screenshot"
             className="h-auto w-full object-contain"

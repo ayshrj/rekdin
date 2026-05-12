@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react"
 
-import { Image } from "@/components/ui/image"
+import { ClickableImage } from "@/components/ui/image-lightbox"
 import { ChevronDoubleRight, CursorArrowRays as MousePointer, Eye, Type } from "@/lib/icons"
 
 import { BrowserShell } from "./browser-shell"
@@ -50,7 +50,7 @@ export const BrowserControlRenderer: React.FC<{
       {screenshot && (
         <BrowserShell className="mb-2">
           <div className="relative">
-            <Image
+            <ClickableImage
               ref={imageRef}
               src={screenshot}
               alt="Browser screenshot"

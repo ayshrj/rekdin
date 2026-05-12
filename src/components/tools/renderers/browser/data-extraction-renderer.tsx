@@ -3,7 +3,7 @@
 import { motion } from "motion/react"
 import React, { useState } from "react"
 
-import { Image } from "@/components/ui/image"
+import { ClickableImage } from "@/components/ui/image-lightbox"
 import { Check, ClipboardDocumentList as Copy, XMark } from "@/lib/icons"
 import { ArrowDownTray, Eye } from "@/lib/icons"
 
@@ -94,7 +94,7 @@ export const DataExtractionRenderer: React.FC<DataExtractionRendererProps> = ({ 
     <div className="space-y-4">
       {screenshot ? (
         <BrowserShell>
-          <Image
+          <ClickableImage
             src={screenshot}
             alt="Data extraction screenshot"
             className="h-auto w-full object-contain"

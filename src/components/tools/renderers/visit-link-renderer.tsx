@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 
-import { Image } from "@/components/ui/image"
+import { ClickableImage } from "@/components/ui/image-lightbox"
 
 import { BrowserShell } from "./browser-shell"
 import {
@@ -82,7 +82,7 @@ export function VisitLinkRenderer({ part }: { part: ToolResultContentPart }) {
       )}
       {screenshot && (
         <BrowserShell>
-          <Image
+          <ClickableImage
             src={
               screenshot.startsWith("data:") ? screenshot : `data:image/png;base64,${screenshot}`
             }

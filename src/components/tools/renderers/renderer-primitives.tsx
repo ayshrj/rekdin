@@ -22,9 +22,17 @@
 
 "use client"
 
-import React, { useState } from "react"
+import React, { useCallback, useState } from "react"
 
-import { Check, ChevronDown, ChevronRight, ClipboardDocumentList as Copy } from "@/lib/icons"
+import { useChat } from "@/contexts/chat-context"
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ClipboardDocumentList as Copy,
+  Search,
+  XMark as X,
+} from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 // ─── CopyButton ──────────────────────────────────────────────────────────────
@@ -287,6 +295,142 @@ export function RawPayloadDisclosure({
         <div className="px-3 pb-2">
           <pre className="rk-code-block max-h-60 text-[10px] leading-relaxed">{text}</pre>
         </div>
+      )}
+    </div>
+  )
+}
+
+// ─── SearchInput ─────────────────────────────────────────────────────────────
+// Compact filter input for renderer headers. Fits inline at h-6 height.
+
+export function SearchInput({
+  value,
+  onChange,
+  placeholder = "Filter…",
+  className,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  className?: string
+}) {
+  return (
+    <div
+      className={cn(
+        "bg-surface-4 flex h-6 items-center gap-1 rounded border px-1.5 transition-colors",
+        "focus-within:border-border focus-within:ring-border/30 focus-within:ring-1",
+        className
+      )}
+    >
+      <Search className="text-muted-foreground h-3 w-3 shrink-0" />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="text-foreground placeholder:text-muted-foreground/50 w-full bg-transparent font-mono text-[11px] outline-none"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="text-muted-foreground hover:text-foreground shrink-0 transition-colors"
+          aria-label="Clear filter"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── useToolInvoke ───────────────────────────────────────────────────────────
+// Shared hook for no-LLM direct tool invocations from renderers.
+// Calls /api/tools/invoke with the current session ID.
+// Only tools in the allowlist on that route are accepted.
+
+export type ToolInvokeState<T = unknown> = {
+  loading: boolean
+  result: T | null
+  error: string | null
+}
+
+export function useToolInvoke<T = unknown>(toolName: string) {
+  const { currentSessionId } = useChat()
+  const [state, setState] = useState<ToolInvokeState<T>>({
+    loading: false,
+    result: null,
+    error: null,
+  })
+
+  const invoke = useCallback(
+    async (toolInput: Record<string, unknown> = {}): Promise<T | null> => {
+      if (!currentSessionId) return null
+      setState({ loading: true, result: null, error: null })
+      try {
+        const res = await fetch("/api/tools/invoke", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: currentSessionId, toolName, toolInput }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error ?? "Tool invocation failed")
+        const result = (
+          typeof data.result === "string" ? JSON.parse(data.result) : data.result
+        ) as T
+        setState({ loading: false, result, error: null })
+        return result
+      } catch (err) {
+        const error = err instanceof Error ? err.message : "Unknown error"
+        setState({ loading: false, result: null, error })
+        return null
+      }
+    },
+    [currentSessionId, toolName]
+  )
+
+  const reset = useCallback(() => setState({ loading: false, result: null, error: null }), [])
+
+  return { ...state, invoke, reset }
+}
+
+// ─── InlineToolResult ────────────────────────────────────────────────────────
+// Collapsible panel for showing a nested tool result inside another renderer.
+// Pass a title (e.g. file path or commit SHA), an onDismiss handler, and
+// children as the rendered body content.
+
+export function InlineToolResult({
+  title,
+  onDismiss,
+  error,
+  children,
+  className,
+}: {
+  title: string
+  onDismiss: () => void
+  error?: string | null
+  children?: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn("bg-surface-3 border-t", className)}>
+      <div className="flex items-center gap-2 border-b px-3 py-1.5">
+        <span className="text-foreground/80 min-w-0 flex-1 truncate font-mono text-[11px]">
+          {title}
+        </span>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5 transition-colors"
+          title="Dismiss"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+      {error ? (
+        <p className="text-destructive px-3 py-2 font-mono text-[11px]">{error}</p>
+      ) : (
+        children
       )}
     </div>
   )

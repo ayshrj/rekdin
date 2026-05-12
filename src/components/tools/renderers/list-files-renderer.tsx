@@ -7,6 +7,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ChevronDown, ChevronRight, InformationCircle } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
+import { CopyButton, InlineToolResult, SearchInput, useToolInvoke } from "./renderer-primitives"
+import { SimpleCodeEditor } from "./simple-code-editor"
 import { type ToolResultContentPart } from "./tool-result-renderer"
 
 interface FileEntry {
@@ -95,6 +97,15 @@ function buildTree(files: FileEntry[]): TreeNode[] {
   return root
 }
 
+function flattenFiles(nodes: TreeNode[]): TreeNode[] {
+  const result: TreeNode[] = []
+  for (const node of nodes) {
+    if (node.type === "file") result.push(node)
+    if (node.children.length > 0) result.push(...flattenFiles(node.children))
+  }
+  return result
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -117,19 +128,35 @@ function TreeNodeRow({
   node,
   depth,
   defaultOpen,
+  onFileClick,
+  activePath,
+  forceOpen,
 }: {
   node: TreeNode
   depth: number
   defaultOpen: boolean
+  onFileClick?: (path: string) => void
+  activePath?: string | null
+  forceOpen?: boolean | null
 }) {
   const [open, setOpen] = React.useState(defaultOpen)
+
+  React.useEffect(() => {
+    if (forceOpen !== null && forceOpen !== undefined) setOpen(forceOpen)
+  }, [forceOpen])
 
   const isDir = node.type === "directory"
   const hasChildren = node.children.length > 0
   const isSkippedProtectedDirectory = isDir && node.protected && node.skipped
+  const isActive = !isDir && activePath === node.path
 
   const tooltipText =
     node.reason ?? "Skipped by default because this folder is expected to be large."
+
+  const handleClick = () => {
+    if (isDir && hasChildren) setOpen((o) => !o)
+    else if (!isDir) onFileClick?.(node.path)
+  }
 
   const row = (
     <div
@@ -140,10 +167,13 @@ function TreeNodeRow({
               "text-foreground/80 font-medium",
               hasChildren ? "hover:bg-muted/40 cursor-pointer" : "hover:bg-muted/30"
             )
-          : "text-foreground/65 hover:bg-muted/30"
+          : cn(
+              "cursor-pointer",
+              isActive ? "bg-primary/10 text-foreground" : "text-foreground/65 hover:bg-muted/30"
+            )
       )}
       style={{ paddingLeft: `${8 + depth * 16}px` }}
-      onClick={() => isDir && hasChildren && setOpen((o) => !o)}
+      onClick={handleClick}
     >
       <span className="text-muted-foreground/50 w-3 shrink-0">
         {isDir && hasChildren ? (
@@ -182,6 +212,14 @@ function TreeNodeRow({
           {formatSize(node.size)}
         </span>
       ) : null}
+
+      {/* Copy path — appears on row hover */}
+      <span
+        className="opacity-0 transition-opacity group-hover:opacity-100"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CopyButton text={node.path} className="h-3 w-3 p-0" />
+      </span>
     </div>
   )
 
@@ -206,6 +244,9 @@ function TreeNodeRow({
               node={child}
               depth={depth + 1}
               defaultOpen={defaultOpen}
+              onFileClick={onFileClick}
+              activePath={activePath}
+              forceOpen={forceOpen}
             />
           ))}
         </>
@@ -213,6 +254,8 @@ function TreeNodeRow({
     </>
   )
 }
+
+type FileReadResult = { path?: string; content?: string; truncated?: boolean }
 
 export const ListFilesRenderer: React.FC<{
   part: ToolResultContentPart
@@ -224,45 +267,201 @@ export const ListFilesRenderer: React.FC<{
     result?.path ?? (part.toolInput as { path?: string } | undefined)?.path ?? "."
   const files = React.useMemo(() => normalizeFileEntries(result?.files), [result?.files])
   const tree = React.useMemo(() => buildTree(files), [files])
+  const allFileNodes = React.useMemo(() => flattenFiles(tree), [tree])
 
   const totalFiles = files.filter((f) => f.type === "file").length
   const totalDirs = files.filter((f) => f.type === "directory").length
   const skippedDirs = files.filter((f) => f.type === "directory" && f.skipped).length
 
+  const {
+    loading,
+    result: fileResult,
+    error: fileError,
+    invoke,
+    reset,
+  } = useToolInvoke<FileReadResult>("file_read")
+  const [activePath, setActivePath] = React.useState<string | null>(null)
+  const [filterQuery, setFilterQuery] = React.useState("")
+  const [forceOpen, setForceOpen] = React.useState<boolean | null>(null)
+
+  const handleFileClick = React.useCallback(
+    async (path: string) => {
+      if (activePath === path) {
+        reset()
+        setActivePath(null)
+        return
+      }
+      setActivePath(path)
+      await invoke({ path })
+    },
+    [activePath, invoke, reset]
+  )
+
+  const handleForceOpen = React.useCallback((value: boolean) => {
+    setForceOpen(value)
+    setTimeout(() => setForceOpen(null), 0)
+  }, [])
+
+  const q = filterQuery.toLowerCase()
+  const filteredNodes = q
+    ? allFileNodes.filter(
+        (n) => n.path.toLowerCase().includes(q) || n.name.toLowerCase().includes(q)
+      )
+    : null
+
+  const fileContent = fileResult?.content ?? ""
+  const filePath = fileResult?.path ?? activePath ?? ""
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? ""
+  const fileName = filePath.split("/").pop() ?? filePath
+
   return (
     <div className="w-full min-w-0 overflow-hidden rounded-lg">
       {/* Header */}
-      <div className="bg-muted/20 flex items-center justify-between border-b px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <FolderIcon open className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-          <span className="text-foreground/70 truncate font-mono text-[11px]" title={rootPath}>
-            {rootPath}
-          </span>
-        </div>
+      <div className="bg-muted/20 flex items-center gap-2 border-b px-3 py-2">
+        <FolderIcon open className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+        <span
+          className="text-foreground/70 min-w-0 flex-1 truncate font-mono text-[11px]"
+          title={rootPath}
+        >
+          {rootPath}
+        </span>
+        {/* Search input */}
+        {totalFiles > 0 && (
+          <SearchInput
+            value={filterQuery}
+            onChange={setFilterQuery}
+            placeholder="Filter files…"
+            className="w-36"
+          />
+        )}
+        {/* Stats / match count */}
         <div className="text-muted-foreground flex shrink-0 items-center gap-2 text-[10px]">
-          {totalDirs > 0 && (
-            <span>
-              {totalDirs} folder{totalDirs !== 1 ? "s" : ""}
+          {filteredNodes ? (
+            <span className={filteredNodes.length === 0 ? "text-destructive" : ""}>
+              {filteredNodes.length} match{filteredNodes.length !== 1 ? "es" : ""}
             </span>
+          ) : (
+            <>
+              {totalDirs > 0 && <span>{totalDirs}d</span>}
+              {totalFiles > 0 && <span>{totalFiles}f</span>}
+              {skippedDirs > 0 && (
+                <span className="text-status-warning">{skippedDirs} skipped</span>
+              )}
+            </>
           )}
-          {totalFiles > 0 && (
-            <span>
-              {totalFiles} file{totalFiles !== 1 ? "s" : ""}
-            </span>
-          )}
-          {skippedDirs > 0 && <span className="text-status-warning">{skippedDirs} skipped</span>}
         </div>
+        {/* Expand / Collapse all — only show when not filtering */}
+        {!filteredNodes && tree.length > 0 && (
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => handleForceOpen(true)}
+              className="rk-flat-button font-mono text-[10px]"
+              title="Expand all"
+            >
+              ↕ All
+            </button>
+            <button
+              type="button"
+              onClick={() => handleForceOpen(false)}
+              className="rk-flat-button font-mono text-[10px]"
+              title="Collapse all"
+            >
+              ↔ Col
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Tree */}
+      {/* Body: filtered flat list OR full tree */}
       {tree.length === 0 ? (
         <div className="text-muted-foreground px-3 py-4 text-xs italic">Empty directory</div>
+      ) : filteredNodes ? (
+        filteredNodes.length === 0 ? (
+          <div className="text-muted-foreground px-3 py-4 text-xs italic">No matches</div>
+        ) : (
+          <div className="rk-scrollbar max-h-[60vh] divide-y overflow-auto">
+            {filteredNodes.map((node) => (
+              <div
+                key={node.path}
+                className={cn(
+                  "group flex cursor-pointer items-center gap-2 px-3 py-1.5 transition-colors",
+                  activePath === node.path ? "bg-primary/10" : "hover:bg-muted/30"
+                )}
+                onClick={() => handleFileClick(node.path)}
+              >
+                <FileExtensionIcon
+                  extensionName={node.name}
+                  className="h-3.5 w-3.5 shrink-0 text-[14px]"
+                />
+                <span
+                  className="text-foreground/75 min-w-0 flex-1 truncate font-mono text-[11px]"
+                  title={node.path}
+                >
+                  {node.path}
+                </span>
+                {node.size > 0 && (
+                  <span className="text-muted-foreground/40 shrink-0 text-[10px]">
+                    {formatSize(node.size)}
+                  </span>
+                )}
+                <span
+                  className="opacity-0 transition-opacity group-hover:opacity-100"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <CopyButton text={node.path} className="h-3 w-3 p-0" />
+                </span>
+              </div>
+            ))}
+          </div>
+        )
       ) : (
         <div className="rk-scrollbar max-h-[60vh] overflow-auto py-1">
           {tree.map((node) => (
-            <TreeNodeRow key={node.path} node={node} depth={0} defaultOpen={true} />
+            <TreeNodeRow
+              key={node.path}
+              node={node}
+              depth={0}
+              defaultOpen={true}
+              onFileClick={handleFileClick}
+              activePath={activePath}
+              forceOpen={forceOpen}
+            />
           ))}
         </div>
+      )}
+
+      {/* Inline file reader */}
+      {(activePath || loading) && (
+        <InlineToolResult
+          title={loading ? `Loading ${activePath ?? ""}…` : filePath}
+          onDismiss={() => {
+            reset()
+            setActivePath(null)
+          }}
+          error={fileError}
+        >
+          {fileContent && (
+            <div className="border-b pb-0">
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <span className="text-muted-foreground font-mono text-[10px]">
+                  {fileContent.split("\n").length} lines
+                  {fileResult?.truncated ? " (truncated)" : ""}
+                </span>
+                <CopyButton text={fileContent} />
+              </div>
+              <SimpleCodeEditor
+                code={fileContent}
+                language={ext}
+                fileName={fileName}
+                showHeader={false}
+                maxHeight="40vh"
+                fontSize={12}
+                readOnly
+              />
+            </div>
+          )}
+        </InlineToolResult>
       )}
     </div>
   )

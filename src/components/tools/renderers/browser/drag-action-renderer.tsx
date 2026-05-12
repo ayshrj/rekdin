@@ -3,7 +3,7 @@
 import { motion } from "motion/react"
 import React, { useEffect, useMemo, useRef, useState } from "react"
 
-import { Image } from "@/components/ui/image"
+import { ClickableImage } from "@/components/ui/image-lightbox"
 import { ArrowRight, Check, Move, XMark } from "@/lib/icons"
 
 import { BrowserShell } from "../browser-shell"
@@ -58,7 +58,7 @@ export const DragActionRenderer: React.FC<DragActionRendererProps> = ({ part }) 
       {screenshot ? (
         <BrowserShell>
           <div className="relative">
-            <Image
+            <ClickableImage
               ref={imageRef}
               src={screenshot}
               alt="Drag action screenshot"
