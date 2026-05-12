@@ -42,6 +42,7 @@ export interface ChatMessage {
     backgroundJobId?: string
     errorCode?: number | null
     errorAction?: string | null
+    compactionMarker?: boolean
   }
 }
 

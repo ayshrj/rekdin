@@ -367,6 +367,43 @@ export interface AgentRunResult {
   retryCount: number
 }
 
+export type InvokableModel = {
+  invoke: (messages: BaseMessage[]) => Promise<{ content: string | unknown[] }>
+}
+
+/**
+ * Creates an invokable LLM from provider settings for single-shot (non-agent) calls.
+ * Mirrors createModel() but returns a type that exposes .invoke() rather than .bindTools().
+ */
+export function buildLlmFromSettings(
+  providerSettings: ProviderSettings,
+  origin?: string
+): InvokableModel {
+  const provider = normalizeLlmProvider(providerSettings.provider)
+  const modelId =
+    getProviderModel(provider, providerSettings).trim() ||
+    (provider === "openrouter"
+      ? OPENROUTER_MODEL
+      : provider === "azure_openai"
+        ? ""
+        : getProviderDefaultModel(provider))
+
+  return createModel({
+    provider,
+    origin,
+    modelId,
+    openRouterApiKey: providerSettings.openRouterApiKey,
+    openAIApiKey: providerSettings.openAIApiKey,
+    geminiApiKey: providerSettings.geminiApiKey,
+    claudeApiKey: providerSettings.claudeApiKey,
+    grokApiKey: providerSettings.grokApiKey,
+    azureOpenAIApiKey: providerSettings.azureOpenAIApiKey,
+    azureOpenAIEndpoint: providerSettings.azureOpenAIEndpoint,
+    azureOpenAIApiVersion: providerSettings.azureOpenAIApiVersion,
+    azureOpenAIDeployment: providerSettings.azureOpenAIDeployment,
+  }) as unknown as InvokableModel
+}
+
 /**
  * Identifies transient provider failures that are worth retrying inside a single agent turn.
  */

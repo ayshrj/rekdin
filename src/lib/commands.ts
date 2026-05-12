@@ -11,6 +11,7 @@ export type SlashCommandId =
   | "export"
   | "clear"
   | "help"
+  | "compact"
 
 export interface SlashCommandDefinition {
   id: SlashCommandId
@@ -86,6 +87,13 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
     label: "Help",
     usage: "/help",
     description: "Show available slash commands.",
+    handlerType: "client_action",
+  },
+  {
+    id: "compact",
+    label: "Compact",
+    usage: "/compact [focus]",
+    description: "Summarize conversation history to free up context window space.",
     handlerType: "client_action",
   },
 ]

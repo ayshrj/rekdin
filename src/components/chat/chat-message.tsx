@@ -37,13 +37,38 @@ function workflowBadgeVariant(
   return "default"
 }
 
+function CompactionBanner({ summary }: { summary: string }) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div className="border-tool-data/25 bg-surface-3/60 my-2 rounded-lg border px-3 py-2">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-2 text-left"
+        aria-expanded={expanded}
+      >
+        <span className="text-tool-data shrink-0 font-mono text-[10px] font-semibold tracking-wider uppercase">
+          Context compacted
+        </span>
+        <span className="text-muted-foreground ml-auto shrink-0 font-mono text-[10px]">
+          {expanded ? "hide" : "show"}
+        </span>
+      </button>
+      {expanded && (
+        <p className="text-muted-foreground mt-1.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
+          {summary}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /**
  * Renders a persisted chat message, including workflow-aware structured output blocks for
  * selected assistant responses.
  */
 export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
-  const isUser = message.role === "user"
   const [copied, setCopied] = useState(false)
+  const isUser = message.role === "user"
   const workflowId = message.metadata?.workflowId
   const workflow = getWorkflowPreset(workflowId)
   const isStructuredDraft =
@@ -276,6 +301,11 @@ export function ChatMessage({ message, showHeader = true }: ChatMessageProps) {
 
   // ─── Badge helpers ──────────────────────────────────────────────────────────
   const badgeVariant = workflowBadgeVariant(workflowId)
+
+  // ─── Compaction banner ───────────────────────────────────────────────────────
+  if (message.metadata?.compactionMarker) {
+    return <CompactionBanner summary={message.content} />
+  }
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (

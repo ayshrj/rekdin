@@ -89,6 +89,7 @@ type ChatContextValue = {
       workflowId?: string
     }
   ) => Promise<void>
+  applyCompaction: (sessionId: string, summary: string) => void
   refreshSessions: () => Promise<void>
 }
 
@@ -334,6 +335,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [messagesBySession, setMessagesBySession] = React.useState<Record<string, ChatMessage[]>>(
     {}
   )
+  const [compactionBySession, setCompactionBySession] = React.useState<
+    Record<string, { messageIndex: number; summary: string }>
+  >({})
   const [toolResults, setToolResults] = React.useState<ToolResultEntry[]>([])
   const [isLoading, setIsLoading] = React.useState(false)
   const [isThinking, setIsThinking] = React.useState(false)
@@ -511,6 +515,26 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       })
     },
     []
+  )
+
+  const applyCompaction = React.useCallback(
+    (sessionId: string, summary: string) => {
+      updateMessages(sessionId, (prev) => {
+        const marker: ChatMessage = {
+          id: `compact-${Date.now()}`,
+          sessionId,
+          role: "system",
+          content: summary,
+          timestamp: new Date().toISOString(),
+          metadata: { compactionMarker: true },
+        }
+        const messageIndex = prev.length
+        setCompactionBySession((c) => ({ ...c, [sessionId]: { messageIndex, summary } }))
+        void replaceMessage(sessionId, marker).catch(() => undefined)
+        return [...prev, marker]
+      })
+    },
+    [updateMessages]
   )
 
   const hydrateFromIdb = React.useCallback(
@@ -1082,11 +1106,23 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const history = trimHistory(
-          (messagesBySession[targetSession] ?? [])
-            .filter((m) => !(m.role === "system" && m.metadata?.errorCode !== undefined))
-            .concat(optimisticUser)
-        )
+        const rawMessages = messagesBySession[targetSession] ?? []
+        const compaction = compactionBySession[targetSession]
+        const baseMessages = compaction
+          ? [
+              {
+                id: "compact-summary",
+                sessionId: targetSession,
+                role: "assistant" as const,
+                content: `[Prior conversation summary]\n${compaction.summary}`,
+                timestamp: new Date(0).toISOString(),
+              },
+              ...rawMessages
+                .filter((m) => !m.metadata?.compactionMarker && !m.metadata?.errorCode)
+                .slice(compaction.messageIndex),
+            ]
+          : rawMessages.filter((m) => !(m.role === "system" && m.metadata?.errorCode !== undefined))
+        const history = trimHistory(baseMessages.concat(optimisticUser))
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1352,6 +1388,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       cloudinaryApiKey,
       cloudinaryApiSecret,
       cloudinaryCloudName,
+      compactionBySession,
       currentSessionId,
       hydrateFromIdb,
       isLoading,
@@ -1425,9 +1462,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       joinSession,
       deleteSession,
       sendMessage,
+      applyCompaction,
       refreshSessions,
     }),
     [
+      applyCompaction,
       azureOpenAIApiKey,
       azureOpenAIApiVersion,
       azureOpenAIDeployment,

@@ -362,6 +362,77 @@ function WorkflowBar({
   )
 }
 
+// ─── ContextUsageRing ─────────────────────────────────────────────────────────
+// Circular progress ring showing approximate context usage vs the 12k-token
+// trimHistory budget. Clicking it triggers /compact.
+
+const CONTEXT_TOKEN_BUDGET = 12_000
+
+function ContextUsageRing({
+  pct,
+  isDisabled,
+  onClick,
+}: {
+  pct: number
+  isDisabled: boolean
+  onClick: () => void
+}) {
+  const radius = 8
+  const circumference = 2 * Math.PI * radius
+  const strokeDashoffset = circumference * (1 - Math.min(pct, 1))
+  const displayPct = Math.round(Math.min(pct, 1) * 100)
+
+  const colorClass =
+    pct > 0.85 ? "text-destructive" : pct > 0.6 ? "text-status-warning" : "text-status-success"
+
+  return (
+    <TooltipProvider delayDuration={250}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            disabled={isDisabled}
+            onClick={onClick}
+            className={cn(
+              "relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+              colorClass,
+              isDisabled && "opacity-50"
+            )}
+            aria-label="Context usage — click to compact"
+          >
+            <svg className="absolute h-5 w-5 -rotate-90" viewBox="0 0 20 20" fill="none">
+              <circle
+                cx="10"
+                cy="10"
+                r={radius}
+                strokeWidth="2"
+                stroke="currentColor"
+                className="opacity-20"
+              />
+              <circle
+                cx="10"
+                cy="10"
+                r={radius}
+                strokeWidth="2"
+                stroke="currentColor"
+                strokeDasharray={circumference}
+                strokeDashoffset={strokeDashoffset}
+                strokeLinecap="round"
+              />
+            </svg>
+            <span className="relative z-10 font-mono text-[6px] leading-none font-bold tabular-nums">
+              {displayPct}
+            </span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="center" className="text-xs">
+          ~{displayPct}% context used · Click to compact
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 // ─── ComposerMeta ─────────────────────────────────────────────────────────────
 // Single row: workspace path left, policy selector right.
 
@@ -371,12 +442,14 @@ function ComposerMeta({
   isDisabled,
   onChangeWorkspace,
   onChangePolicy,
+  rightSlot,
 }: {
   workspaceRoot: string | null
   toolPolicy: ToolPolicyProfile
   isDisabled: boolean
   onChangeWorkspace: () => void
   onChangePolicy: (p: ToolPolicyProfile) => void
+  rightSlot?: React.ReactNode
 }) {
   return (
     <div id="tour-composer-meta" className="rk-composer-meta">
@@ -391,8 +464,9 @@ function ComposerMeta({
         </span>
       </div>
 
-      {/* Right: change + policy */}
+      {/* Right: context ring + change + policy */}
       <div className="flex shrink-0 items-center gap-2">
+        {rightSlot}
         <button type="button" className="rk-composer-change-btn" onClick={onChangeWorkspace}>
           Change
         </button>
@@ -465,6 +539,7 @@ export function ChatPanel() {
     azureOpenAIApiVersion,
     azureOpenAIDeployment,
     workspaceRoot,
+    applyCompaction,
   } = useChat()
 
   // ── Refs ────────────────────────────────────────────────────────────────────
@@ -485,6 +560,22 @@ export function ChatPanel() {
   const [selectedWorkflowId, setSelectedWorkflowId] = React.useState<string | null>(null)
   const [showCommandHelp, setShowCommandHelp] = React.useState(false)
   const [showWorkspaceSelector, setShowWorkspaceSelector] = React.useState(false)
+  const [isCompacting, setIsCompacting] = React.useState(false)
+
+  // ── Context usage ───────────────────────────────────────────────────────────
+  const contextPct = React.useMemo(() => {
+    const used = messages
+      .filter((m) => !m.metadata?.compactionMarker)
+      .reduce((sum, m) => {
+        const contentTokens = Math.ceil((m.content ?? "").length / 4)
+        const toolTokens = (m.toolCalls ?? []).reduce(
+          (s, tc) => s + Math.ceil(JSON.stringify(tc.result ?? "").length / 4),
+          0
+        )
+        return sum + contentTokens + toolTokens
+      }, 0)
+    return used / CONTEXT_TOKEN_BUDGET
+  }, [messages])
 
   // ── Derived ─────────────────────────────────────────────────────────────────
   const missingApiKey = React.useMemo(
@@ -740,6 +831,34 @@ export function ChatPanel() {
     if (!nextValue.trim()) setSelectedWorkflowId(null)
   }, [])
 
+  const triggerCompact = React.useCallback(
+    async (focus?: string) => {
+      if (!currentSessionId) {
+        toast.error("Open a session before compacting.")
+        return
+      }
+      setIsCompacting(true)
+      try {
+        const res = await fetch("/api/compact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: currentSessionId, focus }),
+        })
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string }
+          throw new Error(body.error ?? "Compact failed")
+        }
+        const { summary } = (await res.json()) as { summary: string }
+        applyCompaction(currentSessionId, summary)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Compact failed")
+      } finally {
+        setIsCompacting(false)
+      }
+    },
+    [applyCompaction, currentSessionId]
+  )
+
   const handleSend = React.useCallback(
     async (content: string, attachments: File[]) => {
       const slashCommand = parseSlashCommand(content)
@@ -790,6 +909,10 @@ export function ChatPanel() {
           setShowCommandHelp(true)
           return
         }
+        if (command.id === "compact") {
+          await triggerCompact(args?.trim() || undefined)
+          return
+        }
       }
 
       const wf = selectedWorkflowId
@@ -810,13 +933,14 @@ export function ChatPanel() {
       selectedWorkflowId,
       sendMessage,
       toolPolicy,
+      triggerCompact,
       workflowPresets,
     ]
   )
 
   // ── Error state ──────────────────────────────────────────────────────────────
   const lastMsg = messages[messages.length - 1]
-  const hasError = lastMsg?.role === "system"
+  const hasError = lastMsg?.role === "system" && !lastMsg?.metadata?.compactionMarker
   const lastUserMsg = hasError ? [...messages].reverse().find((m) => m.role === "user") : null
   const errorParsed = hasError && lastMsg ? parseLLMError(lastMsg.content ?? "") : null
 
@@ -1091,6 +1215,15 @@ export function ChatPanel() {
                 isDisabled={isLoading || isThinking}
                 onChangeWorkspace={() => setShowWorkspaceSelector(true)}
                 onChangePolicy={setToolPolicy}
+                rightSlot={
+                  messages.length > 0 ? (
+                    <ContextUsageRing
+                      pct={contextPct}
+                      isDisabled={isLoading || isThinking || isCompacting}
+                      onClick={() => void triggerCompact()}
+                    />
+                  ) : undefined
+                }
               />
 
               {/* 3. Selected workflow card — only when a workflow is loaded */}
@@ -1130,7 +1263,7 @@ export function ChatPanel() {
                     value={inputValue}
                     onValueChange={handleInputChange}
                     onSend={handleSend}
-                    isLoading={isLoading || isThinking}
+                    isLoading={isLoading || isThinking || isCompacting}
                     disabled={false}
                   />
                 )}
