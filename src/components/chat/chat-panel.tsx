@@ -564,8 +564,8 @@ export function ChatPanel() {
 
   const missingApiKeyMessage = React.useMemo(() => {
     if (!missingApiKey) return ""
-    return getProviderMissingConfigMessage(llmProvider).replace("Set your ", "Add your ")
-  }, [llmProvider, missingApiKey])
+    return "Choose a provider and add its required credentials and model in Settings first."
+  }, [missingApiKey])
 
   const capabilities = React.useMemo(
     () => [
