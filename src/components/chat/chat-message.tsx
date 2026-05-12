@@ -390,7 +390,7 @@ function ToolDot({ name }: { name: string }) {
   const colorVar = toolCategoryColor(name)
   return (
     <span
-      className="inline-block h-[5px] w-[5px] shrink-0 rounded-full"
+      className="inline-block h-1.25 w-1.25 shrink-0 rounded-full"
       style={{ background: colorVar }}
     />
   )

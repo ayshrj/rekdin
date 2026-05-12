@@ -806,7 +806,10 @@ export function WorkspacePanel({ onChangeWorkspace }: { onChangeWorkspace?: () =
         </div>
 
         {/* Tab bar */}
-        <div className="bg-surface-2 border-border flex shrink-0 items-center justify-between border-b px-2 sm:px-4">
+        <div
+          id="tour-workspace-tabs"
+          className="bg-surface-2 border-border flex shrink-0 items-center justify-between border-b px-2 sm:px-4"
+        >
           <div className="flex min-w-0 flex-1">
             {[
               { id: "timeline", label: "Timeline", icon: GalleryVerticalEnd },

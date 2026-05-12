@@ -166,7 +166,9 @@ function DialogShell({
           ) : null}
         </DialogHeader>
 
-        <div className={cn("flex-1 overflow-y-auto", bodyClassName)}>{children}</div>
+        <div className={cn("rk-scrollbar min-h-0 flex-1 overflow-y-auto", bodyClassName)}>
+          {children}
+        </div>
 
         {(footer ?? null) && (
           <DialogFooter

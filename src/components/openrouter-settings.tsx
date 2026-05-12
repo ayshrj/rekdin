@@ -672,7 +672,7 @@ export function OpenRouterSettings({
         />
 
         {/* Tab bar */}
-        <div className="bg-surface-2 border-border flex shrink-0 border-b px-6">
+        <div className="bg-surface-2 border-border sticky top-0 z-10 flex shrink-0 border-b px-6">
           {(["model", "workflows", "uploads"] as const).map((tab) => (
             <button
               key={tab}
@@ -691,7 +691,7 @@ export function OpenRouterSettings({
         </div>
 
         {settingsTab === "model" ? (
-          <div className="rk-scrollbar min-w-0 space-y-4 overflow-y-auto px-6 py-5">
+          <div className="min-w-0 space-y-4 px-6 py-5">
             <div className="space-y-2">
               <Label>LLM provider</Label>
               <Select
@@ -1033,7 +1033,7 @@ export function OpenRouterSettings({
             )}
           </div>
         ) : settingsTab === "workflows" ? (
-          <div className="rk-scrollbar min-w-0 space-y-4 overflow-y-auto px-6 py-5">
+          <div className="min-w-0 space-y-4 px-6 py-5">
             <div className="space-y-1">
               <div className="text-sm font-semibold">Custom workflow presets</div>
               <p className="text-muted-foreground text-xs">
@@ -1201,7 +1201,7 @@ export function OpenRouterSettings({
             </div>
           </div>
         ) : (
-          <div className="rk-scrollbar min-w-0 space-y-4 overflow-y-auto px-6 py-5">
+          <div className="min-w-0 space-y-4 px-6 py-5">
             <div className="space-y-1">
               <div className="text-sm font-semibold">Cloudinary uploads</div>
               <p className="text-muted-foreground text-xs">

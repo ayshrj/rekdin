@@ -169,7 +169,6 @@ const GROUPS_BY_MODE: Record<AgentMode, ToolGroup[]> = {
   general: [
     "network",
     "browser_read",
-    "browser_write",
     "workspace_read",
     "workspace_write",
     "documents",

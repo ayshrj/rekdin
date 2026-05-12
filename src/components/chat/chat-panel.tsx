@@ -379,7 +379,7 @@ function ComposerMeta({
   onChangePolicy: (p: ToolPolicyProfile) => void
 }) {
   return (
-    <div className="rk-composer-meta">
+    <div id="tour-composer-meta" className="rk-composer-meta">
       {/* Workspace path */}
       <div className="flex min-w-0 items-center gap-1.5">
         <Globe className="text-muted-foreground h-3 w-3 shrink-0" />

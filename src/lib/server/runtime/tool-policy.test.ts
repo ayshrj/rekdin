@@ -34,10 +34,14 @@ describe("resolveAllowedToolNames", () => {
 
   it("uses the registered tool names for form fill and codeact tools", () => {
     const generalTools = resolveAllowedToolNames("general", "balanced")
+    const browserTools = resolveAllowedToolNames("browser", "balanced")
     const workspaceTools = resolveAllowedToolNames("workspace", "full_auto")
 
-    expect(generalTools).toContain("browser_form_input_fill")
-    expect(generalTools).not.toContain("browser_form_fill")
+    // browser_write tools are only available in browser mode, not general mode
+    expect(generalTools).not.toContain("browser_form_input_fill")
+    expect(generalTools).not.toContain("browser_click")
+    expect(browserTools).toContain("browser_form_input_fill")
+    expect(browserTools).not.toContain("browser_form_fill")
     expect(workspaceTools).toContain("node_codeact")
     expect(workspaceTools).toContain("python_codeact")
     expect(workspaceTools).toContain("shell_codeact")

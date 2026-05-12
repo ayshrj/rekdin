@@ -33,20 +33,22 @@ const TOUR_STEPS: TourStep[] = [
       <div>
         <p className="text-foreground mb-1 text-sm font-semibold">Session history</p>
         <p className="text-muted-foreground text-xs leading-relaxed">
-          Open your past conversations here. Create new sessions or jump back into any previous one.
+          Every conversation is saved here. Switch between sessions or start a fresh one — context
+          and tool results are preserved per session.
         </p>
       </div>
     ),
   },
   {
-    selectorId: "tour-chat-panel",
-    position: "right",
+    selectorId: "tour-workflow-bar",
+    position: "top",
     content: (
       <div>
-        <p className="text-foreground mb-1 text-sm font-semibold">Chat</p>
+        <p className="text-foreground mb-1 text-sm font-semibold">Workflow presets</p>
         <p className="text-muted-foreground text-xs leading-relaxed">
-          Describe a research task or command. Rekdin uses tools like web search, browser
-          automation, and file editing to complete your request step by step.
+          One-click tasks for common jobs: deep research, code audit, browser automation, and more.
+          Chips marked <span className="text-foreground font-semibold">BG</span> run in the
+          background so you can keep chatting.
         </p>
       </div>
     ),
@@ -58,21 +60,39 @@ const TOUR_STEPS: TourStep[] = [
       <div>
         <p className="text-foreground mb-1 text-sm font-semibold">Message input</p>
         <p className="text-muted-foreground text-xs leading-relaxed">
-          Press Enter to send or Shift+Enter for a new line. Attach files with the paperclip icon.
-          You can also select workflow presets above to run pre-built tasks instantly.
+          Type <span className="text-foreground font-mono font-semibold">/</span> to open the slash
+          command menu — search, browse, audit, and more. Attach files with the paperclip. Enter
+          sends; Shift+Enter adds a line.
         </p>
       </div>
     ),
   },
   {
-    selectorId: "tour-workspace-panel",
+    selectorId: "tour-composer-meta",
+    position: "top",
+    content: (
+      <div>
+        <p className="text-foreground mb-1 text-sm font-semibold">Workspace &amp; tool policy</p>
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          The active folder the agent reads and writes. The icons on the right control what tools it
+          can use: <span className="text-foreground font-semibold">read-only</span>,{" "}
+          <span className="text-foreground font-semibold">balanced</span>, or{" "}
+          <span className="text-foreground font-semibold">full auto</span>.
+        </p>
+      </div>
+    ),
+  },
+  {
+    selectorId: "tour-workspace-tabs",
     position: "left",
     content: (
       <div>
-        <p className="text-foreground mb-1 text-sm font-semibold">Workspace</p>
+        <p className="text-foreground mb-1 text-sm font-semibold">Workspace panel</p>
         <p className="text-muted-foreground text-xs leading-relaxed">
-          Every tool call appears in the Timeline as it runs. Download artifacts, inspect results,
-          and review the activity log — all updating live.
+          <span className="text-foreground font-semibold">Timeline</span> shows each tool call live.{" "}
+          <span className="text-foreground font-semibold">Artifacts</span> collects generated files.{" "}
+          <span className="text-foreground font-semibold">Activity</span> is the full chronological
+          replay log for debugging.
         </p>
       </div>
     ),
@@ -84,8 +104,8 @@ const TOUR_STEPS: TourStep[] = [
       <div>
         <p className="text-foreground mb-1 text-sm font-semibold">Settings</p>
         <p className="text-muted-foreground text-xs leading-relaxed">
-          Choose between OpenRouter, OpenAI, Gemini, Claude, Grok, or Azure OpenAI. You can also
-          change models and configure agent behavior here.
+          Switch providers (OpenRouter, OpenAI, Gemini, Claude, Grok, Azure) and models, set your
+          workspace root, and create custom workflow presets.
         </p>
       </div>
     ),
@@ -378,6 +398,7 @@ function HomePageContent() {
         setIsOpen={setTourOpen}
         onStart={markTourSeen}
         onSkip={markTourSeen}
+        description="Six quick stops covering sessions, workflows, slash commands, tool policy, the workspace panel, and settings."
       />
     </div>
   )

@@ -479,7 +479,8 @@ export async function runAgent({
 }: AgentRunOptions): Promise<AgentRunResult> {
   return runWithToolExecutionContext({ sessionId, workspaceRoot }, async () => {
     const providerId = normalizeLlmProvider(providerSettings.provider)
-    const tools: StructuredToolInterface[] = createToolset({
+    const MAX_API_TOOLS = 128
+    const allTools: StructuredToolInterface[] = createToolset({
       headers: toolHeaders,
       allowedToolNames,
     }).filter((tool) =>
@@ -496,6 +497,15 @@ export async function runAgent({
       if (disabledTools.length > 0) {
         await onWarning?.(`Gemini disables unsupported tool schemas: ${disabledTools.join(", ")}.`)
       }
+    }
+
+    const tools: StructuredToolInterface[] =
+      allTools.length > MAX_API_TOOLS ? allTools.slice(0, MAX_API_TOOLS) : allTools
+    if (allTools.length > MAX_API_TOOLS) {
+      const trimmed = allTools.slice(MAX_API_TOOLS).map((t) => t.name)
+      await onWarning?.(
+        `Tool count (${allTools.length}) exceeds API limit of ${MAX_API_TOOLS}. Trimmed: ${trimmed.join(", ")}.`
+      )
     }
 
     let modelId =
