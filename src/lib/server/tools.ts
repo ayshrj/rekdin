@@ -47,6 +47,26 @@ let recaptchaInitialized = false
 let adblockerPromise: Promise<PuppeteerBlocker | null> | null = null
 let latexJsStylesPromise: Promise<string> | null = null
 
+function isRecoverableBrowserError(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err)
+  return (
+    message.includes("Session closed") ||
+    message.includes("Target closed") ||
+    message.includes("Protocol error") ||
+    message.includes("detached Frame") ||
+    message.includes("Detached Frame") ||
+    message.includes("Connection closed")
+  )
+}
+
+async function resetBrowserProcess() {
+  const existing = await browserPromise?.catch(() => null)
+  browserPromise = null
+  const manager = getBrowserSessionManager() as { resetAll?: () => void }
+  manager.resetAll?.()
+  await existing?.close().catch(() => {})
+}
+
 /**
  * Registers Puppeteer stealth behavior once for the shared browser instance.
  * Browser tools keep running without stealth if the plugin cannot initialize.
@@ -104,6 +124,16 @@ function ensureRecaptchaPlugin() {
  * Returns the singleton headless Puppeteer browser used by all browser tools.
  */
 async function getBrowser() {
+  if (browserPromise) {
+    // If the previous browser process disconnected (e.g. after a hot-reload orphaned
+    // the Puppeteer WebSocket), discard the stale promise and all sessions that used it.
+    const existing = await browserPromise.catch(() => null)
+    if (!existing?.isConnected()) {
+      browserPromise = null
+      const manager = getBrowserSessionManager() as { resetAll?: () => void }
+      manager.resetAll?.()
+    }
+  }
   if (!browserPromise) {
     ensureStealthPlugin()
     ensureRecaptchaPlugin()
@@ -136,16 +166,49 @@ async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
   }
 
   const manager = getBrowserSessionManager()
-  return manager.withPage(sessionId, getBrowser, async (page) => {
-    if (!(page as Page & { __rekdinAdblockEnabled?: boolean }).__rekdinAdblockEnabled) {
+  const runWithSessionPage = () =>
+    manager.withPage(sessionId, getBrowser, async (page) => {
+      if (!(page as Page & { __rekdinAdblockEnabled?: boolean }).__rekdinAdblockEnabled) {
+        const adblocker = await getAdblocker()
+        if (adblocker) {
+          await adblocker.enableBlockingInPage(page)
+        }
+        ;(page as Page & { __rekdinAdblockEnabled?: boolean }).__rekdinAdblockEnabled = true
+      }
+      return fn(page)
+    })
+
+  try {
+    return await runWithSessionPage()
+  } catch (err) {
+    if (!isRecoverableBrowserError(err)) throw err
+    await resetBrowserProcess()
+    return await runWithSessionPage()
+  }
+}
+
+async function withTemporaryPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
+  const run = async () => {
+    const browser = await getBrowser()
+    const page = await browser.newPage()
+    try {
       const adblocker = await getAdblocker()
       if (adblocker) {
         await adblocker.enableBlockingInPage(page)
       }
-      ;(page as Page & { __rekdinAdblockEnabled?: boolean }).__rekdinAdblockEnabled = true
+      return await fn(page)
+    } finally {
+      await page.close().catch(() => {})
     }
-    return fn(page)
-  })
+  }
+
+  try {
+    return await run()
+  } catch (err) {
+    if (!isRecoverableBrowserError(err)) throw err
+    await resetBrowserProcess()
+    return await run()
+  }
 }
 
 /**
@@ -2673,7 +2736,7 @@ export const browserSelectorScreenshotTool = tool(
 
 export const browserFullPageScreenshotTool = tool(
   async ({ url }) => {
-    return await withPage(async (page) => {
+    return await withTemporaryPage(async (page) => {
       await goto(page, url, "networkidle0")
       const artifact = await screenshotArtifact(page, true, "full-page-screenshot.png")
       return {

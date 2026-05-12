@@ -436,6 +436,18 @@ export function InlineToolResult({
   )
 }
 
+// ─── toScreenshotSrc ─────────────────────────────────────────────────────────
+// Normalises a screenshot value that may be:
+//   • a data URI  ("data:image/png;base64,…")  → use as-is
+//   • an artifact URL ("/api/artifacts/…") or absolute URL → use as-is
+//   • a raw base64 string (no prefix)          → prepend data URI header
+
+export function toScreenshotSrc(s: string): string {
+  if (!s) return s
+  if (s.startsWith("data:") || s.startsWith("/") || s.startsWith("http")) return s
+  return `data:image/png;base64,${s}`
+}
+
 // ─── ToolRendererShell ───────────────────────────────────────────────────────
 // The single outer wrapper for all renderers.
 // header → zone 1 (identity, status, primary metadata)

@@ -12,6 +12,7 @@ import {
   SegmentedControl,
   ToolRendererShell,
   ToolStatusBadge,
+  toScreenshotSrc,
 } from "./renderer-primitives"
 import { type ToolResultContentPart } from "./tool-result-renderer"
 
@@ -83,9 +84,7 @@ export function VisitLinkRenderer({ part }: { part: ToolResultContentPart }) {
       {screenshot && (
         <BrowserShell>
           <ClickableImage
-            src={
-              screenshot.startsWith("data:") ? screenshot : `data:image/png;base64,${screenshot}`
-            }
+            src={toScreenshotSrc(screenshot)}
             alt={title || url}
             className="h-auto w-full object-contain"
           />

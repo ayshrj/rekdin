@@ -8,6 +8,7 @@ import {
   RawPayloadDisclosure,
   ToolRendererShell,
   ToolStatusBadge,
+  toScreenshotSrc,
 } from "../renderer-primitives"
 import { type ToolResultContentPart } from "../tool-result-renderer"
 
@@ -258,9 +259,7 @@ export function BrowserScreenshotExtRenderer({ part }: { part: ToolResultContent
       ) : (
         <BrowserShell>
           <ClickableImage
-            src={
-              screenshot.startsWith("data:") ? screenshot : `data:image/png;base64,${screenshot}`
-            }
+            src={toScreenshotSrc(screenshot)}
             alt={title}
             className="h-auto w-full object-contain"
           />

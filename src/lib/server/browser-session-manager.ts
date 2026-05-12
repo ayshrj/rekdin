@@ -9,31 +9,62 @@ type BrowserSession = {
 class BrowserSessionManager {
   private sessions = new Map<string, BrowserSession>()
 
+  private async create(sessionId: string, browserFactory: () => Promise<Browser>) {
+    const browser = await browserFactory()
+    const page = await browser.newPage()
+    const session: BrowserSession = { id: sessionId, page, lastUsedAt: Date.now() }
+    this.sessions.set(sessionId, session)
+    return session
+  }
+
   async getOrCreate(sessionId: string, browserFactory: () => Promise<Browser>) {
     const existing = this.sessions.get(sessionId)
     if (existing) {
-      existing.lastUsedAt = Date.now()
-      return existing
+      // Quick health probe — isClosed() misses detached frames; evaluate() catches both
+      const healthy =
+        !existing.page.isClosed() &&
+        (await existing.page
+          .evaluate(() => null)
+          .then(() => true)
+          .catch(() => false))
+      if (healthy) {
+        existing.lastUsedAt = Date.now()
+        return existing
+      }
+      this.sessions.delete(sessionId)
     }
-    const browser = await browserFactory()
-    const page = await browser.newPage()
-    const session: BrowserSession = {
-      id: sessionId,
-      page,
-      lastUsedAt: Date.now(),
-    }
-    this.sessions.set(sessionId, session)
-    return session
+    return this.create(sessionId, browserFactory)
+  }
+
+  private static isRecoverable(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err)
+    return (
+      msg.includes("Session closed") ||
+      msg.includes("Target closed") ||
+      msg.includes("Protocol error") ||
+      msg.includes("detached Frame") ||
+      msg.includes("Detached Frame") ||
+      msg.includes("Connection closed")
+    )
   }
 
   async withPage<T>(
     sessionId: string,
     browserFactory: () => Promise<Browser>,
     fn: (page: Page) => Promise<T>
-  ) {
-    const session = await this.getOrCreate(sessionId, browserFactory)
-    session.lastUsedAt = Date.now()
-    return fn(session.page)
+  ): Promise<T> {
+    // Wrap the entire call including getOrCreate so errors from create() are also recovered
+    try {
+      const session = await this.getOrCreate(sessionId, browserFactory)
+      session.lastUsedAt = Date.now()
+      return await fn(session.page)
+    } catch (err) {
+      if (!BrowserSessionManager.isRecoverable(err)) throw err
+      // Discard the stale session and retry once with a fresh page
+      this.sessions.delete(sessionId)
+      const fresh = await this.create(sessionId, browserFactory)
+      return fn(fresh.page)
+    }
   }
 
   async reset(sessionId: string) {
@@ -41,6 +72,13 @@ class BrowserSessionManager {
     if (!session) return
     await session.page.close().catch(() => {})
     this.sessions.delete(sessionId)
+  }
+
+  resetAll() {
+    for (const session of this.sessions.values()) {
+      session.page.close().catch(() => {})
+    }
+    this.sessions.clear()
   }
 }
 
