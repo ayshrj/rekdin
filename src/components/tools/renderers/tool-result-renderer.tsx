@@ -4,6 +4,7 @@ import React from "react"
 
 export { toolLabels } from "../tool-labels"
 
+import { GraphqlIntrospectRenderer, OpenApiInspectRenderer } from "./api-spec-renderer"
 import { ArchiveRenderer } from "./archive-renderer"
 import { ArtifactRenderer } from "./artifact-renderer"
 import { BackgroundJobsRenderer } from "./background-jobs-renderer"
@@ -25,6 +26,13 @@ import { BrowserResultRenderer } from "./browser-result-renderer"
 import { CodeActRenderer } from "./code-act-renderer"
 import { CodeQualityRenderer } from "./code-quality-renderer"
 import { CommandResultRenderer } from "./command-result-renderer"
+import {
+  CsvToJsonRenderer,
+  JsonSchemaValidateRenderer,
+  JsonToCsvRenderer,
+  XmlToJsonRenderer,
+  XpathQueryRenderer,
+} from "./data-format-renderer"
 import { DataQueryRenderer } from "./data-query-renderer"
 import { DeepResearchRenderer } from "./deep-research-renderer"
 import { DependencyAuditRenderer } from "./dependency-audit-renderer"
@@ -47,14 +55,27 @@ import { GitLogRenderer } from "./git-log-renderer"
 import { GitShowRenderer } from "./git-show-renderer"
 import { GitStatusRenderer } from "./git-status-renderer"
 import { GitTagsRenderer } from "./git-tags-renderer"
+import {
+  GitCheckoutRenderer,
+  GitCommitRenderer,
+  GitPushRenderer,
+  GitStashRenderer,
+} from "./git-write-renderer"
 import { HashRenderer } from "./hash-renderer"
 import { HttpRequestRenderer } from "./http-request-renderer"
 import { ImageAnalysisRenderer } from "./image-analysis-renderer"
 import { ImageExifRenderer } from "./image-exif-renderer"
 import { ImageInfoRenderer } from "./image-info-renderer"
+import { ImageCropRenderer, ImageResizeRenderer } from "./image-tools-renderer"
 import { JsonResultRenderer } from "./json-result-renderer"
 import { LinkPreviewRenderer } from "./link-preview-renderer"
 import { ListFilesRenderer } from "./list-files-renderer"
+import {
+  DnsLookupRenderer,
+  PingRenderer,
+  SslCheckRenderer,
+  WhoisLookupRenderer,
+} from "./network-diagnostics-renderer"
 import { NpmPackageRenderer } from "./npm-package-renderer"
 import { NpmScriptsRenderer } from "./npm-scripts-renderer"
 import { PdfRenderer } from "./pdf-renderer"
@@ -66,10 +87,27 @@ import { SecurityCheckRenderer } from "./security-check-renderer"
 import { SessionInspectRenderer, SessionListRenderer } from "./session-renderer"
 import { SettingsSummaryRenderer } from "./settings-summary-renderer"
 import { SymbolRenderer } from "./symbol-renderer"
+import {
+  ClipboardReadRenderer,
+  ClipboardWriteRenderer,
+  DesktopNotifyRenderer,
+  ProcessListRenderer,
+  SystemInfoRenderer,
+} from "./system-renderer"
 import { TableRenderer } from "./table-renderer"
 import { TextAnalysisRenderer } from "./text-analysis-renderer"
 import { TextOutputRenderer } from "./text-output-renderer"
 import { TokenUsageReportRenderer, TraceSummaryRenderer } from "./trace-renderer"
+import {
+  ColorConvertRenderer,
+  CronExplainRenderer,
+  JsonDiffRenderer,
+  JwtDecodeRenderer,
+  RegexMatchRenderer,
+  TextDiffRenderer,
+  UrlParseRenderer,
+  UuidGenerateRenderer,
+} from "./utility-renderer"
 import { VisitLinkRenderer } from "./visit-link-renderer"
 import { WebMetadataRenderer } from "./web-metadata-renderer"
 import { WebSearchResultRenderer } from "./web-search-result-renderer"
@@ -338,6 +376,52 @@ const CONTENT_RENDERERS: Record<
   background_jobs_summary: BackgroundJobsRenderer,
   settings_summary: SettingsSummaryRenderer,
 
+  // Cluster A — developer utilities
+  jwt_decode: JwtDecodeRenderer,
+  regex_match: RegexMatchRenderer,
+  uuid_generate: UuidGenerateRenderer,
+  url_parse: UrlParseRenderer,
+  cron_explain: CronExplainRenderer,
+  color_convert: ColorConvertRenderer,
+
+  // Cluster B — diff & comparison
+  text_diff: TextDiffRenderer,
+  json_diff: JsonDiffRenderer,
+
+  // Cluster C — git write
+  git_commit: GitCommitRenderer,
+  git_checkout: GitCheckoutRenderer,
+  git_stash: GitStashRenderer,
+  git_push: GitPushRenderer,
+
+  // Cluster D — system & process
+  process_list: ProcessListRenderer,
+  system_info: SystemInfoRenderer,
+  clipboard_read: ClipboardReadRenderer,
+  clipboard_write: ClipboardWriteRenderer,
+  desktop_notify: DesktopNotifyRenderer,
+
+  // Cluster E — network diagnostics
+  dns_lookup: DnsLookupRenderer,
+  ssl_check: SslCheckRenderer,
+  ping: PingRenderer,
+  whois_lookup: WhoisLookupRenderer,
+
+  // Cluster F — API development
+  openapi_inspect: OpenApiInspectRenderer,
+  graphql_introspect: GraphqlIntrospectRenderer,
+
+  // Cluster G — image tools
+  image_resize: ImageResizeRenderer,
+  image_crop: ImageCropRenderer,
+
+  // Cluster H — data format
+  json_schema_validate: JsonSchemaValidateRenderer,
+  csv_to_json: CsvToJsonRenderer,
+  json_to_csv: JsonToCsvRenderer,
+  xml_to_json: XmlToJsonRenderer,
+  xpath_query: XpathQueryRenderer,
+
   generic: GenericResultRenderer,
 }
 
@@ -509,6 +593,53 @@ const TOOL_ACCENT_MAP: Record<string, string> = {
   token_usage_report: "border-tool-data/25",
   background_jobs_summary: "border-tool-data/25",
   settings_summary: "border-tool-json/25",
+
+  // Cluster A — developer utilities
+  jwt_decode: "border-tool-json/25",
+  regex_match: "border-tool-search/25",
+  uuid_generate: "border-tool-transforms/25",
+  url_parse: "border-tool-browser/25",
+  cron_explain: "border-tool-json/25",
+  color_convert: "border-tool-transforms/25",
+
+  // Cluster B — diff & comparison
+  text_diff: "border-tool-code/25",
+  json_diff: "border-tool-json/25",
+
+  // Cluster C — git write
+  git_commit: "border-tool-command/25",
+  git_checkout: "border-tool-command/25",
+  git_stash: "border-tool-command/25",
+  git_push: "border-tool-command/25",
+
+  // Cluster D — system & process
+  process_list: "border-tool-data/25",
+  system_info: "border-tool-data/25",
+  clipboard_read: "border-tool-data/25",
+  clipboard_write: "border-tool-command/25",
+  desktop_notify: "border-tool-command/25",
+
+  // Cluster E — network diagnostics
+  dns_lookup: "border-tool-browser/25",
+  ssl_check: "border-tool-browser/25",
+  ping: "border-tool-browser/25",
+  whois_lookup: "border-tool-research/25",
+
+  // Cluster F — API development
+  openapi_inspect: "border-tool-data/25",
+  graphql_introspect: "border-tool-data/25",
+
+  // Cluster G — image tools
+  image_resize: "border-tool-data/25",
+  image_crop: "border-tool-data/25",
+
+  // Cluster H — data format
+  json_schema_validate: "border-tool-json/25",
+  csv_to_json: "border-tool-data/25",
+  json_to_csv: "border-tool-data/25",
+  xml_to_json: "border-tool-json/25",
+  xpath_query: "border-tool-search/25",
+
   generic: "border-tool-generic/25",
 }
 

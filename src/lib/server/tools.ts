@@ -3,7 +3,7 @@ import { tool } from "@langchain/core/tools"
 import { Readability } from "@mozilla/readability"
 import { spawn } from "child_process"
 import crypto from "crypto"
-import { createPatch } from "diff"
+import { createPatch, createTwoFilesPatch } from "diff"
 import { unzipSync, zipSync } from "fflate"
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, unlink, writeFile } from "fs/promises"
 import { JSDOM } from "jsdom"
@@ -6524,6 +6524,1550 @@ export const executeCommandTool = tool(
   }
 )
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Cluster A — Developer Utility Tools
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const jwtDecodeTool = tool(
+  async ({ token }: { token: string }) => {
+    const parts = token.replace(/^Bearer\s+/i, "").split(".")
+    if (parts.length < 2 || parts.length > 3) {
+      return { type: "jwt_decode", error: "Invalid JWT: expected 2 or 3 dot-separated segments." }
+    }
+    function decodeSegment(seg: string): unknown {
+      try {
+        const padded = seg + "=".repeat((4 - (seg.length % 4)) % 4)
+        const json = Buffer.from(padded.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString(
+          "utf8"
+        )
+        return JSON.parse(json)
+      } catch {
+        return null
+      }
+    }
+    const header = decodeSegment(parts[0])
+    const payload = decodeSegment(parts[1]) as Record<string, unknown> | null
+    const now = Math.floor(Date.now() / 1000)
+    const exp = typeof payload?.exp === "number" ? payload.exp : undefined
+    const iat = typeof payload?.iat === "number" ? payload.iat : undefined
+    const nbf = typeof payload?.nbf === "number" ? payload.nbf : undefined
+    return {
+      type: "jwt_decode",
+      header,
+      payload,
+      hasSignature: parts.length === 3,
+      algorithm: (header as Record<string, unknown> | null)?.alg ?? undefined,
+      issuedAt: iat != null ? new Date(iat * 1000).toISOString() : undefined,
+      notBefore: nbf != null ? new Date(nbf * 1000).toISOString() : undefined,
+      expiresAt: exp != null ? new Date(exp * 1000).toISOString() : undefined,
+      expired: exp != null ? now > exp : undefined,
+      secondsUntilExpiry: exp != null ? exp - now : undefined,
+    }
+  },
+  {
+    name: "jwt_decode",
+    description:
+      "Decode a JWT token — return header, payload, and expiry info. Never verifies the signature.",
+    schema: z.object({ token: z.string().min(1) }),
+  }
+)
+
+export const regexMatchTool = tool(
+  async ({
+    pattern,
+    text,
+    flags = "",
+    limit = 50,
+  }: {
+    pattern: string
+    text: string
+    flags?: string
+    limit?: number
+  }) => {
+    let regex: RegExp
+    try {
+      const gFlags = flags.includes("g") ? flags : flags + "g"
+      regex = new RegExp(pattern, gFlags)
+    } catch (err) {
+      return {
+        type: "regex_match",
+        error: `Invalid regex: ${err instanceof Error ? err.message : String(err)}`,
+      }
+    }
+    const matches: Array<{
+      match: string
+      index: number
+      captures: string[]
+      groups: Record<string, string> | undefined
+    }> = []
+    let m: RegExpExecArray | null
+    while ((m = regex.exec(text)) !== null && matches.length < limit) {
+      matches.push({ match: m[0], index: m.index, captures: m.slice(1), groups: m.groups })
+      if (m[0].length === 0) regex.lastIndex++
+    }
+    const hasMore = m !== null
+    return {
+      type: "regex_match",
+      pattern,
+      flags,
+      matchCount: matches.length + (hasMore ? "+" : ""),
+      matches,
+    }
+  },
+  {
+    name: "regex_match",
+    description:
+      "Test a regex pattern against text and return all matches, capture groups, and indices.",
+    schema: z.object({
+      pattern: z.string().min(1),
+      text: z.string(),
+      flags: z.string().optional(),
+      limit: z.number().int().min(1).max(200).optional(),
+    }),
+  }
+)
+
+export const uuidGenerateTool = tool(
+  async ({ count = 1 }: { count?: number }) => {
+    const n = Math.min(Math.max(Math.round(count), 1), 16)
+    const uuids = Array.from({ length: n }, () => crypto.randomUUID())
+    return { type: "uuid_generate", count: n, uuids }
+  },
+  {
+    name: "uuid_generate",
+    description: "Generate one or more v4 UUIDs.",
+    schema: z.object({ count: z.number().int().min(1).max(16).optional() }),
+  }
+)
+
+export const urlParseTool = tool(
+  async ({ url }: { url: string }) => {
+    try {
+      const p = new URL(url)
+      const params: Record<string, string> = {}
+      p.searchParams.forEach((v, k) => {
+        params[k] = v
+      })
+      return {
+        type: "url_parse",
+        input: url,
+        protocol: p.protocol,
+        host: p.host,
+        hostname: p.hostname,
+        port: p.port || undefined,
+        pathname: p.pathname,
+        search: p.search || undefined,
+        hash: p.hash || undefined,
+        origin: p.origin,
+        params: Object.keys(params).length > 0 ? params : undefined,
+      }
+    } catch (err) {
+      return {
+        type: "url_parse",
+        error: `Invalid URL: ${err instanceof Error ? err.message : String(err)}`,
+      }
+    }
+  },
+  {
+    name: "url_parse",
+    description: "Parse a URL into protocol, host, path, query parameters, and hash.",
+    schema: z.object({ url: z.string().min(1) }),
+  }
+)
+
+const CRON_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const
+const CRON_DAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const
+
+function explainCronField(
+  value: string,
+  singular: string,
+  plural: string,
+  names?: readonly string[],
+  offset = 0
+): string {
+  if (value === "*" || value === "?") return `every ${singular}`
+  const name = (raw: string) => {
+    const n = parseInt(raw, 10)
+    return names && !isNaN(n) ? (names[n - offset] ?? raw) : raw
+  }
+  if (value.startsWith("*/")) return `every ${value.slice(2)} ${plural}`
+  if (value.includes(",")) return `at ${value.split(",").map(name).join(", ")}`
+  const [range, step] = value.split("/", 2)
+  if (range.includes("-")) {
+    const [s, e] = range.split("-")
+    const desc = `from ${name(s)} to ${name(e)}`
+    return step ? `every ${step} ${plural}, ${desc}` : desc
+  }
+  return name(range)
+}
+
+export const cronExplainTool = tool(
+  async ({ expression }: { expression: string }) => {
+    const parts = expression.trim().split(/\s+/)
+    if (parts.length < 5 || parts.length > 6) {
+      return {
+        type: "cron_explain",
+        error: `Expected 5 or 6 fields, got ${parts.length}.`,
+      }
+    }
+    const has6 = parts.length === 6
+    const [sec, min, hour, dom, month, dow] = has6 ? parts : ["0", ...parts]
+    return {
+      type: "cron_explain",
+      expression,
+      fields: {
+        second: has6 ? explainCronField(sec, "second", "seconds") : undefined,
+        minute: explainCronField(min, "minute", "minutes"),
+        hour: explainCronField(hour, "hour", "hours"),
+        dayOfMonth: explainCronField(dom, "day", "days"),
+        month: explainCronField(month, "month", "months", CRON_MONTHS, 1),
+        dayOfWeek: explainCronField(dow, "weekday", "weekdays", CRON_DAYS, 0),
+      },
+      summary: [
+        has6 && sec !== "0" ? `at second ${explainCronField(sec, "second", "seconds")}` : null,
+        `minute ${explainCronField(min, "minute", "minutes")}`,
+        `hour ${explainCronField(hour, "hour", "hours")}`,
+        dom !== "*" && dom !== "?" ? `day ${explainCronField(dom, "day", "days")}` : null,
+        month !== "*" ? `in ${explainCronField(month, "month", "months", CRON_MONTHS, 1)}` : null,
+        dow !== "*" && dow !== "?"
+          ? `on ${explainCronField(dow, "weekday", "weekdays", CRON_DAYS, 0)}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(", "),
+    }
+  },
+  {
+    name: "cron_explain",
+    description: "Describe a 5- or 6-field cron expression in plain English, field by field.",
+    schema: z.object({ expression: z.string().min(1) }),
+  }
+)
+
+function parseHex(hex: string): [number, number, number] | null {
+  const h = hex.replace(/^#/, "")
+  if (h.length === 3) {
+    return [parseInt(h[0] + h[0], 16), parseInt(h[1] + h[1], 16), parseInt(h[2] + h[2], 16)]
+  }
+  if (h.length === 6) {
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
+  }
+  return null
+}
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  const rn = r / 255,
+    gn = g / 255,
+    bn = b / 255
+  const max = Math.max(rn, gn, bn),
+    min = Math.min(rn, gn, bn)
+  const l = (max + min) / 2
+  if (max === min) return [0, 0, Math.round(l * 100)]
+  const d = max - min
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+  let h = 0
+  if (max === rn) h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6
+  else if (max === gn) h = ((bn - rn) / d + 2) / 6
+  else h = ((rn - gn) / d + 4) / 6
+  return [Math.round(h * 360), Math.round(s * 100), Math.round(l * 100)]
+}
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  const sn = s / 100,
+    ln = l / 100
+  const a = sn * Math.min(ln, 1 - ln)
+  const k = (n: number) => (n + h / 30) % 12
+  const f = (n: number) =>
+    Math.round(255 * (ln - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))))
+  return [f(0), f(8), f(4)]
+}
+function toHex(r: number, g: number, b: number): string {
+  return "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")
+}
+
+export const colorConvertTool = tool(
+  async ({ color }: { color: string }) => {
+    const c = color.trim().toLowerCase()
+    let rgb: [number, number, number] | null = null
+
+    if (c.startsWith("#") || /^[0-9a-f]{3,6}$/i.test(c)) {
+      rgb = parseHex(c)
+    } else if (c.startsWith("rgb")) {
+      const m = c.match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/)
+      if (m) rgb = [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])]
+    } else if (c.startsWith("hsl")) {
+      const m = c.match(/([\d.]+)[,\s]+([\d.]+)%?[,\s]+([\d.]+)%?/)
+      if (m) rgb = hslToRgb(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]))
+    } else if (/^\d+[,\s]+\d+[,\s]+\d+$/.test(c)) {
+      const m = c.match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/)
+      if (m) {
+        const vals = [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])]
+        rgb =
+          vals[0] <= 360 && vals[1] <= 100 && vals[2] <= 100
+            ? hslToRgb(vals[0], vals[1], vals[2])
+            : ([vals[0], vals[1], vals[2]] as [number, number, number])
+      }
+    }
+
+    if (!rgb) {
+      return {
+        type: "color_convert",
+        error: `Could not parse color: "${color}". Use hex (#rrggbb), rgb(r,g,b), or hsl(h,s%,l%).`,
+      }
+    }
+
+    const [r, g, b] = rgb
+    const [h, s, l] = rgbToHsl(r, g, b)
+    return {
+      type: "color_convert",
+      input: color,
+      hex: toHex(r, g, b),
+      rgb: { r, g, b },
+      rgbCss: `rgb(${r}, ${g}, ${b})`,
+      hsl: { h, s, l },
+      hslCss: `hsl(${h}, ${s}%, ${l}%)`,
+    }
+  },
+  {
+    name: "color_convert",
+    description: "Convert a color between hex, rgb, and hsl formats.",
+    schema: z.object({ color: z.string().min(1) }),
+  }
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cluster B — Diff Tools
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const textDiffTool = tool(
+  async ({
+    a,
+    b,
+    pathA,
+    pathB,
+    nameA = "a",
+    nameB = "b",
+  }: {
+    a?: string
+    b?: string
+    pathA?: string
+    pathB?: string
+    nameA?: string
+    nameB?: string
+  }) => {
+    const textA = pathA ? await readWorkspaceText(pathA) : (a ?? "")
+    const textB = pathB ? await readWorkspaceText(pathB) : (b ?? "")
+    const labelA = pathA ?? nameA
+    const labelB = pathB ?? nameB
+    const patch = createTwoFilesPatch(labelA, labelB, textA, textB, undefined, undefined, {
+      context: 3,
+    })
+    const lines = patch.split("\n")
+    const added = lines.filter((l) => l.startsWith("+") && !l.startsWith("+++")).length
+    const removed = lines.filter((l) => l.startsWith("-") && !l.startsWith("---")).length
+    return {
+      type: "text_diff",
+      nameA: labelA,
+      nameB: labelB,
+      patch,
+      addedLines: added,
+      removedLines: removed,
+      identical: added === 0 && removed === 0,
+    }
+  },
+  {
+    name: "text_diff",
+    description: "Compute a unified diff between two strings or two workspace file paths.",
+    schema: z.object({
+      a: z.string().optional(),
+      b: z.string().optional(),
+      pathA: z.string().optional(),
+      pathB: z.string().optional(),
+      nameA: z.string().optional(),
+      nameB: z.string().optional(),
+    }),
+  }
+)
+
+export const jsonDiffTool = tool(
+  async ({ a, b, pathA, pathB }: { a?: unknown; b?: unknown; pathA?: string; pathB?: string }) => {
+    async function parseSource(inline?: unknown, filePath?: string): Promise<unknown> {
+      if (filePath) {
+        const text = await readWorkspaceText(filePath)
+        return JSON.parse(text)
+      }
+      if (typeof inline === "string") return JSON.parse(inline)
+      return inline
+    }
+    let objA: unknown, objB: unknown
+    try {
+      objA = await parseSource(a, pathA)
+      objB = await parseSource(b, pathB)
+    } catch (err) {
+      return {
+        type: "json_diff",
+        error: `JSON parse error: ${err instanceof Error ? err.message : String(err)}`,
+      }
+    }
+    const strA = JSON.stringify(objA, null, 2)
+    const strB = JSON.stringify(objB, null, 2)
+    const labelA = pathA ?? "a"
+    const labelB = pathB ?? "b"
+    const patch = createTwoFilesPatch(labelA, labelB, strA, strB, undefined, undefined, {
+      context: 3,
+    })
+    const lines = patch.split("\n")
+    const added = lines.filter((l) => l.startsWith("+") && !l.startsWith("+++")).length
+    const removed = lines.filter((l) => l.startsWith("-") && !l.startsWith("---")).length
+    return {
+      type: "json_diff",
+      nameA: labelA,
+      nameB: labelB,
+      patch,
+      addedLines: added,
+      removedLines: removed,
+      identical: added === 0 && removed === 0,
+    }
+  },
+  {
+    name: "json_diff",
+    description:
+      "Semantic diff between two JSON values (inline or workspace file paths). Returns a unified diff of the formatted JSON.",
+    schema: z.object({
+      a: z.unknown().optional(),
+      b: z.unknown().optional(),
+      pathA: z.string().optional(),
+      pathB: z.string().optional(),
+    }),
+  }
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cluster C — Git Write Tools
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const gitCommitTool = tool(
+  async ({ message, files, all = false }: { message: string; files?: string[]; all?: boolean }) => {
+    const addCmd = all
+      ? "git add -A"
+      : files && files.length > 0
+        ? `git add ${files.map((f) => `"${f}"`).join(" ")}`
+        : "git add -u"
+    const addResult = await runCommand(addCmd)
+    if (addResult.exitCode !== 0) {
+      return {
+        type: "git_commit",
+        error: addResult.stderr || addResult.stdout,
+        exitCode: addResult.exitCode,
+      }
+    }
+    const commitResult = await runCommand(`git commit -m ${JSON.stringify(message)}`)
+    const hashLine = commitResult.stdout.match(/^\[.+\s([0-9a-f]{7,})\]/)
+    const hash = hashLine ? hashLine[1] : undefined
+    return {
+      type: "git_commit",
+      message,
+      hash,
+      stdout: truncateString(commitResult.stdout, 2000),
+      stderr: truncateString(commitResult.stderr, 500),
+      exitCode: commitResult.exitCode,
+      success: commitResult.exitCode === 0,
+    }
+  },
+  {
+    name: "git_commit",
+    description:
+      "Stage files and create a git commit. Specify `files` for selective staging, `all: true` to stage all changes, or leave both empty to stage only tracked modifications.",
+    schema: z.object({
+      message: z.string().min(1).max(500),
+      files: z.array(z.string()).optional(),
+      all: z.boolean().optional(),
+    }),
+  }
+)
+
+export const gitCheckoutTool = tool(
+  async ({ branch, create = false }: { branch: string; create?: boolean }) => {
+    const cmd = create
+      ? `git checkout -b ${JSON.stringify(branch)}`
+      : `git checkout ${JSON.stringify(branch)}`
+    const result = await runCommand(cmd)
+    return {
+      type: "git_checkout",
+      branch,
+      created: create,
+      stdout: truncateString(result.stdout, 1000),
+      stderr: truncateString(result.stderr, 500),
+      exitCode: result.exitCode,
+      success: result.exitCode === 0,
+    }
+  },
+  {
+    name: "git_checkout",
+    description: "Switch to an existing branch or create a new one (`create: true`).",
+    schema: z.object({
+      branch: z.string().min(1),
+      create: z.boolean().optional(),
+    }),
+  }
+)
+
+export const gitStashTool = tool(
+  async ({
+    action = "push",
+    message,
+    index,
+  }: {
+    action?: "push" | "pop" | "list" | "drop"
+    message?: string
+    index?: number
+  }) => {
+    let cmd: string
+    if (action === "push") {
+      cmd = message ? `git stash push -m ${JSON.stringify(message)}` : "git stash push"
+    } else if (action === "pop") {
+      cmd = index != null ? `git stash pop stash@{${index}}` : "git stash pop"
+    } else if (action === "drop") {
+      cmd = index != null ? `git stash drop stash@{${index}}` : "git stash drop"
+    } else {
+      cmd = "git stash list"
+    }
+    const result = await runCommand(cmd)
+    return {
+      type: "git_stash",
+      action,
+      stdout: truncateString(result.stdout, 2000),
+      stderr: truncateString(result.stderr, 500),
+      exitCode: result.exitCode,
+      success: result.exitCode === 0,
+    }
+  },
+  {
+    name: "git_stash",
+    description: "Stash or restore changes: push (save), pop (restore), list, or drop.",
+    schema: z.object({
+      action: z.enum(["push", "pop", "list", "drop"]).optional(),
+      message: z.string().optional(),
+      index: z.number().int().min(0).optional(),
+    }),
+  }
+)
+
+export const gitPushTool = tool(
+  async ({
+    remote = "origin",
+    branch,
+    force = false,
+    setUpstream = false,
+  }: {
+    remote?: string
+    branch?: string
+    force?: boolean
+    setUpstream?: boolean
+  }) => {
+    const currentBranch =
+      branch ?? (await runCommand("git rev-parse --abbrev-ref HEAD")).stdout.trim()
+    const flags = [setUpstream ? "--set-upstream" : null, force ? "--force-with-lease" : null]
+      .filter(Boolean)
+      .join(" ")
+    const cmd = `git push ${flags} ${remote} ${currentBranch}`.trim().replace(/\s+/g, " ")
+    const result = await runCommand(cmd)
+    return {
+      type: "git_push",
+      remote,
+      branch: currentBranch,
+      force,
+      stdout: truncateString(result.stdout, 2000),
+      stderr: truncateString(result.stderr, 1000),
+      exitCode: result.exitCode,
+      success: result.exitCode === 0,
+    }
+  },
+  {
+    name: "git_push",
+    description:
+      "Push the current branch (or specified branch) to a remote. Uses --force-with-lease when force is true.",
+    schema: z.object({
+      remote: z.string().optional(),
+      branch: z.string().optional(),
+      force: z.boolean().optional(),
+      setUpstream: z.boolean().optional(),
+    }),
+  }
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cluster D — System & Process Tools
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const processListTool = tool(
+  async ({ filter }: { filter?: string }) => {
+    const isPosix = os.platform() !== "win32"
+    const cmd = isPosix ? "ps aux" : "tasklist /fo csv"
+    const result = await runCommandUnsafe(cmd, undefined, 10000)
+    const lines = result.stdout.trim().split("\n")
+    if (!isPosix) {
+      return { type: "process_list", platform: "win32", raw: truncateString(result.stdout, 8000) }
+    }
+    const processes = lines
+      .slice(1)
+      .map((line) => {
+        const parts = line.trim().split(/\s+/)
+        return {
+          user: parts[0] ?? "",
+          pid: parseInt(parts[1] ?? "0"),
+          cpu: parts[2] ?? "0",
+          mem: parts[3] ?? "0",
+          command: parts.slice(10).join(" "),
+        }
+      })
+      .filter((p) => {
+        if (!filter) return true
+        const q = filter.toLowerCase()
+        return p.command.toLowerCase().includes(q) || p.user.toLowerCase().includes(q)
+      })
+      .slice(0, 100)
+    return {
+      type: "process_list",
+      platform: os.platform(),
+      filter: filter ?? null,
+      totalShown: processes.length,
+      processes,
+    }
+  },
+  {
+    name: "process_list",
+    description:
+      "List running processes with optional name/command filter. Returns PID, CPU%, MEM%, command.",
+    schema: z.object({ filter: z.string().optional() }),
+  }
+)
+
+export const systemInfoTool = tool(
+  async () => {
+    const platform = os.platform()
+    const cpus = os.cpus()
+    const totalMem = os.totalmem()
+    const freeMem = os.freemem()
+    const dfResult = await runCommandUnsafe("df -h .", undefined, 5000).catch(() => ({
+      stdout: "",
+      stderr: "",
+      exitCode: 1,
+      duration: 0,
+    }))
+    const dfLine = dfResult.stdout.split("\n")[1] ?? ""
+    const dfParts = dfLine.trim().split(/\s+/)
+    return {
+      type: "system_info",
+      platform,
+      arch: os.arch(),
+      nodeVersion: process.version,
+      hostname: os.hostname(),
+      uptime: os.uptime(),
+      uptimeHuman: `${Math.floor(os.uptime() / 3600)}h ${Math.floor((os.uptime() % 3600) / 60)}m`,
+      cpu: {
+        model: cpus[0]?.model ?? "unknown",
+        cores: cpus.length,
+        speedMhz: cpus[0]?.speed ?? 0,
+      },
+      memory: {
+        totalBytes: totalMem,
+        freeBytes: freeMem,
+        usedBytes: totalMem - freeMem,
+        usedPercent: Math.round(((totalMem - freeMem) / totalMem) * 100),
+        totalGb: +(totalMem / 1024 ** 3).toFixed(1),
+        freeGb: +(freeMem / 1024 ** 3).toFixed(1),
+      },
+      disk:
+        dfParts.length >= 5
+          ? { size: dfParts[1], used: dfParts[2], available: dfParts[3], usePercent: dfParts[4] }
+          : undefined,
+      workspaceRoot: getWorkspaceRoot(),
+    }
+  },
+  {
+    name: "system_info",
+    description:
+      "Return CPU, memory, disk usage, uptime, platform, and Node.js version for the current host.",
+    schema: z.object({}),
+  }
+)
+
+export const clipboardReadTool = tool(
+  async () => {
+    const platform = os.platform()
+    const cmd = platform === "darwin" ? "pbpaste" : "xclip -o -selection clipboard"
+    const result = await runCommandUnsafe(cmd, undefined, 5000).catch((err) => ({
+      stdout: "",
+      stderr: String(err),
+      exitCode: 1,
+      duration: 0,
+    }))
+    if (result.exitCode !== 0) {
+      return { type: "clipboard_read", error: result.stderr || "Clipboard read failed." }
+    }
+    return {
+      type: "clipboard_read",
+      content: truncateString(result.stdout, 8000),
+      chars: result.stdout.length,
+    }
+  },
+  {
+    name: "clipboard_read",
+    description: "Read text content from the system clipboard (macOS pbpaste / Linux xclip).",
+    schema: z.object({}),
+  }
+)
+
+export const clipboardWriteTool = tool(
+  async ({ text }: { text: string }) => {
+    const platform = os.platform()
+    const child = spawn(platform === "darwin" ? "pbcopy" : "xclip -selection clipboard", {
+      shell: true,
+    })
+    await new Promise<void>((resolve) => {
+      child.stdin.write(text, "utf-8")
+      child.stdin.end()
+      child.on("close", () => resolve())
+    })
+    return { type: "clipboard_write", chars: text.length, success: true }
+  },
+  {
+    name: "clipboard_write",
+    description: "Write text to the system clipboard (macOS pbcopy / Linux xclip).",
+    schema: z.object({ text: z.string() }),
+  }
+)
+
+export const desktopNotifyTool = tool(
+  async ({ title, message }: { title: string; message: string }) => {
+    const platform = os.platform()
+    let cmd: string
+    if (platform === "darwin") {
+      cmd = `osascript -e ${JSON.stringify(`display notification ${JSON.stringify(message)} with title ${JSON.stringify(title)}`)}`
+    } else {
+      cmd = `notify-send ${JSON.stringify(title)} ${JSON.stringify(message)}`
+    }
+    const result = await runCommandUnsafe(cmd, undefined, 5000).catch((err) => ({
+      stdout: "",
+      stderr: String(err),
+      exitCode: 1,
+      duration: 0,
+    }))
+    return {
+      type: "desktop_notify",
+      title,
+      message,
+      success: result.exitCode === 0,
+      error: result.exitCode !== 0 ? result.stderr : undefined,
+    }
+  },
+  {
+    name: "desktop_notify",
+    description: "Send a desktop notification (macOS osascript / Linux notify-send).",
+    schema: z.object({ title: z.string().min(1), message: z.string().min(1) }),
+  }
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cluster E — Network Diagnostics
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const dnsLookupTool = tool(
+  async ({ hostname, types }: { hostname: string; types?: string[] }) => {
+    const dns = await import("dns/promises")
+    const selectedTypes = types ?? ["A", "AAAA", "MX", "TXT", "CNAME", "NS"]
+    const records: Record<string, unknown> = {}
+    await Promise.all(
+      selectedTypes.map(async (t) => {
+        try {
+          switch (t.toUpperCase()) {
+            case "A":
+              records.A = await dns.resolve4(hostname)
+              break
+            case "AAAA":
+              records.AAAA = await dns.resolve6(hostname)
+              break
+            case "MX":
+              records.MX = await dns.resolveMx(hostname)
+              break
+            case "TXT":
+              records.TXT = (await dns.resolveTxt(hostname)).map((r) => r.join(""))
+              break
+            case "CNAME":
+              records.CNAME = await dns.resolveCname(hostname)
+              break
+            case "NS":
+              records.NS = await dns.resolveNs(hostname)
+              break
+            case "SOA":
+              records.SOA = await dns.resolveSoa(hostname)
+              break
+          }
+        } catch {
+          // Skip unavailable record types
+        }
+      })
+    )
+    return {
+      type: "dns_lookup",
+      hostname,
+      records,
+      resolvedTypes: Object.keys(records),
+    }
+  },
+  {
+    name: "dns_lookup",
+    description: "Resolve DNS records (A, AAAA, MX, TXT, CNAME, NS) for a hostname.",
+    schema: z.object({
+      hostname: z.string().min(1),
+      types: z.array(z.string()).optional(),
+    }),
+  }
+)
+
+export const sslCheckTool = tool(
+  async ({ hostname, port = 443 }: { hostname: string; port?: number }) => {
+    const tls = await import("tls")
+    const cert = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      const socket = tls.connect(
+        { host: hostname, port, servername: hostname, rejectUnauthorized: false },
+        () => {
+          const peerCert = socket.getPeerCertificate(true)
+          socket.destroy()
+          if (!peerCert || !peerCert.subject) {
+            reject(new Error("No certificate returned"))
+            return
+          }
+          const valid = socket.authorized
+          resolve({
+            subject: peerCert.subject,
+            issuer: peerCert.issuer,
+            validFrom: peerCert.valid_from,
+            validTo: peerCert.valid_to,
+            serialNumber: peerCert.serialNumber,
+            fingerprint: peerCert.fingerprint,
+            subjectAltNames: (peerCert.subjectaltname ?? "").split(", ").filter(Boolean),
+            authorized: valid,
+          })
+        }
+      )
+      socket.on("error", reject)
+      socket.setTimeout(10000, () => {
+        socket.destroy()
+        reject(new Error("Timeout"))
+      })
+    }).catch((err) => ({ error: err instanceof Error ? err.message : String(err) }))
+
+    if ("error" in cert) {
+      return { type: "ssl_check", hostname, port, ...cert }
+    }
+
+    const expiry = new Date((cert.validTo as string) ?? "")
+    const now = new Date()
+    const daysUntilExpiry = Math.floor((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    return {
+      type: "ssl_check",
+      hostname,
+      port,
+      ...cert,
+      expiresAt: cert.validTo,
+      daysUntilExpiry,
+      expired: daysUntilExpiry < 0,
+      expiringSoon: daysUntilExpiry >= 0 && daysUntilExpiry < 30,
+    }
+  },
+  {
+    name: "ssl_check",
+    description:
+      "Check the SSL/TLS certificate for a hostname — issuer, subject, expiry, SANs, and validity.",
+    schema: z.object({
+      hostname: z.string().min(1),
+      port: z.number().int().min(1).max(65535).optional(),
+    }),
+  }
+)
+
+export const pingTool = tool(
+  async ({ host, count = 3 }: { host: string; count?: number }) => {
+    const platform = os.platform()
+    const n = Math.min(Math.max(count, 1), 10)
+    const cmd = platform === "win32" ? `ping -n ${n} ${host}` : `ping -c ${n} ${host}`
+    const result = await runCommandUnsafe(cmd, undefined, 15000).catch((err) => ({
+      stdout: "",
+      stderr: String(err),
+      exitCode: 1,
+      duration: 0,
+    }))
+    const lines = result.stdout
+    const rttLine =
+      lines.match(/round-trip[^=]+=\s*([\d.]+)\/([\d.]+)\/([\d.]+)/) ??
+      lines.match(/rtt[^=]+=\s*([\d.]+)\/([\d.]+)\/([\d.]+)/) ??
+      lines.match(/Minimum = ([\d]+)ms, Maximum = ([\d]+)ms, Average = ([\d]+)ms/)
+    const stats = rttLine
+      ? {
+          minMs: parseFloat(rttLine[1]),
+          avgMs: parseFloat(rttLine[2]),
+          maxMs: parseFloat(rttLine[3]),
+        }
+      : undefined
+    const transmitted = lines.match(/(\d+) packets transmitted/)
+    const received = lines.match(/(\d+) (?:packets )?received/)
+    return {
+      type: "ping",
+      host,
+      count: n,
+      reachable: result.exitCode === 0,
+      transmitted: transmitted ? parseInt(transmitted[1]) : n,
+      received: received ? parseInt(received[1]) : result.exitCode === 0 ? n : 0,
+      stats,
+      output: truncateString(result.stdout, 1000),
+    }
+  },
+  {
+    name: "ping",
+    description: "Check host reachability and measure round-trip latency.",
+    schema: z.object({
+      host: z.string().min(1),
+      count: z.number().int().min(1).max(10).optional(),
+    }),
+  }
+)
+
+export const whoisLookupTool = tool(
+  async ({ domain }: { domain: string }) => {
+    const cleanDomain = domain
+      .replace(/^https?:\/\//, "")
+      .replace(/\/.*$/, "")
+      .toLowerCase()
+    const res = await fetch(`https://rdap.org/domain/${cleanDomain}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!res.ok) {
+      return {
+        type: "whois_lookup",
+        domain: cleanDomain,
+        error: `RDAP lookup failed: ${res.status}`,
+      }
+    }
+    const data = (await res.json()) as Record<string, unknown>
+    const events = Array.isArray(data.events)
+      ? (data.events as Array<Record<string, unknown>>).reduce(
+          (acc, e) => {
+            if (typeof e.eventAction === "string" && typeof e.eventDate === "string") {
+              acc[e.eventAction] = e.eventDate
+            }
+            return acc
+          },
+          {} as Record<string, string>
+        )
+      : {}
+    const nameservers = Array.isArray(data.nameservers)
+      ? (data.nameservers as Array<Record<string, unknown>>).map((ns) => String(ns.ldhName ?? ""))
+      : []
+    const entities = Array.isArray(data.entities)
+      ? (data.entities as Array<Record<string, unknown>>)
+      : []
+    const registrar = entities.find(
+      (e) => Array.isArray(e.roles) && (e.roles as string[]).includes("registrar")
+    )
+    const vcardFields = (registrar?.vcardArray as Array<unknown[]>)?.[1] ?? []
+    const fnField = vcardFields.find((v): v is unknown[] => Array.isArray(v) && v[0] === "fn")
+    const registrarName = fnField ? fnField[3] : undefined
+    return {
+      type: "whois_lookup",
+      domain: cleanDomain,
+      status: Array.isArray(data.status) ? data.status : undefined,
+      nameservers,
+      registrar: typeof registrarName === "string" ? registrarName : undefined,
+      events,
+      registered: events["registration"],
+      updated: events["last changed"],
+      expires: events["expiration"],
+    }
+  },
+  {
+    name: "whois_lookup",
+    description:
+      "WHOIS/RDAP data for a domain — registrar, nameservers, registration, and expiry dates.",
+    schema: z.object({ domain: z.string().min(1) }),
+  }
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cluster F — API Development Tools
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const openapiInspectTool = tool(
+  async ({ source }: { source: string }) => {
+    let specText: string
+    if (source.startsWith("http://") || source.startsWith("https://")) {
+      const res = await fetch(source, { signal: AbortSignal.timeout(10000) })
+      if (!res.ok) return { type: "openapi_inspect", error: `Fetch failed: ${res.status}` }
+      specText = await res.text()
+    } else {
+      specText = await readWorkspaceText(source)
+    }
+
+    let spec: Record<string, unknown>
+    try {
+      spec =
+        source.endsWith(".yaml") ||
+        source.endsWith(".yml") ||
+        specText.trimStart().startsWith("openapi:")
+          ? (await import("yaml")).parse(specText)
+          : JSON.parse(specText)
+    } catch (err) {
+      return {
+        type: "openapi_inspect",
+        error: `Parse error: ${err instanceof Error ? err.message : String(err)}`,
+      }
+    }
+
+    const version = (spec.openapi ?? spec.swagger ?? "unknown") as string
+    const info = (spec.info ?? {}) as Record<string, unknown>
+    const paths = (spec.paths ?? {}) as Record<string, Record<string, unknown>>
+    const HTTP_METHODS = ["get", "post", "put", "patch", "delete", "head", "options", "trace"]
+
+    const endpoints: Array<{
+      method: string
+      path: string
+      summary?: string
+      tags: string[]
+      operationId?: string
+    }> = []
+    for (const [p, methods] of Object.entries(paths)) {
+      for (const method of HTTP_METHODS) {
+        const op = methods[method] as Record<string, unknown> | undefined
+        if (!op) continue
+        endpoints.push({
+          method: method.toUpperCase(),
+          path: p,
+          summary: op.summary as string | undefined,
+          tags: Array.isArray(op.tags) ? (op.tags as string[]) : [],
+          operationId: op.operationId as string | undefined,
+        })
+      }
+    }
+
+    const byTag: Record<string, typeof endpoints> = {}
+    for (const ep of endpoints) {
+      const tag = ep.tags[0] ?? "default"
+      if (!byTag[tag]) byTag[tag] = []
+      byTag[tag].push(ep)
+    }
+
+    return {
+      type: "openapi_inspect",
+      source,
+      version,
+      title: info.title as string | undefined,
+      description: info.description ? truncateString(String(info.description), 500) : undefined,
+      apiVersion: info.version as string | undefined,
+      totalEndpoints: endpoints.length,
+      byTag,
+    }
+  },
+  {
+    name: "openapi_inspect",
+    description:
+      "Parse an OpenAPI 3.x or Swagger 2.x spec (file path or URL) and list endpoints grouped by tag.",
+    schema: z.object({ source: z.string().min(1) }),
+  }
+)
+
+const GRAPHQL_INTROSPECTION_QUERY = `
+query IntrospectionQuery {
+  __schema {
+    queryType { name }
+    mutationType { name }
+    subscriptionType { name }
+    types {
+      kind name description
+      fields(includeDeprecated: false) { name description type { kind name ofType { kind name } } }
+    }
+  }
+}`
+
+export const graphqlIntrospectTool = tool(
+  async ({
+    endpoint,
+    headers: extraHeaders = {},
+  }: {
+    endpoint: string
+    headers?: Record<string, string>
+  }) => {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...extraHeaders },
+      body: JSON.stringify({ query: GRAPHQL_INTROSPECTION_QUERY }),
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!res.ok) {
+      return { type: "graphql_introspect", endpoint, error: `Request failed: ${res.status}` }
+    }
+    const json = (await res.json()) as Record<string, unknown>
+    if ((json as Record<string, unknown>).errors) {
+      return {
+        type: "graphql_introspect",
+        endpoint,
+        error: "GraphQL errors in introspection response",
+        errors: (json as Record<string, unknown>).errors,
+      }
+    }
+    const schema = ((json as Record<string, unknown>).data as Record<string, unknown>)
+      ?.__schema as Record<string, unknown>
+    const types = (Array.isArray(schema?.types) ? schema.types : []) as Array<
+      Record<string, unknown>
+    >
+    const userTypes = types.filter(
+      (t) => !String(t.name ?? "").startsWith("__") && t.kind !== "SCALAR" && t.kind !== "ENUM"
+    )
+    const queryTypeName = (schema?.queryType as Record<string, string> | undefined)?.name
+    const mutationTypeName = (schema?.mutationType as Record<string, string> | undefined)?.name
+    const queryType = types.find((t) => t.name === queryTypeName)
+    const mutationType = types.find((t) => t.name === mutationTypeName)
+    return {
+      type: "graphql_introspect",
+      endpoint,
+      queryType: queryTypeName,
+      mutationType: mutationTypeName,
+      queryFields: Array.isArray(queryType?.fields)
+        ? (queryType.fields as Array<Record<string, unknown>>).map((f) => String(f.name))
+        : [],
+      mutationFields: Array.isArray(mutationType?.fields)
+        ? (mutationType.fields as Array<Record<string, unknown>>).map((f) => String(f.name))
+        : [],
+      typeCount: userTypes.length,
+      types: userTypes.slice(0, 60).map((t) => ({
+        kind: t.kind,
+        name: t.name,
+        fieldCount: Array.isArray(t.fields) ? t.fields.length : 0,
+      })),
+    }
+  },
+  {
+    name: "graphql_introspect",
+    description:
+      "Run the GraphQL introspection query against an endpoint and return types, queries, and mutations.",
+    schema: z.object({
+      endpoint: z.string().url(),
+      headers: z.record(z.string(), z.string()).optional(),
+    }),
+  }
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cluster G — Image Tools
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const imageResizeTool = tool(
+  async ({
+    source,
+    width,
+    height,
+    fit = "inside",
+  }: {
+    source: string
+    width?: number
+    height?: number
+    fit?: "cover" | "contain" | "fill" | "inside" | "outside"
+  }) => {
+    const sharp = await loadSharp()
+    if (!sharp) return { type: "image_resize", error: "Image tooling requires `sharp`." }
+    const buf = await fetchBuffer(source)
+    const meta = await sharp(buf).metadata()
+    const resized = await sharp(buf).resize(width, height, { fit }).png().toBuffer()
+    const artifact = await storeArtifact({
+      filename: `image-resize-${Date.now()}.png`,
+      bytes: resized,
+      mimeType: "image/png",
+    })
+    return {
+      type: "image_resize",
+      originalWidth: meta.width,
+      originalHeight: meta.height,
+      targetWidth: width,
+      targetHeight: height,
+      fit,
+      size: resized.length,
+      artifact,
+      artifactUrl: artifact.url,
+    }
+  },
+  {
+    name: "image_resize",
+    description: "Resize an image (URL, data URI, or workspace path) and return as an artifact.",
+    schema: z.object({
+      source: z.string().min(1),
+      width: z.number().int().min(1).max(8000).optional(),
+      height: z.number().int().min(1).max(8000).optional(),
+      fit: z.enum(["cover", "contain", "fill", "inside", "outside"]).optional(),
+    }),
+  }
+)
+
+export const imageCropTool = tool(
+  async ({
+    source,
+    left,
+    top,
+    width,
+    height,
+  }: {
+    source: string
+    left: number
+    top: number
+    width: number
+    height: number
+  }) => {
+    const sharp = await loadSharp()
+    if (!sharp) return { type: "image_crop", error: "Image tooling requires `sharp`." }
+    const buf = await fetchBuffer(source)
+    const meta = await sharp(buf).metadata()
+    const cropped = await sharp(buf).extract({ left, top, width, height }).png().toBuffer()
+    const artifact = await storeArtifact({
+      filename: `image-crop-${Date.now()}.png`,
+      bytes: cropped,
+      mimeType: "image/png",
+    })
+    return {
+      type: "image_crop",
+      originalWidth: meta.width,
+      originalHeight: meta.height,
+      region: { left, top, width, height },
+      size: cropped.length,
+      artifact,
+      artifactUrl: artifact.url,
+    }
+  },
+  {
+    name: "image_crop",
+    description: "Crop an image to a specified region (left, top, width, height).",
+    schema: z.object({
+      source: z.string().min(1),
+      left: z.number().int().min(0),
+      top: z.number().int().min(0),
+      width: z.number().int().min(1),
+      height: z.number().int().min(1),
+    }),
+  }
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cluster H — Data Format Tools
+// ─────────────────────────────────────────────────────────────────────────────
+
+function validateSchema(data: unknown, schema: Record<string, unknown>, path = "$"): string[] {
+  const errors: string[] = []
+  const typ = schema.type
+  if (typ) {
+    const allowed = Array.isArray(typ) ? typ : [typ]
+    const actual = data === null ? "null" : Array.isArray(data) ? "array" : typeof data
+    if (!allowed.includes(actual)) {
+      errors.push(`${path}: expected type ${allowed.join("|")}, got ${actual}`)
+    }
+  }
+  if (schema.enum && Array.isArray(schema.enum)) {
+    if (!schema.enum.some((v) => JSON.stringify(v) === JSON.stringify(data)))
+      errors.push(`${path}: value not in enum`)
+  }
+  if (typeof data === "string") {
+    if (typeof schema.minLength === "number" && data.length < schema.minLength)
+      errors.push(`${path}: length ${data.length} < minLength ${schema.minLength}`)
+    if (typeof schema.maxLength === "number" && data.length > schema.maxLength)
+      errors.push(`${path}: length ${data.length} > maxLength ${schema.maxLength}`)
+    if (typeof schema.pattern === "string") {
+      try {
+        if (!new RegExp(schema.pattern).test(data)) errors.push(`${path}: pattern mismatch`)
+      } catch {
+        /* ignore invalid pattern */
+      }
+    }
+  }
+  if (typeof data === "number") {
+    if (typeof schema.minimum === "number" && data < schema.minimum)
+      errors.push(`${path}: ${data} < minimum ${schema.minimum}`)
+    if (typeof schema.maximum === "number" && data > schema.maximum)
+      errors.push(`${path}: ${data} > maximum ${schema.maximum}`)
+  }
+  if (data !== null && typeof data === "object" && !Array.isArray(data)) {
+    const obj = data as Record<string, unknown>
+    if (Array.isArray(schema.required)) {
+      for (const key of schema.required as string[]) {
+        if (!(key in obj)) errors.push(`${path}: missing required property "${key}"`)
+      }
+    }
+    if (schema.properties && typeof schema.properties === "object") {
+      for (const [k, s] of Object.entries(schema.properties as Record<string, unknown>)) {
+        if (k in obj)
+          errors.push(...validateSchema(obj[k], s as Record<string, unknown>, `${path}.${k}`))
+      }
+    }
+  }
+  if (Array.isArray(data)) {
+    if (typeof schema.minItems === "number" && data.length < schema.minItems)
+      errors.push(`${path}: length ${data.length} < minItems ${schema.minItems}`)
+    if (typeof schema.maxItems === "number" && data.length > schema.maxItems)
+      errors.push(`${path}: length ${data.length} > maxItems ${schema.maxItems}`)
+    if (schema.items && typeof schema.items === "object") {
+      data.forEach((item, i) =>
+        errors.push(
+          ...validateSchema(item, schema.items as Record<string, unknown>, `${path}[${i}]`)
+        )
+      )
+    }
+  }
+  return errors
+}
+
+export const jsonSchemaValidateTool = tool(
+  async ({
+    data,
+    schema,
+    dataPath,
+  }: {
+    data?: unknown
+    schema: Record<string, unknown>
+    dataPath?: string
+  }) => {
+    let value: unknown = data
+    if (dataPath) {
+      try {
+        value = JSON.parse(await readWorkspaceText(dataPath))
+      } catch (err) {
+        return {
+          type: "json_schema_validate",
+          error: `Could not read/parse ${dataPath}: ${err instanceof Error ? err.message : String(err)}`,
+        }
+      }
+    }
+    const errors = validateSchema(value, schema)
+    return {
+      type: "json_schema_validate",
+      valid: errors.length === 0,
+      errorCount: errors.length,
+      errors: errors.slice(0, 50),
+    }
+  },
+  {
+    name: "json_schema_validate",
+    description:
+      "Validate a JSON value against a JSON Schema (draft-7 subset). Supply inline data or a workspace file path.",
+    schema: z.object({
+      data: z.unknown().optional(),
+      schema: z.record(z.string(), z.unknown()),
+      dataPath: z.string().optional(),
+    }),
+  }
+)
+
+function splitCSVLine(line: string): string[] {
+  const result: string[] = []
+  let cur = ""
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"' && !inQuotes) {
+      inQuotes = true
+      continue
+    }
+    if (ch === '"' && inQuotes) {
+      if (line[i + 1] === '"') {
+        cur += '"'
+        i++
+      } else inQuotes = false
+      continue
+    }
+    if (ch === "," && !inQuotes) {
+      result.push(cur)
+      cur = ""
+      continue
+    }
+    cur += ch
+  }
+  result.push(cur)
+  return result
+}
+
+export const csvToJsonTool = tool(
+  async ({ csv, path: filePath }: { csv?: string; path?: string }) => {
+    const text = filePath ? await readWorkspaceText(filePath) : (csv ?? "")
+    const lines = text.trim().split(/\r?\n/).filter(Boolean)
+    if (lines.length === 0) return { type: "csv_to_json", rows: [], headers: [] }
+    const headers = splitCSVLine(lines[0])
+    const rows = lines.slice(1).map((line) => {
+      const vals = splitCSVLine(line)
+      return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? ""]))
+    })
+    return {
+      type: "csv_to_json",
+      headers,
+      rowCount: rows.length,
+      rows: rows.slice(0, 500),
+      omittedRows: Math.max(rows.length - 500, 0),
+    }
+  },
+  {
+    name: "csv_to_json",
+    description: "Convert CSV text or a workspace file to a JSON array of objects.",
+    schema: z.object({
+      csv: z.string().optional(),
+      path: z.string().optional(),
+    }),
+  }
+)
+
+export const jsonToCsvTool = tool(
+  async ({ json, path: filePath }: { json?: unknown[]; path?: string }) => {
+    let rows: unknown[]
+    if (filePath) {
+      rows = JSON.parse(await readWorkspaceText(filePath)) as unknown[]
+    } else {
+      rows = json ?? []
+    }
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return { type: "json_to_csv", csv: "", rowCount: 0, headers: [] }
+    }
+    const first = rows[0] as Record<string, unknown>
+    const headers = Object.keys(first)
+    function escapeCell(v: unknown): string {
+      const s = v === null || v === undefined ? "" : String(v)
+      return s.includes(",") || s.includes('"') || s.includes("\n")
+        ? `"${s.replace(/"/g, '""')}"`
+        : s
+    }
+    const csvLines = [
+      headers.map(escapeCell).join(","),
+      ...(rows as Array<Record<string, unknown>>).map((row) =>
+        headers.map((h) => escapeCell(row[h])).join(",")
+      ),
+    ]
+    return {
+      type: "json_to_csv",
+      headers,
+      rowCount: rows.length,
+      csv: csvLines.join("\n"),
+    }
+  },
+  {
+    name: "json_to_csv",
+    description: "Convert a JSON array of objects to CSV text.",
+    schema: z.object({
+      json: z.array(z.unknown()).optional(),
+      path: z.string().optional(),
+    }),
+  }
+)
+
+export const xmlToJsonTool = tool(
+  async ({ xml, path: filePath }: { xml?: string; path?: string }) => {
+    const text = filePath ? await readWorkspaceText(filePath) : (xml ?? "")
+    function nodeToJson(node: Element): unknown {
+      const children = Array.from(node.children)
+      if (children.length === 0) {
+        const attrs = Array.from(node.attributes).reduce(
+          (acc, a) => {
+            acc[`@${a.name}`] = a.value
+            return acc
+          },
+          {} as Record<string, string>
+        )
+        const hasAttrs = Object.keys(attrs).length > 0
+        if (hasAttrs) return { ...attrs, "#text": node.textContent ?? "" }
+        return node.textContent ?? ""
+      }
+      const result: Record<string, unknown> = {}
+      for (const attr of Array.from(node.attributes)) result[`@${attr.name}`] = attr.value
+      for (const child of children) {
+        const key = child.tagName
+        const val = nodeToJson(child)
+        if (key in result) {
+          if (!Array.isArray(result[key])) result[key] = [result[key]]
+          ;(result[key] as unknown[]).push(val)
+        } else {
+          result[key] = val
+        }
+      }
+      return result
+    }
+    const dom = new JSDOM(text, { contentType: "text/xml" })
+    const root = dom.window.document.documentElement
+    return {
+      type: "xml_to_json",
+      rootTag: root.tagName,
+      json: nodeToJson(root),
+    }
+  },
+  {
+    name: "xml_to_json",
+    description: "Convert XML text or a workspace file to a JSON representation.",
+    schema: z.object({
+      xml: z.string().optional(),
+      path: z.string().optional(),
+    }),
+  }
+)
+
+export const xpathQueryTool = tool(
+  async ({ html, path: filePath, xpath }: { html?: string; path?: string; xpath: string }) => {
+    const text = filePath ? await readWorkspaceText(filePath) : (html ?? "")
+    const dom = new JSDOM(text)
+    const doc = dom.window.document
+    const result = doc.evaluate(xpath, doc, null, dom.window.XPathResult.ANY_TYPE, null)
+    const nodes: Array<{ tag: string; text: string; html: string }> = []
+    let node = result.iterateNext()
+    while (node && nodes.length < 100) {
+      if (node.nodeType === 1) {
+        const el = node as Element
+        nodes.push({
+          tag: el.tagName,
+          text: (el.textContent ?? "").slice(0, 500),
+          html: el.outerHTML.slice(0, 500),
+        })
+      } else {
+        nodes.push({ tag: "#text", text: (node.textContent ?? "").slice(0, 500), html: "" })
+      }
+      node = result.iterateNext()
+    }
+    return {
+      type: "xpath_query",
+      xpath,
+      matchCount: nodes.length,
+      nodes,
+    }
+  },
+  {
+    name: "xpath_query",
+    description: "Run an XPath expression against HTML/XML text or a workspace file.",
+    schema: z.object({
+      html: z.string().optional(),
+      path: z.string().optional(),
+      xpath: z.string().min(1),
+    }),
+  }
+)
+
 /**
  * Builds the full LangChain tool list and filters it through an optional allowlist.
  */
@@ -6705,6 +8249,52 @@ export function createToolset(context?: { headers?: HeadersInit; allowedToolName
     gitCommitSearchTool,
     gitPatchPreviewTool,
     gitApplyPatchTool,
+
+    // Developer utilities (Cluster A)
+    jwtDecodeTool,
+    regexMatchTool,
+    uuidGenerateTool,
+    urlParseTool,
+    cronExplainTool,
+    colorConvertTool,
+
+    // Diff & comparison (Cluster B)
+    textDiffTool,
+    jsonDiffTool,
+
+    // Git write (Cluster C)
+    gitCommitTool,
+    gitCheckoutTool,
+    gitStashTool,
+    gitPushTool,
+
+    // System & process (Cluster D)
+    processListTool,
+    systemInfoTool,
+    clipboardReadTool,
+    clipboardWriteTool,
+    desktopNotifyTool,
+
+    // Network diagnostics (Cluster E)
+    dnsLookupTool,
+    sslCheckTool,
+    pingTool,
+    whoisLookupTool,
+
+    // API development (Cluster F)
+    openapiInspectTool,
+    graphqlIntrospectTool,
+
+    // Image tools (Cluster G)
+    imageResizeTool,
+    imageCropTool,
+
+    // Data format (Cluster H)
+    jsonSchemaValidateTool,
+    csvToJsonTool,
+    jsonToCsvTool,
+    xmlToJsonTool,
+    xpathQueryTool,
   ]
   if (!context || !context.allowedToolNames) {
     return tools

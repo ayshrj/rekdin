@@ -171,6 +171,52 @@ const TOOL_GROUPS: Record<string, ToolGroup[]> = {
   git_commit_search: ["repo"],
   git_patch_preview: ["repo"],
   git_apply_patch: ["workspace_write", "repo"],
+
+  // Cluster A — developer utilities
+  jwt_decode: ["transforms"],
+  regex_match: ["transforms"],
+  uuid_generate: ["transforms"],
+  url_parse: ["transforms", "network"],
+  cron_explain: ["transforms"],
+  color_convert: ["transforms"],
+
+  // Cluster B — diff & comparison
+  text_diff: ["transforms", "workspace_read"],
+  json_diff: ["transforms", "workspace_read"],
+
+  // Cluster C — git write
+  git_commit: ["repo", "workspace_write"],
+  git_checkout: ["repo"],
+  git_stash: ["repo"],
+  git_push: ["repo", "network"],
+
+  // Cluster D — system & process
+  process_list: ["workspace_read"],
+  system_info: ["workspace_read"],
+  clipboard_read: ["workspace_read"],
+  clipboard_write: ["transforms"],
+  desktop_notify: ["transforms"],
+
+  // Cluster E — network diagnostics
+  dns_lookup: ["network"],
+  ssl_check: ["network"],
+  ping: ["network"],
+  whois_lookup: ["network"],
+
+  // Cluster F — API development
+  openapi_inspect: ["network", "workspace_read", "transforms"],
+  graphql_introspect: ["network"],
+
+  // Cluster G — image tools
+  image_resize: ["transforms"],
+  image_crop: ["transforms"],
+
+  // Cluster H — data format
+  json_schema_validate: ["transforms"],
+  csv_to_json: ["transforms", "workspace_read"],
+  json_to_csv: ["transforms"],
+  xml_to_json: ["transforms", "workspace_read"],
+  xpath_query: ["transforms", "workspace_read"],
 }
 
 const GROUPS_BY_MODE: Record<AgentMode, ToolGroup[]> = {
@@ -258,6 +304,14 @@ const READ_ONLY_BLOCKLIST = new Set([
   "generate_latex_pdf",
   "markdown_to_pdf",
   "image_convert",
+  "git_commit",
+  "git_checkout",
+  "git_stash",
+  "git_push",
+  "clipboard_write",
+  "desktop_notify",
+  "image_resize",
+  "image_crop",
 ])
 
 const BALANCED_APPROVAL_TOOLS = new Set([
@@ -297,6 +351,10 @@ const BALANCED_APPROVAL_TOOLS = new Set([
   "dev_server_stop",
   "git_apply_patch",
   "artifact_delete",
+  "git_commit",
+  "git_checkout",
+  "git_stash",
+  "git_push",
 ])
 
 const FULL_AUTO_APPROVAL_TOOLS = new Set([
@@ -310,6 +368,7 @@ const FULL_AUTO_APPROVAL_TOOLS = new Set([
   "browser_downloads",
   "git_apply_patch",
   "artifact_delete",
+  "git_push",
 ])
 
 /**
