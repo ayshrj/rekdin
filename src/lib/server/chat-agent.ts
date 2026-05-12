@@ -22,11 +22,26 @@ import {
   normalizeLlmProvider,
 } from "@/lib/llm-providers"
 import { ChatMessage, ToolCall } from "@/types/chat"
-import { LlmProvider, ProviderSettings, ToolPolicyProfile } from "@/types/runtime"
+import {
+  LlmProvider,
+  ProviderSettings,
+  TokenUsageEstimate,
+  ToolPolicyProfile,
+} from "@/types/runtime"
 
+import { createModelToolMessageContent } from "./model-tool-results"
 import { getToolApprovalReason, requiresToolApproval } from "./runtime/tool-policy"
+import {
+  createEmptyTokenUsageEstimate,
+  estimateTokens,
+  finalizeTokenUsageEstimate,
+} from "./token-budget"
 import { runWithToolExecutionContext } from "./tool-execution-context"
 import { createToolset } from "./tools"
+import {
+  findBlockedWorkspaceDirectoryReference,
+  findBlockedWorkspacePathSegment,
+} from "./workspace"
 
 type AgentEventHandlers = {
   onToolStart?: (tool: Partial<ToolCall> & { id: string }) => void | Promise<void>
@@ -51,11 +66,6 @@ type ToolCapableChatModel = {
   bindTools: (tools: StructuredToolInterface[]) => BoundToolModel
 }
 
-const MAX_TOOL_RESULT_CHARS = 12_000
-const MAX_STRING_CHARS = 6_000
-const MAX_ARRAY_ITEMS = 30
-const MAX_OBJECT_KEYS = 50
-const MAX_DEPTH = 4
 const GEMINI_UNSUPPORTED_TOOL_NAMES = new Set([
   "http_request",
   "download_fetch",
@@ -63,90 +73,82 @@ const GEMINI_UNSUPPORTED_TOOL_NAMES = new Set([
   "yaml_patch",
 ])
 
-/**
- * Truncates large strings before they are sent back to the model or persisted as tool output.
- */
-function truncateString(value: string, max = MAX_STRING_CHARS) {
-  if (value.length <= max) return value
-  return `${value.slice(0, max)}\n\n...(truncated, ${value.length} chars total)`
+const PROTECTED_WORKSPACE_ACCESS_ARGUMENT_KEYS: Record<string, string[]> = {
+  file_read: ["path"],
+  list_files: ["path"],
+  file_stat: ["path"],
+  workspace_stats: ["path"],
+  file_head_tail: ["path"],
+  file_outline: ["path"],
+  symbol_search: ["path"],
+  symbol_references: ["path"],
+  dependency_graph: ["path"],
+  duplicate_code_candidates: ["path"],
+  dead_code_candidates: ["path"],
+  code_map: ["path"],
+  file_search: ["path"],
+  write_file: ["path"],
+  file_replace: ["path"],
+  json_patch: ["path"],
+  yaml_patch: ["path"],
+  archive_create: ["paths"],
+  archive_extract: ["outputDir"],
+  extract_todos: ["path"],
+  pdf_extract_text: ["path"],
+  docx_extract_text: ["path"],
+  csv_preview: ["path"],
+  csv_query: ["path"],
+  json_query: ["path"],
+  yaml_query: ["path"],
+  sqlite_query: ["path"],
+  markdown_frontmatter: ["path"],
+  secret_scan: ["path"],
+  workspace_permissions_scan: ["path"],
+  asset_manifest: ["path"],
+  svg_optimize: ["path"],
+  git_diff_summary: ["path"],
+  git_blame: ["path"],
+  git_file_history: ["path"],
+  git_staged_diff: ["path"],
+  git_show: ["path"],
+  git_patch_preview: ["path"],
+  git_apply_patch: ["patch"],
+  execute_command: ["command", "cwd"],
+  shell_execute: ["command", "cwd"],
+  node_execute: ["code"],
+  python_execute: ["code"],
+  node_codeact: ["code"],
+  python_codeact: ["code"],
+  shell_codeact: ["code"],
 }
+const FREEFORM_PROTECTED_WORKSPACE_ARGUMENT_KEYS = new Set(["command", "code", "patch"])
 
-/**
- * Reduces arbitrary tool payloads into model-safe JSON by limiting size, nesting, arrays, keys, and
- * embedded binary/image data.
- */
-function sanitizeToolPayload(value: unknown, depth = 0): unknown {
-  if (depth > MAX_DEPTH) return "[truncated: max depth]"
-
+function findProtectedWorkspaceAccessReference(key: string, value: unknown): string | undefined {
   if (typeof value === "string") {
-    if (value.startsWith("data:image/") && value.length > 200) {
-      return `[omitted image data url, ${value.length} chars]`
-    }
-    return truncateString(value)
+    return FREEFORM_PROTECTED_WORKSPACE_ARGUMENT_KEYS.has(key)
+      ? findBlockedWorkspaceDirectoryReference(value)
+      : findBlockedWorkspacePathSegment(value)
   }
-
-  if (typeof value === "number" || typeof value === "boolean" || value == null) return value
-
   if (Array.isArray(value)) {
-    const slice = value
-      .slice(0, MAX_ARRAY_ITEMS)
-      .map((item) => sanitizeToolPayload(item, depth + 1))
-    if (value.length > MAX_ARRAY_ITEMS) {
-      slice.push(`[truncated: ${value.length - MAX_ARRAY_ITEMS} more items]`)
+    for (const item of value) {
+      const blockedDirectory = findProtectedWorkspaceAccessReference(key, item)
+      if (blockedDirectory) return blockedDirectory
     }
-    return slice
   }
-
-  if (typeof value === "object") {
-    const obj = value as Record<string, unknown>
-    const keys = Object.keys(obj)
-    const limitedKeys = keys.slice(0, MAX_OBJECT_KEYS)
-    const out: Record<string, unknown> = {}
-
-    for (const key of limitedKeys) {
-      const val = obj[key]
-      if (typeof val === "string") {
-        const lower = key.toLowerCase()
-        if (lower.includes("screenshot") || lower.includes("image")) {
-          out[key] = val.startsWith("data:image/")
-            ? `[omitted ${key}, ${val.length} chars]`
-            : truncateString(val, 500)
-          continue
-        }
-        if (
-          key === "markdown" ||
-          key === "content" ||
-          key === "html" ||
-          key === "stdout" ||
-          key === "stderr"
-        ) {
-          out[key] = truncateString(val)
-          continue
-        }
-      }
-      out[key] = sanitizeToolPayload(val, depth + 1)
-    }
-
-    if (keys.length > MAX_OBJECT_KEYS) {
-      out.__truncatedKeys = keys.length - MAX_OBJECT_KEYS
-    }
-
-    return out
-  }
-
-  return String(value)
+  return undefined
 }
 
-/**
- * Serializes a tool result into the compact ToolMessage content required by provider chat APIs.
- */
-function toolMessageContent(result: unknown) {
-  const sanitized = sanitizeToolPayload(result)
-  let content = JSON.stringify(sanitized)
-  if (content.length > MAX_TOOL_RESULT_CHARS) {
-    content = `${content.slice(0, MAX_TOOL_RESULT_CHARS)}...(truncated tool result, ${content.length} chars total)`
+function getProtectedWorkspaceAccessReason(toolName: string, args: unknown) {
+  const keys = PROTECTED_WORKSPACE_ACCESS_ARGUMENT_KEYS[toolName]
+  if (!keys || !args || typeof args !== "object") return undefined
+  const argRecord = args as Record<string, unknown>
+  for (const key of keys) {
+    const blockedDirectory = findProtectedWorkspaceAccessReference(key, argRecord[key])
+    if (blockedDirectory) {
+      return `This tool references protected workspace directory "${blockedDirectory}". Rekdin skips generated dependency/build folders by default; explicit access needs approval.`
+    }
   }
-  return content
+  return undefined
 }
 
 /**
@@ -247,16 +249,56 @@ function createModel({
   })
 }
 
+function addToolTokenEstimate(
+  estimate: TokenUsageEstimate,
+  result: { originalTokens: number; tokens: number }
+) {
+  estimate.originalToolResultTokens += result.originalTokens
+  estimate.toolResultTokens += result.tokens
+  estimate.savedToolResultTokens = Math.max(
+    estimate.originalToolResultTokens - estimate.toolResultTokens,
+    0
+  )
+}
+
+function estimateToolSchemaTokens(tools: StructuredToolInterface[]) {
+  return estimateTokens(
+    JSON.stringify(
+      tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+      }))
+    )
+  )
+}
+
 /**
  * Converts persisted Rekdin messages into LangChain messages, including matching ToolMessages for
  * assistant tool calls so providers accept historical tool-call context.
  */
-function toLangChainMessages(message: ChatMessage): BaseMessage[] {
+function toLangChainMessages(
+  message: ChatMessage,
+  tokenEstimate?: TokenUsageEstimate
+): BaseMessage[] {
   if (message.role === "user") {
-    return [new HumanMessage(formatUserContent(message.content, message.attachments))]
+    const content = formatUserContent(message.content, message.attachments)
+    if (tokenEstimate) tokenEstimate.historyTokens += estimateTokens(content)
+    return [new HumanMessage(content)]
   }
   if (message.role === "assistant") {
     const toolCalls = message.toolCalls ?? []
+    if (tokenEstimate) {
+      tokenEstimate.historyTokens += estimateTokens(
+        JSON.stringify({
+          role: message.role,
+          content: message.content,
+          toolCalls: toolCalls.map((call) => ({
+            name: call.name,
+            arguments: call.arguments,
+          })),
+        })
+      )
+    }
     const aiMsg = new AIMessage({
       content: message.content,
       tool_calls: toolCalls.map((call) => ({
@@ -269,15 +311,21 @@ function toLangChainMessages(message: ChatMessage): BaseMessage[] {
     // otherwise OpenAI rejects the conversation with a 400.
     const toolMessages = toolCalls
       .filter((call) => call.result !== undefined || call.error !== undefined)
-      .map(
-        (call) =>
-          new ToolMessage({
-            tool_call_id: call.id,
-            content: toolMessageContent(call.result ?? { error: call.error ?? "unknown error" }),
-          })
-      )
+      .map((call) => {
+        const toolContent = createModelToolMessageContent(
+          call.name,
+          call.result ?? { error: call.error ?? "unknown error" },
+          "history"
+        )
+        if (tokenEstimate) addToolTokenEstimate(tokenEstimate, toolContent)
+        return new ToolMessage({
+          tool_call_id: call.id,
+          content: toolContent.content,
+        })
+      })
     return [aiMsg, ...toolMessages]
   }
+  if (tokenEstimate) tokenEstimate.historyTokens += estimateTokens(message.content)
   return [new SystemMessage(message.content)]
 }
 
@@ -314,6 +362,7 @@ export interface AgentRunResult {
   reply: string
   toolCalls: ToolCall[]
   usageTokens: number
+  tokenUsageEstimate: TokenUsageEstimate
   model: string
   retryCount: number
 }
@@ -430,7 +479,8 @@ export async function runAgent({
 }: AgentRunOptions): Promise<AgentRunResult> {
   return runWithToolExecutionContext({ sessionId, workspaceRoot }, async () => {
     const providerId = normalizeLlmProvider(providerSettings.provider)
-    const tools: StructuredToolInterface[] = createToolset({
+    const MAX_API_TOOLS = 128
+    const allTools: StructuredToolInterface[] = createToolset({
       headers: toolHeaders,
       allowedToolNames,
     }).filter((tool) =>
@@ -447,6 +497,15 @@ export async function runAgent({
       if (disabledTools.length > 0) {
         await onWarning?.(`Gemini disables unsupported tool schemas: ${disabledTools.join(", ")}.`)
       }
+    }
+
+    const tools: StructuredToolInterface[] =
+      allTools.length > MAX_API_TOOLS ? allTools.slice(0, MAX_API_TOOLS) : allTools
+    if (allTools.length > MAX_API_TOOLS) {
+      const trimmed = allTools.slice(MAX_API_TOOLS).map((t) => t.name)
+      await onWarning?.(
+        `Tool count (${allTools.length}) exceeds API limit of ${MAX_API_TOOLS}. Trimmed: ${trimmed.join(", ")}.`
+      )
     }
 
     let modelId =
@@ -472,9 +531,12 @@ export async function runAgent({
       azureOpenAIDeployment: providerSettings.azureOpenAIDeployment,
     })
     let llmWithTools = llm.bindTools(tools)
+    const tokenUsageEstimate = createEmptyTokenUsageEstimate()
+    tokenUsageEstimate.systemPromptTokens = estimateTokens(systemPrompt ?? "")
+    tokenUsageEstimate.toolSchemaTokens = estimateToolSchemaTokens(tools)
     const history: BaseMessage[] = [
       ...(systemPrompt ? [new SystemMessage(systemPrompt)] : []),
-      ...contextMessages.flatMap(toLangChainMessages),
+      ...contextMessages.flatMap((message) => toLangChainMessages(message, tokenUsageEstimate)),
     ]
 
     const executedTools: ToolCall[] = []
@@ -548,7 +610,18 @@ export async function runAgent({
           let result: unknown
           let error: string | undefined
           try {
+            const approvalReasons: string[] = []
             if (toolPolicy && requiresToolApproval(toolName, toolPolicy)) {
+              approvalReasons.push(getToolApprovalReason(toolName, toolPolicy))
+            }
+            const protectedWorkspaceAccessReason = getProtectedWorkspaceAccessReason(
+              toolName,
+              call.args
+            )
+            if (protectedWorkspaceAccessReason) {
+              approvalReasons.push(protectedWorkspaceAccessReason)
+            }
+            if (approvalReasons.length > 0) {
               const approved = await onApprovalRequired?.({
                 sessionId,
                 toolName,
@@ -556,13 +629,18 @@ export async function runAgent({
                   call.args && typeof call.args === "object"
                     ? (call.args as Record<string, unknown>)
                     : { value: call.args },
-                reason: getToolApprovalReason(toolName, toolPolicy),
+                reason: approvalReasons.join(" "),
               })
               if (!approved) {
                 throw new Error(`Tool execution rejected by approval gate: ${toolName}`)
               }
             }
-            result = await tool.invoke(call.args)
+            result = protectedWorkspaceAccessReason
+              ? await runWithToolExecutionContext(
+                  { sessionId, workspaceRoot, allowProtectedWorkspaceAccess: true },
+                  async () => await tool.invoke(call.args)
+                )
+              : await tool.invoke(call.args)
           } catch (err) {
             status = "error"
             error = err instanceof Error ? err.message : "Unknown error"
@@ -581,10 +659,16 @@ export async function runAgent({
           }
           executedTools.push(record)
           await onToolResult?.(record)
+          const toolContent = createModelToolMessageContent(
+            record.name,
+            record.result ?? record.error ?? "",
+            "current"
+          )
+          addToolTokenEstimate(tokenUsageEstimate, toolContent)
           history.push(
             new ToolMessage({
               tool_call_id: record.id,
-              content: toolMessageContent(record.result ?? record.error ?? ""),
+              content: toolContent.content,
             })
           )
         }
@@ -602,11 +686,14 @@ export async function runAgent({
       typeof finalMessage.content === "string"
         ? finalMessage.content
         : JSON.stringify(finalMessage.content)
+    const completionTokens = estimateTokens(text)
+    const finalizedTokenEstimate = finalizeTokenUsageEstimate(tokenUsageEstimate, completionTokens)
 
     return {
       reply: text,
       toolCalls: executedTools,
-      usageTokens: finalMessage.usage_metadata?.total_tokens ?? 0,
+      usageTokens: finalMessage.usage_metadata?.total_tokens ?? finalizedTokenEstimate.totalTokens,
+      tokenUsageEstimate: finalizedTokenEstimate,
       model: modelId,
       retryCount,
     }

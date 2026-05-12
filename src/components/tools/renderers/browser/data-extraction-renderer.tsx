@@ -3,7 +3,7 @@
 import { motion } from "motion/react"
 import React, { useState } from "react"
 
-import { Image } from "@/components/ui/image"
+import { ClickableImage } from "@/components/ui/image-lightbox"
 import { Check, ClipboardDocumentList as Copy, XMark } from "@/lib/icons"
 import { ArrowDownTray, Eye } from "@/lib/icons"
 
@@ -94,7 +94,7 @@ export const DataExtractionRenderer: React.FC<DataExtractionRendererProps> = ({ 
     <div className="space-y-4">
       {screenshot ? (
         <BrowserShell>
-          <Image
+          <ClickableImage
             src={screenshot}
             alt="Data extraction screenshot"
             className="h-auto w-full object-contain"
@@ -102,7 +102,7 @@ export const DataExtractionRenderer: React.FC<DataExtractionRendererProps> = ({ 
         </BrowserShell>
       ) : null}
 
-      <div className="border-tool-data/20 bg-card overflow-hidden rounded-xl border shadow-sm">
+      <div className="border-tool-data/20 bg-surface-3 overflow-hidden rounded-lg border shadow-none">
         <div className="border-tool-data/20 bg-tool-data/10 flex items-center border-b px-4 py-3">
           <ArrowDownTray className="text-tool-data mr-2.5" size={18} />
           <div className="text-foreground font-medium">Data Extraction</div>

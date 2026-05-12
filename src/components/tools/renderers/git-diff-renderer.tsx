@@ -3,9 +3,13 @@
 import { parsePatch } from "diff"
 import { useState } from "react"
 
-import { Check, ChevronDown, ChevronRight, ClipboardDocumentList as Copy } from "@/lib/icons"
+import { FileExtensionIcon } from "@/components/file-extension-icon"
+import { ChevronDown, ChevronRight } from "@/lib/icons"
 
+import { CopyButton, InlineToolResult, SearchInput, useToolInvoke } from "./renderer-primitives"
 import { type ToolResultContentPart } from "./tool-result-renderer"
+
+type GitBlameResult = { output?: string; blame?: string }
 
 const STATUS_COLORS: Record<string, string> = {
   M: "text-amber-500",
@@ -37,29 +41,6 @@ function parseStatusLines(status: string) {
     })
 }
 
-function CopyBtn({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      /* ignore */
-    }
-  }
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      className="text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
-      title="Copy"
-    >
-      {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-    </button>
-  )
-}
-
 function DiffFileBlock({ file }: { file: ReturnType<typeof parsePatch>[number] }) {
   const [open, setOpen] = useState(true)
   const fileName =
@@ -71,31 +52,67 @@ function DiffFileBlock({ file }: { file: ReturnType<typeof parsePatch>[number] }
     0
   )
 
+  const {
+    loading: blameLoading,
+    result: blameResult,
+    error: blameError,
+    invoke: blameInvoke,
+    reset: blameReset,
+  } = useToolInvoke<GitBlameResult>("git_blame")
+  const [showBlame, setShowBlame] = useState(false)
+
+  const handleBlame = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (showBlame) {
+      blameReset()
+      setShowBlame(false)
+      return
+    }
+    setShowBlame(true)
+    await blameInvoke({ path: fileName })
+  }
+
+  const blameOutput = blameResult?.output ?? blameResult?.blame ?? ""
+
   return (
     <div className="border-b last:border-b-0">
       {/* File header */}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="bg-muted/10 hover:bg-muted/20 flex w-full items-center gap-2 px-3 py-2 text-left transition-colors"
-      >
-        {open ? (
-          <ChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
-        ) : (
-          <ChevronRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+      <div className="bg-muted/10 hover:bg-muted/20 flex w-full items-center gap-2 px-3 py-2 transition-colors">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          {open ? (
+            <ChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+          ) : (
+            <ChevronRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+          )}
+          {fileName && (
+            <FileExtensionIcon extensionName={fileName} className="h-3.5 w-3.5 shrink-0" />
+          )}
+          <span className="text-foreground/80 min-w-0 flex-1 truncate font-mono text-[11px]">
+            {fileName}
+          </span>
+          <span className="shrink-0 text-[10px] font-medium text-emerald-600">+{added}</span>
+          <span className="text-destructive shrink-0 text-[10px] font-medium">−{removed}</span>
+        </button>
+        {fileName && (
+          <button
+            type="button"
+            onClick={handleBlame}
+            disabled={blameLoading}
+            className={`rk-flat-button shrink-0 font-mono text-[10px] disabled:opacity-50 ${showBlame ? "text-foreground" : ""}`}
+          >
+            {blameLoading ? "Loading…" : showBlame ? "Dismiss" : "Blame"}
+          </button>
         )}
-        <span className="text-foreground/80 min-w-0 flex-1 truncate font-mono text-[11px]">
-          {fileName}
-        </span>
-        <span className="shrink-0 text-[10px] font-medium text-emerald-600">+{added}</span>
-        <span className="text-destructive shrink-0 text-[10px] font-medium">−{removed}</span>
-      </button>
+      </div>
 
       {open && (
         <div className="overflow-x-auto">
           {file.hunks.map((hunk, hi) => (
             <div key={hi}>
-              {/* Hunk header */}
               <div className="bg-blue-500/5 px-3 py-0.5 font-mono text-[10px] text-blue-500/70">
                 @@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
               </div>
@@ -124,6 +141,32 @@ function DiffFileBlock({ file }: { file: ReturnType<typeof parsePatch>[number] }
             </div>
           ))}
         </div>
+      )}
+
+      {/* Inline blame */}
+      {showBlame && (
+        <InlineToolResult
+          title={blameLoading ? `Loading blame for ${fileName}…` : `git blame ${fileName}`}
+          onDismiss={() => {
+            blameReset()
+            setShowBlame(false)
+          }}
+          error={blameError}
+        >
+          {blameOutput && (
+            <div>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <span className="text-muted-foreground font-mono text-[10px]">
+                  {blameOutput.split("\n").length} lines
+                </span>
+                <CopyButton text={blameOutput} />
+              </div>
+              <pre className="rk-scrollbar text-foreground/75 max-h-[40vh] overflow-auto px-3 pb-3 font-mono text-[10px] leading-relaxed whitespace-pre-wrap">
+                {blameOutput}
+              </pre>
+            </div>
+          )}
+        </InlineToolResult>
       )}
     </div>
   )
@@ -155,31 +198,49 @@ export function GitDiffRenderer({ part }: { part: ToolResultContentPart }) {
     0
   )
 
+  const [fileFilter, setFileFilter] = useState("")
+  const q = fileFilter.toLowerCase()
+  const visibleFiles = q
+    ? parsedFiles.filter((f) => {
+        const name = f.newFileName?.replace(/^b\//, "") ?? f.oldFileName?.replace(/^a\//, "") ?? ""
+        return name.toLowerCase().includes(q)
+      })
+    : parsedFiles
+
   return (
     <div className="w-full min-w-0 overflow-hidden rounded-lg">
       {/* Header */}
-      <div className="bg-muted/20 flex items-center justify-between gap-2 border-b px-3 py-2">
-        <div className="flex items-center gap-2">
-          <span className="text-foreground text-xs font-semibold">Git Diff</span>
-          {isClean ? (
-            <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600">
-              clean
-            </span>
-          ) : (
-            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
-              {statusLines.length > 0
+      <div className="bg-muted/20 flex items-center gap-2 border-b px-3 py-2">
+        <span className="text-foreground text-xs font-semibold">Git Diff</span>
+        {isClean ? (
+          <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600">
+            clean
+          </span>
+        ) : (
+          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+            {q
+              ? `${visibleFiles.length}/${parsedFiles.length} files`
+              : statusLines.length > 0
                 ? `${statusLines.length} file${statusLines.length !== 1 ? "s" : ""} changed`
                 : `${parsedFiles.length} file${parsedFiles.length !== 1 ? "s" : ""}`}
-            </span>
-          )}
-          {(totalAdded > 0 || totalRemoved > 0) && (
-            <>
-              <span className="text-[10px] font-medium text-emerald-600">+{totalAdded}</span>
-              <span className="text-destructive text-[10px] font-medium">−{totalRemoved}</span>
-            </>
-          )}
-        </div>
-        {diff && <CopyBtn text={diff} />}
+          </span>
+        )}
+        {(totalAdded > 0 || totalRemoved > 0) && (
+          <>
+            <span className="text-[10px] font-medium text-emerald-600">+{totalAdded}</span>
+            <span className="text-destructive text-[10px] font-medium">−{totalRemoved}</span>
+          </>
+        )}
+        {/* File filter — show when there are multiple diff files */}
+        {parsedFiles.length > 3 && (
+          <SearchInput
+            value={fileFilter}
+            onChange={setFileFilter}
+            placeholder="Filter files…"
+            className="ml-auto w-36"
+          />
+        )}
+        {diff && <CopyButton text={diff} className={parsedFiles.length > 3 ? "" : "ml-auto"} />}
       </div>
 
       {isClean && (
@@ -207,12 +268,17 @@ export function GitDiffRenderer({ part }: { part: ToolResultContentPart }) {
       )}
 
       {/* Parsed diff — per-file collapsible blocks */}
-      {parsedFiles.length > 0 && (
-        <div className="max-h-[60vh] divide-y overflow-auto">
-          {parsedFiles.map((file, i) => (
+      {visibleFiles.length > 0 && (
+        <div className="rk-scrollbar max-h-[60vh] divide-y overflow-auto">
+          {visibleFiles.map((file, i) => (
             <DiffFileBlock key={i} file={file} />
           ))}
         </div>
+      )}
+
+      {/* No matches when filtering */}
+      {q && visibleFiles.length === 0 && parsedFiles.length > 0 && (
+        <div className="text-muted-foreground px-3 py-4 text-xs italic">No files match</div>
       )}
 
       {/* Fallback: raw diff if parsePatch returned nothing */}

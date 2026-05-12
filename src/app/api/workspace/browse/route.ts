@@ -2,7 +2,11 @@ import { readdir, stat } from "fs/promises"
 import { NextResponse } from "next/server"
 import path from "path"
 
-import { getDefaultWorkspaceRoot } from "@/lib/server/workspace"
+import {
+  findBlockedWorkspacePathSegment,
+  getDefaultWorkspaceRoot,
+  isBlockedWorkspaceDirectoryName,
+} from "@/lib/server/workspace"
 
 export const runtime = "nodejs"
 
@@ -10,6 +14,13 @@ export async function GET(req: Request) {
   const url = new URL(req.url)
   const requestedPath = url.searchParams.get("path")?.trim()
   const currentPath = requestedPath ? path.resolve(requestedPath) : getDefaultWorkspaceRoot()
+  const blockedSegment = findBlockedWorkspacePathSegment(currentPath)
+  if (blockedSegment) {
+    return NextResponse.json(
+      { error: `Protected workspace directory "${blockedSegment}" cannot be opened` },
+      { status: 400 }
+    )
+  }
   const currentStat = await stat(currentPath).catch(() => null)
 
   if (!currentStat?.isDirectory()) {
@@ -23,6 +34,11 @@ export async function GET(req: Request) {
       name: entry.name,
       path: path.join(currentPath, entry.name),
       hidden: entry.name.startsWith("."),
+      protected: isBlockedWorkspaceDirectoryName(entry.name),
+      skipped: isBlockedWorkspaceDirectoryName(entry.name),
+      reason: isBlockedWorkspaceDirectoryName(entry.name)
+        ? "Expected to be large; not opened by default."
+        : undefined,
     }))
     .sort((a, b) => {
       if (a.hidden !== b.hidden) return a.hidden ? 1 : -1

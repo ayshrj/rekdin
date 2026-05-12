@@ -11,6 +11,7 @@ import {
 import { toolLabels } from "@/components/tools/tool-labels"
 import { Badge } from "@/components/ui/badge"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ToolResultEntry, useChat, useToolResults } from "@/contexts/chat-context"
 import {
   ArrowDownTray,
@@ -64,7 +65,7 @@ function isResultEmpty(entry: ToolResultEntry): boolean {
 
 function ToolLoadingSkeleton({ toolName }: { toolName: string }) {
   return (
-    <div className="bg-surface-1 w-full space-y-4 rounded-2xl border p-4">
+    <div className="rk-tool-card w-full space-y-4">
       <div className="flex items-center gap-2">
         <span className="bg-primary h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
         <span className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
@@ -72,13 +73,75 @@ function ToolLoadingSkeleton({ toolName }: { toolName: string }) {
         </span>
       </div>
       <div className="space-y-2.5">
-        <div className="bg-muted h-3 w-4/5 animate-pulse rounded" />
-        <div className="bg-muted h-3 w-3/5 animate-pulse rounded" />
-        <div className="bg-muted h-3 w-11/12 animate-pulse rounded" />
-        <div className="bg-muted h-3 w-2/3 animate-pulse rounded" />
-        <div className="bg-muted h-3 w-3/4 animate-pulse rounded" />
+        <div className="bg-surface-4 h-3 w-4/5 animate-pulse rounded-sm" />
+        <div className="bg-surface-4 h-2 w-3/5 animate-pulse rounded-sm" />
+        <div className="bg-surface-4 h-3 w-11/12 animate-pulse rounded-sm" />
+        <div className="bg-surface-4 h-2 w-2/3 animate-pulse rounded-sm" />
+        <div className="bg-surface-4 h-3 w-3/4 animate-pulse rounded-sm" />
       </div>
     </div>
+  )
+}
+
+function StepRail({
+  steps,
+  selectedIndex,
+  onSelect,
+}: {
+  steps: ToolResultEntry[]
+  selectedIndex: number
+  onSelect: (index: number) => void
+}) {
+  return (
+    <TooltipProvider delayDuration={180}>
+      <aside className="border-border bg-surface-2/60 hidden w-11 shrink-0 flex-col border-r sm:flex">
+        <div className="border-border flex h-9 shrink-0 items-center justify-center border-b">
+          <span className="text-muted-foreground font-mono text-[10px] font-medium">
+            {steps.length}
+          </span>
+        </div>
+        <div className="rk-scrollbar min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
+          <div className="space-y-1">
+            {steps.map((step, index) => {
+              const active = index === selectedIndex
+              const isRunning = step.status === "running"
+              const label = toolLabels[step.toolName] ?? step.toolName
+              return (
+                <Tooltip key={step.id}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => onSelect(index)}
+                      aria-label={`Step ${index + 1}: ${label}`}
+                      className={cn(
+                        "relative flex size-8 items-center justify-center rounded-md font-mono text-[11px] transition-colors",
+                        active
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:bg-surface-4 hover:text-foreground"
+                      )}
+                    >
+                      {index + 1}
+                      {isRunning ? (
+                        <span className="bg-primary absolute top-1 right-1 size-1.5 animate-pulse rounded-full" />
+                      ) : null}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" align="center" className="max-w-56 text-xs">
+                    <div className="space-y-1">
+                      <p className="font-medium">Step {index + 1}</p>
+                      <p className="text-muted-foreground">{label}</p>
+                      <p className="text-muted-foreground/70 font-mono text-[10px]">
+                        {new Date(step.timestamp).toLocaleTimeString()}
+                      </p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              )
+            })}
+          </div>
+        </div>
+      </aside>
+    </TooltipProvider>
   )
 }
 
@@ -333,13 +396,13 @@ function summarizeAssistantOutcome(message?: string | null) {
  * Renders Rekdin's inspection surface: live tool results, background jobs, replay events, traces,
  * and export controls for the active chat session.
  */
-export function WorkspacePanel() {
+export function WorkspacePanel({ onChangeWorkspace }: { onChangeWorkspace?: () => void }) {
   const { toolResults } = useToolResults()
   const { currentSessionId, messages } = useChat()
   const [selectedIndex, setSelectedIndex] = React.useState(0)
-  const [showTimeline, setShowTimeline] = React.useState(false)
   const [navigationMode, setNavigationMode] = React.useState<"scroll" | "buttons">("buttons")
   const scrollContainerRef = React.useRef<HTMLDivElement | null>(null)
+  const stepNodeRefs = React.useRef(new Map<string, HTMLDivElement>())
   const [activeTab, setActiveTab] = React.useState<"timeline" | "artifacts" | "replay">("timeline")
   const [replayEvents, setReplayEvents] = React.useState<Array<Record<string, unknown>>>([])
   const [traces, setTraces] = React.useState<Array<Record<string, unknown>>>([])
@@ -369,7 +432,7 @@ export function WorkspacePanel() {
     const el = scrollContainerRef.current
     if (!el) return
     const isLastStep = selectedIndex === toolResults.length - 1
-    if (!isLastStep && navigationMode !== "scroll") return
+    if (!isLastStep || navigationMode !== "scroll") return
     const observer = new ResizeObserver(() => {
       const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
       if (distanceFromBottom < 300) {
@@ -383,6 +446,7 @@ export function WorkspacePanel() {
   const activeEntry = toolResults[selectedIndex]
   const runningEntry = toolResults.find((r) => r.status === "running")
   const isScrollMode = navigationMode === "scroll"
+  const showStepRail = activeTab === "timeline" && toolResults.length > 0
   const stepLabel =
     toolResults.length > 0 ? `Step ${selectedIndex + 1} of ${toolResults.length}` : "No steps yet"
 
@@ -391,10 +455,16 @@ export function WorkspacePanel() {
       if (index < 0 || index >= toolResults.length) return
       setSelectedIndex(index)
       if (!isScrollMode) return
-      const target = document.getElementById(`tool-result-${toolResults[index]?.id}`)
-      if (target) {
-        target.scrollIntoView({ behavior: "smooth", block: "start" })
-      }
+      const target = stepNodeRefs.current.get(toolResults[index]?.id)
+      const container = scrollContainerRef.current
+      if (!target || !container) return
+
+      window.requestAnimationFrame(() => {
+        const containerRect = container.getBoundingClientRect()
+        const targetRect = target.getBoundingClientRect()
+        const top = targetRect.top - containerRect.top + container.scrollTop - 16
+        container.scrollTo({ top, behavior: "smooth" })
+      })
     },
     [isScrollMode, toolResults]
   )
@@ -657,89 +727,10 @@ export function WorkspacePanel() {
   }, [backgroundJobs, replayEvents, traces])
 
   return (
-    <div className="rk-panel flex h-full min-w-0 overflow-hidden">
-      <motion.div
-        className="bg-surface-0/80 hidden shrink-0 overflow-y-auto border-r py-3 sm:block"
-        initial={false}
-        animate={{
-          width: showTimeline ? 240 : 56,
-          minWidth: showTimeline ? 200 : 56,
-        }}
-        transition={{ duration: 0.3, ease: "easeInOut" }}
-      >
-        <div className="mb-1 flex w-full items-center justify-between px-2">
-          {showTimeline && (
-            <motion.p
-              className="rk-section-label"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              Timeline
-            </motion.p>
-          )}
-          <Button
-            onClick={() => setShowTimeline(!showTimeline)}
-            size="icon-sm"
-            variant="ghost"
-            className={cn(
-              !showTimeline && "mx-auto",
-              "text-muted-foreground hover:bg-surface-2 hover:text-foreground cursor-pointer"
-            )}
-          >
-            <GalleryVerticalEnd className="size-4" />
-          </Button>
-        </div>
-        <div className="mt-2 space-y-0.5 px-1.5">
-          {toolResults.map((result, index) => {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const resultId = `tool-result-${result.id}`
-            return (
-              <button
-                key={result.id}
-                type="button"
-                className={cn(
-                  "w-full rounded-md border border-transparent px-2.5 py-2 text-left transition-colors",
-                  index === selectedIndex
-                    ? "border-primary/20 bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:bg-surface-2 hover:text-foreground"
-                )}
-                onClick={() => {
-                  handleStepChange(index)
-                }}
-              >
-                {showTimeline ? (
-                  <>
-                    <div className="flex flex-wrap items-center justify-between gap-1">
-                      <span className="font-medium">
-                        {toolLabels[result.toolName] ?? result.toolName}
-                      </span>
-                      {result.status === "running" ? (
-                        <span className="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full" />
-                      ) : (
-                        <span className="font-mono text-[10px]">{result.status}</span>
-                      )}
-                    </div>
-                    <p className="text-muted-foreground font-mono text-[10px]">
-                      {new Date(result.timestamp).toLocaleTimeString()}
-                    </p>
-                  </>
-                ) : (
-                  <div className="flex items-center justify-center gap-1">
-                    <span className="text-xs font-medium">{index + 1}</span>
-                    {result.status === "running" && (
-                      <span className="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full" />
-                    )}
-                  </div>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      </motion.div>
+    <div className="bg-surface-1 flex h-full min-w-0 overflow-hidden">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Header */}
-        <div className="bg-surface-1/90 flex h-12 shrink-0 items-center justify-between border-b px-4">
+        <div className="bg-surface-2 border-border flex h-12 shrink-0 items-center justify-between border-b px-4">
           <div className="flex items-center gap-2">
             <h3 className="text-foreground text-sm font-semibold">
               {activeTab === "timeline"
@@ -753,12 +744,12 @@ export function WorkspacePanel() {
                     : "Activity"}
             </h3>
             {activeTab === "timeline" && toolResults.length > 0 && (
-              <span className="bg-surface-2 text-muted-foreground rounded-full px-2 py-0.5 font-mono text-[10px]">
+              <span className="bg-surface-4 text-muted-foreground rounded-full px-2 py-0.5 font-mono text-[10px]">
                 {toolResults.length}
               </span>
             )}
             {activeTab === "artifacts" && artifacts.length > 0 && (
-              <span className="bg-surface-2 text-muted-foreground rounded-full px-2 py-0.5 font-mono text-[10px]">
+              <span className="bg-surface-4 text-muted-foreground rounded-full px-2 py-0.5 font-mono text-[10px]">
                 {artifacts.length}
               </span>
             )}
@@ -773,14 +764,27 @@ export function WorkspacePanel() {
               </span>
             ) : null}
           </div>
-          <div className="hidden items-center gap-1 sm:flex">
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 rounded-md text-xs"
+              onClick={
+                onChangeWorkspace ??
+                (() => window.dispatchEvent(new CustomEvent("rekdin:open-workspace")))
+              }
+            >
+              <Globe className="h-3 w-3" />
+              Root
+            </Button>
             {currentSessionId ? (
-              <>
+              <div className="hidden items-center gap-1 sm:flex">
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 gap-1 text-xs"
+                  className="h-7 gap-1 rounded-md text-xs"
                   onClick={() => downloadBundle("json")}
                 >
                   <ArrowDownTray className="h-3 w-3" />
@@ -790,19 +794,22 @@ export function WorkspacePanel() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 gap-1 text-xs"
+                  className="h-7 gap-1 rounded-md text-xs"
                   onClick={() => downloadBundle("html")}
                 >
                   <ClipboardDocumentList className="h-3 w-3" />
                   HTML
                 </Button>
-              </>
+              </div>
             ) : null}
           </div>
         </div>
 
         {/* Tab bar */}
-        <div className="bg-surface-2/50 flex shrink-0 items-center justify-between border-b px-2 sm:px-4">
+        <div
+          id="tour-workspace-tabs"
+          className="bg-surface-2 border-border flex shrink-0 items-center justify-between border-b px-2 sm:px-4"
+        >
           <div className="flex min-w-0 flex-1">
             {[
               { id: "timeline", label: "Timeline", icon: GalleryVerticalEnd },
@@ -816,9 +823,9 @@ export function WorkspacePanel() {
                   type="button"
                   onClick={() => setActiveTab(tab.id as typeof activeTab)}
                   className={cn(
-                    "flex h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 border-b-2 px-2 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase transition-colors sm:h-10 sm:flex-none sm:flex-row sm:gap-1.5 sm:px-3",
+                    "flex h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 border-b-2 px-2 text-xs font-medium transition-colors sm:h-10 sm:flex-none sm:flex-row sm:gap-1.5 sm:px-3",
                     activeTab === tab.id
-                      ? "border-primary text-primary"
+                      ? "border-primary text-foreground"
                       : "text-muted-foreground hover:text-foreground border-transparent"
                   )}
                 >
@@ -833,7 +840,7 @@ export function WorkspacePanel() {
               type="button"
               onClick={() => setShowDiagnostics((value) => !value)}
               className={cn(
-                "rounded-md px-2 py-1 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase transition-colors",
+                "rounded-md px-2 py-1 text-xs font-medium transition-colors",
                 showDiagnostics
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:text-foreground"
@@ -844,224 +851,250 @@ export function WorkspacePanel() {
           ) : null}
         </div>
 
-        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-auto px-4 pb-4">
-          <AnimatePresence mode="wait">
-            {activeTab === "timeline" && toolResults.length === 0 ? (
-              <motion.div
-                key="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                className="flex h-full flex-col items-center justify-center gap-3 text-center"
-              >
-                <div className="bg-surface-2/70 rounded-xl border p-4">
-                  <Globe className="text-muted-foreground/60 h-6 w-6" />
-                </div>
-                <div>
-                  <p className="text-foreground text-sm font-medium">No tool steps yet</p>
-                  <p className="text-muted-foreground mt-0.5 text-xs">
-                    Tool results will appear here as the agent works.
-                  </p>
-                </div>
-              </motion.div>
-            ) : activeTab === "timeline" && isScrollMode ? (
-              <motion.div
-                key="scroll"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15, ease: "easeOut" }}
-                className="mt-4 space-y-6"
-              >
-                {toolResults.map((result, index) => {
-                  const resultId = `tool-result-${result.id}`
-                  const contentPart = toContentPart(result)
-                  return (
-                    <div key={result.id} id={resultId} className="scroll-mt-4">
-                      <div
-                        className={cn(
-                          "mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
-                          index === selectedIndex
-                            ? "border-primary/20 bg-primary/10 text-primary"
-                            : "text-muted-foreground border-transparent"
-                        )}
-                      >
-                        <span>Step {index + 1}</span>
-                        <span>{toolLabels[result.toolName] ?? result.toolName}</span>
-                        <span>{new Date(result.timestamp).toLocaleTimeString()}</span>
-                      </div>
-                      {result.status === "running" && isResultEmpty(result) ? (
-                        <ToolLoadingSkeleton toolName={result.toolName} />
-                      ) : (
-                        <ToolResultRenderer content={[contentPart]} />
-                      )}
-                    </div>
-                  )
-                })}
-              </motion.div>
-            ) : activeTab === "timeline" && activeEntry ? (
-              <AnimatePresence mode="wait">
+        <div className="flex min-h-0 flex-1">
+          {showStepRail ? (
+            <StepRail
+              steps={toolResults}
+              selectedIndex={selectedIndex}
+              onSelect={handleStepChange}
+            />
+          ) : null}
+          <div
+            ref={scrollContainerRef}
+            className="rk-scrollbar min-h-0 flex-1 overflow-auto px-4 pb-4"
+          >
+            <AnimatePresence mode="wait">
+              {activeTab === "timeline" && toolResults.length === 0 ? (
                 <motion.div
-                  key={selectedIndex}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.15, ease: "easeOut" }}
-                  className="mt-4"
+                  key="empty"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex h-full flex-col items-center justify-center gap-3 text-center"
                 >
-                  <div className="text-muted-foreground border-border/60 bg-surface-2/50 mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1 font-mono text-[10px]">
-                    <span>{stepLabel}</span>
-                    <span>{toolLabels[activeEntry.toolName] ?? activeEntry.toolName}</span>
-                    <span>{new Date(activeEntry.timestamp).toLocaleTimeString()}</span>
+                  <div className="bg-surface-3 rounded-lg border p-4">
+                    <Globe className="text-muted-foreground/60 h-6 w-6" />
                   </div>
-                  {activeEntry.status === "running" && isResultEmpty(activeEntry) ? (
-                    <ToolLoadingSkeleton toolName={activeEntry.toolName} />
+                  <div>
+                    <p className="text-foreground text-sm font-medium">No tool steps yet</p>
+                    <p className="text-muted-foreground mt-0.5 text-xs">
+                      Tool results will appear here as the agent works.
+                    </p>
+                  </div>
+                </motion.div>
+              ) : activeTab === "timeline" && isScrollMode ? (
+                <motion.div
+                  key="scroll"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className="mt-4 space-y-6"
+                >
+                  {toolResults.map((result, index) => {
+                    const resultId = `tool-result-${result.id}`
+                    const contentPart = toContentPart(result)
+                    return (
+                      <div
+                        key={result.id}
+                        id={resultId}
+                        ref={(node) => {
+                          if (node) {
+                            stepNodeRefs.current.set(result.id, node)
+                          } else {
+                            stepNodeRefs.current.delete(result.id)
+                          }
+                        }}
+                        className="scroll-mt-4"
+                      >
+                        <div
+                          className={cn(
+                            "mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
+                            index === selectedIndex
+                              ? "border-primary/30 bg-primary/10 text-primary"
+                              : "text-muted-foreground border-transparent"
+                          )}
+                        >
+                          <span>Step {index + 1}</span>
+                          <span>{toolLabels[result.toolName] ?? result.toolName}</span>
+                          <span>{new Date(result.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        {result.status === "running" && isResultEmpty(result) ? (
+                          <ToolLoadingSkeleton toolName={result.toolName} />
+                        ) : (
+                          <ToolResultRenderer content={[contentPart]} />
+                        )}
+                      </div>
+                    )
+                  })}
+                </motion.div>
+              ) : activeTab === "timeline" && activeEntry ? (
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={selectedIndex}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className="mt-4"
+                  >
+                    <div className="text-muted-foreground border-border bg-surface-3 mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1 font-mono text-[10px]">
+                      <span>{stepLabel}</span>
+                      <span>{toolLabels[activeEntry.toolName] ?? activeEntry.toolName}</span>
+                      <span>{new Date(activeEntry.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    {activeEntry.status === "running" && isResultEmpty(activeEntry) ? (
+                      <ToolLoadingSkeleton toolName={activeEntry.toolName} />
+                    ) : (
+                      <ToolResultRenderer content={[toContentPart(activeEntry)]} />
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              ) : activeTab === "artifacts" ? (
+                <motion.div
+                  key="artifacts"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className="mt-4 space-y-3"
+                >
+                  {artifacts.length === 0 ? (
+                    <div className="text-muted-foreground py-10 text-center text-sm">
+                      No artifacts captured yet.
+                    </div>
                   ) : (
-                    <ToolResultRenderer content={[toContentPart(activeEntry)]} />
+                    artifacts.map((artifact) => (
+                      <a
+                        key={artifact.url}
+                        href={artifact.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group bg-surface-3 hover:bg-surface-4 border-border block rounded-lg border p-3 transition-colors"
+                      >
+                        <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
+                          Artifact
+                        </div>
+                        <div className="mt-1 text-sm font-medium">{artifact.label}</div>
+                        <div className="text-muted-foreground font-mono text-[11px] wrap-anywhere">
+                          {artifact.url}
+                        </div>
+                      </a>
+                    ))
                   )}
                 </motion.div>
-              </AnimatePresence>
-            ) : activeTab === "artifacts" ? (
-              <motion.div
-                key="artifacts"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15, ease: "easeOut" }}
-                className="mt-4 space-y-3"
-              >
-                {artifacts.length === 0 ? (
-                  <div className="text-muted-foreground py-10 text-center text-sm">
-                    No artifacts captured yet.
-                  </div>
-                ) : (
-                  artifacts.map((artifact) => (
-                    <a
-                      key={artifact.url}
-                      href={artifact.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="group bg-surface-1 hover:border-primary/30 hover:bg-primary/5 block rounded-lg border p-3 transition-colors"
-                    >
-                      <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
-                        Artifact
-                      </div>
-                      <div className="mt-1 text-sm font-medium">{artifact.label}</div>
-                      <div className="text-muted-foreground font-mono text-[11px] wrap-anywhere">
-                        {artifact.url}
-                      </div>
-                    </a>
-                  ))
-                )}
-              </motion.div>
-            ) : (
-              <motion.div
-                key="activity"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15, ease: "easeOut" }}
-                className="mt-4 space-y-3"
-              >
-                {!showDiagnostics && activityItems.length > 0
-                  ? activityItems.map((item, index) => (
-                      <motion.div
-                        key={item.id}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.18, ease: "easeOut", delay: index * 0.04 }}
-                        className="bg-surface-1/80 hover:bg-surface-2/70 rounded-lg border p-3 transition-colors"
-                      >
-                        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="flex min-w-0 items-start gap-2 text-sm font-medium wrap-anywhere">
-                            <PlayCircle className="mt-0.5 size-4 shrink-0" />
-                            {item.title}
+              ) : (
+                <motion.div
+                  key="activity"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className="mt-4 space-y-3"
+                >
+                  {!showDiagnostics && activityItems.length > 0
+                    ? activityItems.map((item, index) => (
+                        <motion.div
+                          key={item.id}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.18, ease: "easeOut", delay: index * 0.04 }}
+                          className="bg-surface-3 hover:bg-surface-4 border-border rounded-lg border p-3 transition-colors"
+                        >
+                          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="flex min-w-0 items-start gap-2 text-sm font-medium wrap-anywhere">
+                              <PlayCircle className="mt-0.5 size-4 shrink-0" />
+                              {item.title}
+                            </div>
+                            {item.timestamp ? (
+                              <div className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs">
+                                <Clock className="size-3" />
+                                {item.timestamp}
+                              </div>
+                            ) : null}
                           </div>
-                          {item.timestamp ? (
-                            <div className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs">
-                              <Clock className="size-3" />
-                              {item.timestamp}
+                          <p className="text-muted-foreground mt-1 text-sm whitespace-pre-wrap">
+                            {item.detail}
+                          </p>
+                          {item.tone ? (
+                            <div className="mt-2">
+                              <Badge
+                                variant="outline"
+                                className={
+                                  item.tone === "success"
+                                    ? "border-tool-data/25 bg-tool-data/10 text-tool-data"
+                                    : item.tone === "warning"
+                                      ? "border-destructive/25 bg-destructive/10 text-destructive"
+                                      : "border-tool-json/25 bg-tool-json/10 text-tool-json"
+                                }
+                              >
+                                {item.tone === "success"
+                                  ? "Completed"
+                                  : item.tone === "warning"
+                                    ? "Attention"
+                                    : "In progress"}
+                              </Badge>
                             </div>
                           ) : null}
-                        </div>
-                        <p className="text-muted-foreground mt-1 text-sm whitespace-pre-wrap">
-                          {item.detail}
-                        </p>
-                        {item.tone ? (
-                          <div className="mt-2">
-                            <Badge
-                              variant="outline"
-                              className={
-                                item.tone === "success"
-                                  ? "border-tool-data/25 bg-tool-data/10 text-tool-data"
-                                  : item.tone === "warning"
-                                    ? "border-destructive/25 bg-destructive/10 text-destructive"
-                                    : "border-tool-json/25 bg-tool-json/10 text-tool-json"
-                              }
-                            >
-                              {item.tone === "success"
-                                ? "Completed"
-                                : item.tone === "warning"
-                                  ? "Attention"
-                                  : "In progress"}
-                            </Badge>
+                        </motion.div>
+                      ))
+                    : null}
+                  {showDiagnostics && traces.length > 0 ? (
+                    <div className="space-y-3">
+                      {traces.map((trace) => (
+                        <div
+                          key={String(trace.id)}
+                          className="bg-surface-3 border-border rounded-lg border p-3"
+                        >
+                          <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
+                            Diagnostic trace · {String(trace.mode ?? "general")} ·{" "}
+                            {String(trace.model ?? "model")}
                           </div>
-                        ) : null}
-                      </motion.div>
-                    ))
-                  : null}
-                {showDiagnostics && traces.length > 0 ? (
-                  <div className="space-y-3">
-                    {traces.map((trace) => (
-                      <div key={String(trace.id)} className="bg-surface-1/80 rounded-lg border p-3">
-                        <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
-                          Diagnostic trace · {String(trace.mode ?? "general")} ·{" "}
-                          {String(trace.model ?? "model")}
+                          <JsonTreeViewer
+                            json={trace as unknown as JsonValue}
+                            className="px-0 pt-3 pb-0"
+                            showOnlyKeys={{ keys: [...TRACE_SHOW_ONLY_KEYS] }}
+                          />
                         </div>
-                        <JsonTreeViewer
-                          json={trace as unknown as JsonValue}
-                          className="px-0 pt-3 pb-0"
-                          showOnlyKeys={{ keys: [...TRACE_SHOW_ONLY_KEYS] }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                {showDiagnostics && replayEvents.length > 0 ? (
-                  <div className="space-y-3">
-                    {replayEvents.map((event, index) => (
-                      <div
-                        key={`${String(event.id ?? index)}`}
-                        className="bg-surface-1/80 rounded-lg border p-3"
-                      >
-                        <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
-                          Diagnostic event · {String(event.type ?? "event")}
+                      ))}
+                    </div>
+                  ) : null}
+                  {showDiagnostics && replayEvents.length > 0 ? (
+                    <div className="space-y-3">
+                      {replayEvents.map((event, index) => (
+                        <div
+                          key={`${String(event.id ?? index)}`}
+                          className="bg-surface-3 border-border rounded-lg border p-3"
+                        >
+                          <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
+                            Diagnostic event · {String(event.type ?? "event")}
+                          </div>
+                          <JsonTreeViewer
+                            json={(event.data ?? event) as unknown as JsonValue}
+                            className="px-0 pt-3 pb-0"
+                            showOnlyKeys={{ keys: [...REPLAY_EVENT_SHOW_ONLY_KEYS] }}
+                          />
                         </div>
-                        <JsonTreeViewer
-                          json={(event.data ?? event) as unknown as JsonValue}
-                          className="px-0 pt-3 pb-0"
-                          showOnlyKeys={{ keys: [...REPLAY_EVENT_SHOW_ONLY_KEYS] }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                {!showDiagnostics && activityItems.length === 0 ? (
-                  <div className="text-muted-foreground py-10 text-center text-sm">
-                    Activity will appear here after the session runs tools.
-                  </div>
-                ) : null}
-                {showDiagnostics && traces.length === 0 && replayEvents.length === 0 ? (
-                  <div className="text-muted-foreground py-10 text-center text-sm">
-                    Diagnostics will appear here after the session runs tools.
-                  </div>
-                ) : null}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                      ))}
+                    </div>
+                  ) : null}
+                  {!showDiagnostics && activityItems.length === 0 ? (
+                    <div className="text-muted-foreground py-10 text-center text-sm">
+                      Activity will appear here after the session runs tools.
+                    </div>
+                  ) : null}
+                  {showDiagnostics && traces.length === 0 && replayEvents.length === 0 ? (
+                    <div className="text-muted-foreground py-10 text-center text-sm">
+                      Diagnostics will appear here after the session runs tools.
+                    </div>
+                  ) : null}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
-        <div className="bg-surface-2/50 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-2">
+        <div className="bg-surface-2 border-border flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-2">
           <ToggleGroup
             type="single"
             value={navigationMode}

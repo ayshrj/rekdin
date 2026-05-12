@@ -2,8 +2,10 @@ import "./globals.css"
 
 import type { Metadata } from "next"
 import { Geist, Geist_Mono, Manrope } from "next/font/google"
+import Script from "next/script"
 
 import { ThemeProvider } from "@/components/theme-provider"
+import { ImageLightboxPortal } from "@/components/ui/image-lightbox"
 import { Toaster } from "@/components/ui/sonner"
 import { ChatProvider } from "@/contexts/chat-context"
 
@@ -118,13 +120,16 @@ export default function RootLayout({
       <body
         className={`${manrope.variable} ${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
-        <script
+        <Script
+          id="structured-data"
           type="application/ld+json"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <ChatProvider>
             {children}
+            <ImageLightboxPortal />
             <Toaster position="bottom-right" />
           </ChatProvider>
         </ThemeProvider>

@@ -55,8 +55,8 @@ interface TourProviderProps {
 const TourContext = createContext<TourContextType | null>(null)
 
 const SPOTLIGHT_PADDING = 10
-const CONTENT_WIDTH = 320
-const CONTENT_MIN_HEIGHT = 184
+const CONTENT_WIDTH = 220
+const CONTENT_MIN_HEIGHT = 160
 
 function getElementRect(step: TourStep | undefined): TargetRect | null {
   if (typeof document === "undefined") return null
@@ -271,7 +271,7 @@ export function TourProvider({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="pointer-events-none fixed inset-0 z-50 bg-black/55"
+                className="pointer-events-none fixed inset-0 z-50 bg-black/70"
               />
             ) : null}
 
@@ -281,7 +281,7 @@ export function TourProvider({
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.97 }}
                 className={cn(
-                  "border-primary/60 pointer-events-none fixed z-[60] rounded-xl border-2 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]",
+                  "border-primary pointer-events-none fixed z-60 rounded-xl border-4 shadow-[0_0_0_9999px_rgba(0,0,0,0.7)]",
                   className
                 )}
                 style={{
@@ -294,25 +294,22 @@ export function TourProvider({
             ) : null}
 
             <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.98 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="fixed z-[70]"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              className="fixed z-70"
               style={{
                 top: contentPosition.top,
                 left: contentPosition.left,
                 width: contentPosition.width,
               }}
             >
-              <div className="bg-card rounded-xl border p-5 shadow-(--shadow-panel)">
-                <div className="mb-4 flex items-start justify-between gap-4">
+              <div className="bg-surface-3 border-border rounded-xl border p-4 shadow-none">
+                <div className="mb-3 flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-muted-foreground text-[10px] font-semibold tracking-[0.16em] uppercase">
-                      Guided tour
-                    </p>
-                    <p className="text-foreground mt-1 text-sm font-semibold">
-                      Step {currentStep + 1} of {steps.length}
+                      {currentStep + 1} / {steps.length}
                     </p>
                   </div>
                   <button
@@ -324,7 +321,7 @@ export function TourProvider({
                   </button>
                 </div>
 
-                <div className="min-h-[120px]">
+                <div className="min-h-24">
                   {activeStep?.content}
                   {!targetRect ? (
                     <p className="text-muted-foreground/50 mt-3 text-xs">
@@ -334,7 +331,7 @@ export function TourProvider({
                   ) : null}
                 </div>
 
-                <div className="mt-5 flex items-center justify-between gap-3">
+                <div className="mt-4 flex items-center justify-between gap-3">
                   <Button
                     type="button"
                     variant="ghost"
@@ -395,25 +392,11 @@ export function TourAlertDialog({
 
   return (
     <AlertDialog open={isOpen}>
-      <AlertDialogContent className="max-w-md rounded-2xl p-6">
+      <AlertDialogContent className="max-w-md rounded-xl p-6">
         <AlertDialogHeader className="flex flex-col items-center justify-center">
           <div className="relative mx-auto mb-4">
-            <motion.div
-              initial={{ scale: 0.72, filter: "blur(8px)" }}
-              animate={{
-                scale: 1,
-                filter: "blur(0px)",
-                y: [0, -8, 0],
-                rotate: [36, 44, 36],
-              }}
-              transition={{
-                duration: 0.45,
-                ease: "easeOut",
-                y: { duration: 2.8, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" },
-                rotate: { duration: 3.2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" },
-              }}
-            >
-              <Torus className="text-primary size-28" />
+            <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}>
+              <Torus className="text-primary size-16" />
             </motion.div>
           </div>
           <AlertDialogTitle className="w-full text-center text-xl font-semibold tracking-tight">

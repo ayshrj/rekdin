@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { getSettingsStore, normalizeProvider } from "@/lib/server/settings-store"
+import { findBlockedWorkspacePathSegment } from "@/lib/server/workspace"
 import { ServerSettings } from "@/types/runtime"
 
 export const runtime = "nodejs"
@@ -58,7 +59,15 @@ export async function PUT(req: Request) {
   }
 
   if (typeof parsed.data.workspaceRoot === "string" && parsed.data.workspaceRoot.trim()) {
-    const workspaceStat = await stat(parsed.data.workspaceRoot.trim()).catch(() => null)
+    const workspaceRoot = parsed.data.workspaceRoot.trim()
+    const blockedSegment = findBlockedWorkspacePathSegment(workspaceRoot)
+    if (blockedSegment) {
+      return NextResponse.json(
+        { error: `Workspace root cannot be inside protected directory "${blockedSegment}"` },
+        { status: 400 }
+      )
+    }
+    const workspaceStat = await stat(workspaceRoot).catch(() => null)
     if (!workspaceStat?.isDirectory()) {
       return NextResponse.json(
         { error: "Workspace root must be an existing directory" },

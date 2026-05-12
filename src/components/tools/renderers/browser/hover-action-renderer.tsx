@@ -3,7 +3,7 @@
 import { motion } from "motion/react"
 import React, { useEffect, useRef, useState } from "react"
 
-import { Image } from "@/components/ui/image"
+import { ClickableImage } from "@/components/ui/image-lightbox"
 import { Check, CursorArrowRays as MousePointer, XMark } from "@/lib/icons"
 
 import { BrowserShell } from "../browser-shell"
@@ -45,7 +45,7 @@ export const HoverActionRenderer: React.FC<HoverActionRendererProps> = ({ part }
       {screenshot ? (
         <BrowserShell>
           <div className="relative">
-            <Image
+            <ClickableImage
               ref={imageRef}
               src={screenshot}
               alt="Hover action screenshot"
@@ -123,7 +123,7 @@ export const HoverActionRenderer: React.FC<HoverActionRendererProps> = ({ part }
         </BrowserShell>
       ) : null}
 
-      <div className="border-tool-action/20 bg-card overflow-hidden rounded-xl border shadow-sm">
+      <div className="border-tool-action/20 bg-surface-3 overflow-hidden rounded-lg border shadow-none">
         <div className="border-tool-action/20 bg-tool-action/10 flex items-center border-b px-4 py-3">
           <motion.div
             animate={{ x: [0, 2, 0] }}

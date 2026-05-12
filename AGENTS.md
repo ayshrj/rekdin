@@ -76,6 +76,10 @@ Read these before changing behavior:
 - `src/components/openrouter-settings.tsx`
 - `src/components/workspace-panel.tsx`
 - `src/components/tools/renderers/tool-result-renderer.tsx`
+- `src/components/tools/renderers/renderer-primitives.tsx`
+- `src/components/tools/renderers/simple-code-editor.tsx`
+- `src/components/tools/renderers/browser-shell.tsx`
+- `src/app/renderer-mock/page.tsx`
 
 ## Commands
 
@@ -171,6 +175,39 @@ Tool approvals are intentionally not durable job state. Foreground approval requ
 - Do not use native browser dialogs such as `window.alert`, `window.confirm`, or `prompt` for product UI. Use project UI surfaces such as inline panels, `Dialog`, `DialogShell`, or `AlertDialog`.
 - Avoid decorative UI changes that reduce density or scanning. This is a work-focused tool.
 - Make streamed and background states clear without requiring the user to inspect raw JSON.
+
+## Tool Renderer UI Guidance
+
+Tool result renderers are inspectability surfaces, not decorative cards. They should make an agent step understandable at a glance while preserving enough raw data to debug bad payloads, tool failures, and replay discrepancies.
+
+Renderer architecture:
+
+- `ToolResultRenderer` is the registry and safety boundary. Keep tool-name/type routing centralized there, normalize inconsistent LLM/tool payloads defensively, and preserve the error boundary fallback to raw payloads.
+- `renderer-primitives.tsx` is the preferred source for repeated renderer UI: `ToolRendererShell`, `ToolStatusBadge`, `ExitCodeBadge`, `CopyButton`, `RendererTabBar`, `RendererTab`, `SegmentedControl`, `ToolMetaRow`, `MonoField`, `EmptyState`, `ErrorBanner`, and `RawPayloadDisclosure`.
+- `SimpleCodeEditor` / `CodeEditor` are the shared code-view path. Use them for code, JSON-ish bodies, scripts, patches, and structured text where syntax highlighting helps.
+- `BrowserShell` is the shared frame for browser screenshots, page previews, and GUI automation context. Browser action renderers should keep screenshots, coordinates, selectors, thoughts, and actions visible.
+- `/renderer-mock` is the visual smoke-test route for renderer work. Update or use it when adding renderer families or changing the visual system.
+
+Renderer visual language:
+
+- Keep renderers dense, technical, and scan-first: compact headers, monospace metadata, restrained borders, stable rounded-lg shells, and no marketing-style empty space.
+- Prefer the three-zone pattern: header for identity/status/primary metadata, body for the readable result, footer/disclosure for raw payload or secondary details.
+- Use Rekdin tokens and utilities instead of ad hoc colors: `--surface-*`, `--tool-browser`, `--tool-action`, `--tool-search`, `--tool-json`, `--tool-code`, `--tool-command`, `--tool-doc`, `--tool-research`, `--tool-data`, `--status-success`, `--status-warning`, plus `rk-section-label`, `rk-meta-chip`, `rk-path-chip`, `rk-flat-button`, `rk-tab`, `rk-tab-active`, `rk-code-block`, `rk-tool-card`, and `rk-scrollbar`.
+- Use `RendererTabBar`/`RendererTab` for multi-view renderers such as overview/headers/body, summary/sources/insights, or tree/raw/source views. Use `SegmentedControl` for compact two- or three-mode toggles like preview/raw or script/output.
+- Include copy actions for high-value text: commands, stdout/stderr, URLs, selectors, response bodies, JSON, hashes, encoded text, and generated source.
+- Keep status visible with badges and concise labels: success/error/warning/fallback, exit code, HTTP status, duration, counts, file sizes, line counts, and source counts.
+
+Renderer behavior:
+
+- Treat every renderer input as untrusted and possibly malformed. Check arrays before mapping, strings before splitting, dates before formatting, and objects before property access.
+- Prefer structured parsing when available: `parsePatch` for diffs, JSON parsing for JSON strings, URL parsing for domains, file extensions for code/markdown detection.
+- Always provide empty states and raw fallbacks. A renderer should fail soft and preserve inspection rather than throwing or hiding data.
+- Keep scroll containment explicit with `rk-scrollbar`, max heights, `min-w-0`, truncation, and `break-all`/`wrap-anywhere` where needed. Tool output can be huge and path/URL strings can be hostile to layout.
+- Avoid hydration-unstable output in client renderers. Do not use locale-dependent dates, `Date.now()`, random values, or theme-dependent markup during SSR unless guarded after mount. Data/blob images should not receive generated `srcSet`.
+- Browser renderers should show the evidence: URL, screenshot, markdown/text extraction, selector or target element, coordinates, action status, and raw payload when useful.
+- File and repository renderers should preserve developer context: path, filename, extension icon where applicable, line counts, tree hierarchy, skipped/protected directory reasons, diff hunks, status summaries, blame/log metadata, and raw fallback.
+- Document/artifact renderers should surface both the artifact action and the diagnostic path: preview/open/download where possible, degraded/fallback states, compilation errors, generated source disclosure, artifact URL, and raw result.
+- Do not rewrite the renderer system wholesale for a small fix. Preserve the current redesigned renderer direction and patch narrowly unless the user explicitly asks for a redesign.
 
 ## Security And Safety
 

@@ -129,21 +129,16 @@ export const Image = React.forwardRef<HTMLImageElement, ImageProps>(function Ima
 ) {
   const isBrowser = typeof window !== "undefined"
   const [loaded, setLoaded] = React.useState(false)
-  const [shouldLoad, setShouldLoad] = React.useState(() => {
-    // For SSR or priority images, render with src immediately.
-    if (!isBrowser) return true
-    if (priority) return true
-    if (loadingProp === "eager") return true
-    return !useIntersectionObserver // if not using IO, let browser handle loading="lazy"
-  })
+  const [shouldLoad, setShouldLoad] = React.useState(true)
 
   const effectiveLoading: "lazy" | "eager" = priority ? "eager" : (loadingProp ?? "lazy")
   const fetchPriority = priority ? "high" : undefined
+  const shouldSkipSrcSet = unoptimized || src.startsWith("data:") || src.startsWith("blob:")
 
   const imgSrc = shouldLoad ? loader({ src, width: width ?? widths[0], quality }) : undefined
 
   const imgSrcSet =
-    !unoptimized && shouldLoad ? buildSrcSet(src, widths, quality, loader) : undefined
+    !shouldSkipSrcSet && shouldLoad ? buildSrcSet(src, widths, quality, loader) : undefined
 
   // Prevent CLS:
   // - if width+height => wrapper uses aspect-ratio
@@ -215,7 +210,7 @@ export const Image = React.forwardRef<HTMLImageElement, ImageProps>(function Ima
     if (!priority) return
 
     const href = pickPreloadHref(src, width, quality, widths, loader)
-    const imagesrcset = !unoptimized ? buildSrcSet(src, widths, quality, loader) : undefined
+    const imagesrcset = !shouldSkipSrcSet ? buildSrcSet(src, widths, quality, loader) : undefined
 
     ensurePreloadLink({
       key: `${src}|${sizes ?? ""}|${width ?? ""}|${height ?? ""}`,
@@ -234,7 +229,7 @@ export const Image = React.forwardRef<HTMLImageElement, ImageProps>(function Ima
     quality,
     widths,
     loader,
-    unoptimized,
+    shouldSkipSrcSet,
     crossOrigin,
     referrerPolicy,
   ])

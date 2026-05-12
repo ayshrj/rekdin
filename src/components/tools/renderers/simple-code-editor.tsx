@@ -1,7 +1,7 @@
 "use client"
 
 import { useTheme } from "next-themes"
-import { Component, useMemo, useState } from "react"
+import { Component, useEffect, useMemo, useState } from "react"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism"
 
@@ -45,7 +45,12 @@ export function SimpleCodeEditor({
   showHeader = true,
 }: SimpleCodeEditorProps) {
   const { resolvedTheme: theme } = useTheme()
+  const [mounted, setMounted] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const normalizedLanguage = useMemo(() => {
     const map: Record<string, string> = {
@@ -83,7 +88,7 @@ export function SimpleCodeEditor({
     }
   }
 
-  const isDark = theme === "dark"
+  const isDark = mounted && theme === "dark"
 
   return (
     <div className={`border-border overflow-hidden rounded-lg border ${className}`}>

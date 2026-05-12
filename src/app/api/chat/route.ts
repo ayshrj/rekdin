@@ -204,6 +204,7 @@ export async function POST(req: Request) {
         retryCount: agentResult.retryCount,
         success: true,
         workflowId: workflowId ?? undefined,
+        tokenUsageEstimate: agentResult.tokenUsageEstimate,
       })
       send({
         version: 2,

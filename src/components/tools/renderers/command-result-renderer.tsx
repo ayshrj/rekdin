@@ -1,182 +1,202 @@
 "use client"
 
-import React, { useState } from "react"
+import React from "react"
 
-import { Check, ClipboardDocumentList as Copy } from "@/lib/icons"
+import { cn } from "@/lib/utils"
 
+import {
+  CopyButton,
+  EmptyState,
+  ExitCodeBadge,
+  RawPayloadDisclosure,
+  ToolRendererShell,
+} from "./renderer-primitives"
 import { ToolResultContentPart } from "./tool-result-renderer"
 
-interface CommandResultRendererProps {
-  part: ToolResultContentPart
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAction?: (action: string, data: any) => void
-}
+// ─── Command tokenizer ───────────────────────────────────────────────────────
+// Colours the command line inline: verb, flags, paths, strings, operators.
 
-const highlightCommand = (command: string) => {
-  const tokenize = (cmd: string) => {
-    const parts: React.ReactNode[] = []
-    const patterns = [
-      {
-        pattern: /^[\w.-]+|(?<=\s|;|&&|\|\|)[\w.-]+(?=\s|$)/,
-        className: "text-tool-command font-semibold",
-      },
-      { pattern: /(?<=\s|^)(-{1,2}[\w-]+)(?=\s|=|$)/, className: "text-muted-foreground" },
-      {
-        pattern: /(?<=\s|=|:|^)\/[\w./\\_-]+|\.\/?[\w./\\_-]+|~\/[\w./\\_-]+/,
-        className: "text-accent-foreground",
-      },
-      { pattern: /(["'])(?:(?=(\\?))\2.)*?\1/, className: "text-secondary-foreground" },
-      { pattern: /\$\w+|\$\{\w+\}/, className: "text-tool-command" },
-      {
-        pattern: /(?<=\s)(>|>>|<|<<|2>|2>>|&>)(?=\s|$)/,
-        className: "text-tool-command font-semibold",
-      },
-      {
-        pattern: /(?<=\s)(\||;|&&|\|\|)(?=\s|$)/,
-        className: "text-destructive font-semibold",
-      },
-    ]
+function TokenizedCommand({ command }: { command: string }) {
+  const patterns: { re: RegExp; cls: string }[] = [
+    { re: /^\$\w+|\$\{\w+\}/, cls: "text-tool-command opacity-70" },
+    { re: /^(["'])(?:(?=(\\?))\2.)*?\1/, cls: "text-foreground/60" },
+    { re: /^(?:\/|\.\.?\/|~\/)[\w./\\_-]*/, cls: "text-foreground/70" },
+    { re: /^-{1,2}[\w-]+/, cls: "text-muted-foreground" },
+    {
+      re: /^(?:>|>>|<|<<|2>|2>>|&>)(?=\s|$)/,
+      cls: "text-tool-command font-semibold",
+    },
+    { re: /^(?:\|{1,2}|;|&&)(?=\s|$)/, cls: "text-destructive/70 font-semibold" },
+  ]
 
-    let remainingCmd = cmd
-    let currentIndex = 0
+  const nodes: React.ReactNode[] = []
+  let remaining = command
+  let key = 0
+  let firstToken = true
 
-    while (remainingCmd) {
-      let foundMatch = false
-      for (const { pattern, className } of patterns) {
-        const match = remainingCmd.match(pattern)
-        if (match && match.index === 0) {
-          const value = match[0]
-          parts.push(
-            <span key={`highlight-${currentIndex}`} className={className}>
-              {value}
-            </span>
-          )
-          remainingCmd = remainingCmd.slice(value.length)
-          currentIndex += value.length
-          foundMatch = true
-          break
-        }
-      }
-      if (!foundMatch) {
-        parts.push(
-          <span key={`char-${currentIndex}`} className="text-foreground">
-            {remainingCmd[0]}
+  while (remaining.length) {
+    if (firstToken) {
+      const m = remaining.match(/^[\w.-]+/)
+      if (m) {
+        nodes.push(
+          <span key={key++} className="text-tool-command font-semibold">
+            {m[0]}
           </span>
         )
-        remainingCmd = remainingCmd.slice(1)
-        currentIndex += 1
+        remaining = remaining.slice(m[0].length)
+        firstToken = false
+        continue
       }
     }
-    return parts
-  }
-
-  return command.split("\n").map((line, index) => (
-    <div key={index} className="command-line whitespace-nowrap">
-      {tokenize(line)}
-    </div>
-  ))
-}
-
-function CopyBtn({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      /* ignore */
+    let matched = false
+    for (const { re, cls } of patterns) {
+      const m = remaining.match(re)
+      if (m) {
+        nodes.push(
+          <span key={key++} className={cls}>
+            {m[0]}
+          </span>
+        )
+        remaining = remaining.slice(m[0].length)
+        if (remaining.startsWith(" ")) firstToken = false
+        matched = true
+        break
+      }
+    }
+    if (!matched) {
+      if (remaining[0] === "\n") firstToken = true
+      nodes.push(
+        <span key={key++} className="text-foreground/70">
+          {remaining[0]}
+        </span>
+      )
+      remaining = remaining.slice(1)
     }
   }
+  return <>{nodes}</>
+}
+
+// ─── Stream pane ─────────────────────────────────────────────────────────────
+
+function StreamPane({ label, content, isErr }: { label: string; content: string; isErr: boolean }) {
   return (
-    <button
-      type="button"
-      onClick={copy}
-      className="text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
-      title="Copy"
+    <div
+      className={isErr ? "bg-[color-mix(in_srgb,var(--destructive)_5%,transparent)]" : undefined}
     >
-      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-    </button>
+      <div
+        className={cn(
+          "flex items-center justify-between border-b border-dashed px-3 py-1",
+          isErr ? "border-[color-mix(in_srgb,var(--destructive)_20%,transparent)]" : "border-border"
+        )}
+      >
+        <span className={cn("rk-section-label", isErr && "text-destructive/60")}>{label}</span>
+        <CopyButton text={content} />
+      </div>
+      <pre
+        className={cn(
+          "rk-scrollbar max-h-[55vh] overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed wrap-anywhere whitespace-pre-wrap",
+          isErr ? "text-destructive" : "text-foreground/80"
+        )}
+      >
+        {content}
+      </pre>
+    </div>
   )
 }
 
-export const CommandResultRenderer: React.FC<CommandResultRendererProps> = ({ part }) => {
-  const command = part.command || part.toolInput?.command || ""
-  const stdout = part.stdout || part.toolResult?.stdout || part.toolResult?.output || ""
-  const stderr = part.stderr || part.toolResult?.stderr || part.toolResult?.error || ""
+// ─── CommandResultRenderer ───────────────────────────────────────────────────
+
+export const CommandResultRenderer: React.FC<{
+  part: ToolResultContentPart
+  onAction?: (action: string, data: unknown) => void
+}> = ({ part }) => {
+  const command: string =
+    typeof part.command === "string"
+      ? part.command
+      : typeof part.toolInput?.command === "string"
+        ? part.toolInput.command
+        : ""
+  const cwd: string =
+    typeof part.cwd === "string"
+      ? part.cwd
+      : typeof part.toolInput?.cwd === "string"
+        ? part.toolInput.cwd
+        : typeof part.toolResult?.cwd === "string"
+          ? part.toolResult.cwd
+          : ""
+  const stdout: string =
+    typeof part.stdout === "string"
+      ? part.stdout
+      : typeof part.toolResult?.stdout === "string"
+        ? part.toolResult.stdout
+        : typeof part.toolResult?.output === "string"
+          ? part.toolResult.output
+          : ""
+  const stderr: string =
+    typeof part.stderr === "string"
+      ? part.stderr
+      : typeof part.toolResult?.stderr === "string"
+        ? part.toolResult.stderr
+        : typeof part.toolResult?.error === "string"
+          ? part.toolResult.error
+          : ""
   const exitCode = part.exitCode ?? part.toolResult?.exitCode ?? part.toolResult?.exit_code
+  const duration: number | undefined = part.toolResult?.duration
 
   if (!command && !stdout && !stderr) {
-    return <div className="text-muted-foreground italic">Command result is empty</div>
+    return <EmptyState>Command result is empty</EmptyState>
   }
 
-  const isError = exitCode !== 0 && exitCode !== undefined
-
   return (
-    <div className="w-full min-w-0 overflow-hidden rounded-lg border shadow-[0_4px_16px_rgba(0,0,0,0.1)]">
-      {/* Header */}
-      <div className="bg-muted/60 flex items-center justify-between gap-2 border-b px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          <div className="flex shrink-0 gap-1.5">
-            <div className="bg-tool-command/80 h-2.5 w-2.5 rounded-full" />
-            <div className="bg-tool-command/50 h-2.5 w-2.5 rounded-full" />
-            <div className="bg-tool-command/30 h-2.5 w-2.5 rounded-full" />
-          </div>
-          <span className="text-tool-command text-xs font-medium">Terminal</span>
-          {exitCode !== undefined && (
-            <span
-              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                isError
-                  ? "bg-destructive/10 text-destructive border-destructive/20 border"
-                  : "border border-emerald-500/20 bg-emerald-500/10 text-emerald-600"
-              }`}
-            >
-              exit {exitCode}
+    <ToolRendererShell
+      header={
+        <>
+          {/* Terminal dots — identity marker for shell context */}
+          <span className="flex shrink-0 gap-1" aria-hidden>
+            <span className="h-2 w-2 rounded-full bg-(--tool-command)/80" />
+            <span className="h-2 w-2 rounded-full bg-(--tool-command)/50" />
+            <span className="h-2 w-2 rounded-full bg-(--tool-command)/25" />
+          </span>
+
+          <span className="text-tool-command font-mono text-[11px] font-semibold">Terminal</span>
+
+          {cwd && (
+            <span className="rk-path-chip max-w-[40%] min-w-0 truncate" title={cwd}>
+              {cwd}
             </span>
           )}
-        </div>
-        <CopyBtn text={`$ ${command}\n${stdout}${stderr ? `\nSTDERR:\n${stderr}` : ""}`} />
-      </div>
 
-      {/* Command */}
+          <div className="ml-auto flex items-center gap-2">
+            {duration !== undefined && (
+              <span className="text-muted-foreground font-mono text-[10px]">
+                {(duration / 1000).toFixed(2)}s
+              </span>
+            )}
+            {exitCode !== undefined && <ExitCodeBadge code={exitCode} />}
+            <CopyButton text={`$ ${command}\n${stdout}${stderr ? `\nSTDERR:\n${stderr}` : ""}`} />
+          </div>
+        </>
+      }
+      footer={<RawPayloadDisclosure payload={part.toolResult ?? part.toolInput} />}
+    >
+      {/* Command line */}
       {command && (
-        <div className="bg-card overflow-x-auto border-b px-3 py-2">
-          <div className="flex items-start gap-2 font-mono text-sm">
+        <div className="border-b px-3 py-2">
+          <div className="flex items-start gap-2 font-mono text-[12px]">
             <span className="text-tool-command shrink-0 font-bold select-none">$</span>
-            <div className="flex-1">{highlightCommand(command)}</div>
+            <div className="min-w-0 flex-1 leading-relaxed break-all">
+              {command.split("\n").map((line, i) => (
+                <div key={i} className="whitespace-nowrap">
+                  <TokenizedCommand command={line} />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Stdout */}
-      {stdout && (
-        <div className="bg-card border-b last:border-b-0">
-          <div className="border-muted flex items-center justify-between border-b border-dashed px-3 py-1">
-            <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-              Output
-            </span>
-            <CopyBtn text={stdout} />
-          </div>
-          <pre className="text-foreground/80 max-h-[60vh] overflow-auto px-3 py-2 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap">
-            {stdout}
-          </pre>
-        </div>
-      )}
-
-      {/* Stderr */}
-      {stderr && (
-        <div className="bg-destructive/5">
-          <div className="border-destructive/20 flex items-center justify-between border-b border-dashed px-3 py-1">
-            <span className="text-destructive/70 text-[10px] font-medium tracking-wide uppercase">
-              Errors
-            </span>
-            <CopyBtn text={stderr} />
-          </div>
-          <pre className="text-destructive max-h-[40vh] overflow-auto px-3 py-2 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap">
-            {stderr}
-          </pre>
-        </div>
-      )}
-    </div>
+      {stdout && <StreamPane label="Output" content={stdout} isErr={false} />}
+      {stderr && <StreamPane label="Stderr" content={stderr} isErr />}
+    </ToolRendererShell>
   )
 }

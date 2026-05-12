@@ -30,7 +30,7 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/70",
         className
       )}
       {...props}
@@ -52,7 +52,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 outline-none sm:max-w-lg",
+          "bg-surface-2 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-bottom-1 border-border fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-xl border p-6 shadow-none duration-200 outline-none sm:max-w-lg",
           className
         )}
         {...props}
@@ -61,7 +61,7 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="text-muted-foreground hover:bg-surface-4 hover:text-foreground focus-visible:outline-primary/40 absolute top-4 right-4 inline-flex size-6 items-center justify-center rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XMarkIcon />
             <span className="sr-only">Close</span>
@@ -96,7 +96,7 @@ function DialogTitle({ className, ...props }: React.ComponentProps<typeof Dialog
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg leading-none font-semibold", className)}
+      className={cn("text-base leading-none font-semibold", className)}
       {...props}
     />
   )
@@ -150,16 +150,11 @@ function DialogShell({
       {...props}
       className={cn("w-[96vw] overflow-hidden p-0 sm:w-auto sm:max-w-2xl", className)}
     >
-      <div
-        className={cn(
-          "from-background via-background to-background/95 flex max-h-[min(92dvh,720px)] flex-col bg-linear-to-b",
-          contentClassName
-        )}
-      >
+      <div className={cn("bg-surface-2 flex max-h-[min(92dvh,720px)] flex-col", contentClassName)}>
         <DialogHeader
           className={cn(
-            "bg-background/90 supports-backdrop-filter:bg-background/75 sticky top-0 z-20 px-6 py-4 text-left backdrop-blur",
-            showDividers ? "border-border/60 border-b shadow-[0_1px_0_rgba(15,23,42,0.08)]" : null,
+            "bg-surface-3 sticky top-0 z-20 px-6 py-4 text-left",
+            showDividers ? "border-border border-b shadow-none" : null,
             headerClassName
           )}
         >
@@ -171,15 +166,15 @@ function DialogShell({
           ) : null}
         </DialogHeader>
 
-        <div className={cn("flex-1 overflow-y-auto", bodyClassName)}>{children}</div>
+        <div className={cn("rk-scrollbar min-h-0 flex-1 overflow-y-auto", bodyClassName)}>
+          {children}
+        </div>
 
         {(footer ?? null) && (
           <DialogFooter
             className={cn(
-              "bg-muted/40! supports-backdrop-filter:bg-background/75 sticky bottom-0 z-20 px-6 py-4 backdrop-blur",
-              showDividers
-                ? "border-border/60 border-t shadow-[0_-1px_0_rgba(15,23,42,0.08)]"
-                : null,
+              "bg-surface-3 sticky bottom-0 z-20 px-6 py-4",
+              showDividers ? "border-border border-t shadow-none" : null,
               footerClassName
             )}
           >

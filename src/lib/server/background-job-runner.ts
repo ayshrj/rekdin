@@ -169,6 +169,7 @@ async function runBackgroundJob(jobId: string, input: RunBackgroundJobInput) {
       retryCount: turn.retryCount,
       success: true,
       workflowId: input.workflowId ?? undefined,
+      tokenUsageEstimate: turn.tokenUsageEstimate,
     })
     await jobStore.update(jobId, {
       status: "completed",

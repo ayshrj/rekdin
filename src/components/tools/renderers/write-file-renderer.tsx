@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 
-import { ArrowDownTray, CheckCircle, ChevronDown, ChevronRight, FileText } from "@/lib/icons"
+import { FileExtensionIcon } from "@/components/file-extension-icon"
+import { ArrowDownTray, CheckCircle, ChevronDown, ChevronRight } from "@/lib/icons"
 
 import { SimpleCodeEditor } from "./simple-code-editor"
 import { type ToolResultContentPart } from "./tool-result-renderer"
@@ -46,7 +47,7 @@ export function WriteFileRenderer({ part }: { part: ToolResultContentPart }) {
         <div className="min-w-0 flex-1">
           <p className="text-foreground text-xs font-semibold">File written</p>
           <div className="mt-0.5 flex items-center gap-2">
-            <FileText className="text-muted-foreground/60 h-3 w-3 shrink-0" />
+            <FileExtensionIcon extensionName={path} className="h-3 w-3 shrink-0" />
             <span
               className="text-muted-foreground min-w-0 truncate font-mono text-[11px]"
               title={path}

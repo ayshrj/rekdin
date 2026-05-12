@@ -55,4 +55,19 @@ describe("workspace paths", () => {
 
     expect(workspace.getWorkspaceRoot()).toBe(path.resolve("/tmp/rekdin-app-root"))
   })
+
+  it("blocks direct access to generated dependency and build folders", async () => {
+    const workspace = await loadWorkspaceModule()
+    workspace.setWorkspaceRoot("/tmp/rekdin-custom-root")
+
+    expect(() => workspace.resolveWorkspacePath("node_modules/react/index.js")).toThrow(
+      /protected workspace directory "node_modules"/i
+    )
+    expect(() => workspace.resolveWorkspacePath("packages/app/.next/server/app.js")).toThrow(
+      /protected workspace directory ".next"/i
+    )
+    expect(workspace.resolveWorkspacePath("src/index.ts")).toBe(
+      path.resolve("/tmp/rekdin-custom-root", "src/index.ts")
+    )
+  })
 })

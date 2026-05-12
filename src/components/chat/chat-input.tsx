@@ -21,8 +21,8 @@ export interface ChatInputHandle {
 }
 
 /**
- * Controlled prompt composer with attachment support and an imperative focus handle for workflow
- * preset launches.
+ * Controlled prompt composer with attachment support and slash command suggestions.
+ * Imperative focus handle for workflow preset launches.
  */
 export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
   { value, onValueChange, onSend, isLoading, disabled },
@@ -34,6 +34,7 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null)
   const commandItemRefs = React.useRef<Array<HTMLButtonElement | null>>([])
 
+  // ── Slash command matching ────────────────────────────────────────────────
   const slashQuery = React.useMemo(() => {
     const match = value.match(/^\/([^\s/]*)$/)
     return match ? match[1].toLowerCase() : null
@@ -41,22 +42,24 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
 
   const commandSuggestions = React.useMemo(() => {
     if (slashQuery === null) return []
-    return SLASH_COMMANDS.filter((command) => {
+    return SLASH_COMMANDS.filter((cmd) => {
       if (!slashQuery) return true
       return (
-        command.id.includes(slashQuery) ||
-        command.label.toLowerCase().includes(slashQuery) ||
-        command.description.toLowerCase().includes(slashQuery)
+        cmd.id.includes(slashQuery) ||
+        cmd.label.toLowerCase().includes(slashQuery) ||
+        cmd.description.toLowerCase().includes(slashQuery)
       )
     })
   }, [slashQuery])
 
   const showCommandSuggestions = commandSuggestions.length > 0 && !disabled && !isLoading
 
+  // Reset active index when query changes
   React.useEffect(() => {
     setActiveCommandIndex(0)
   }, [slashQuery])
 
+  // Keep active suggestion scrolled into view
   React.useEffect(() => {
     if (!showCommandSuggestions) return
     commandItemRefs.current[activeCommandIndex]?.scrollIntoView({
@@ -69,6 +72,7 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
     focus: () => textareaRef.current?.focus(),
   }))
 
+  // ── Send ─────────────────────────────────────────────────────────────────
   const handleSend = React.useCallback(async () => {
     if (!value.trim() && attachments.length === 0) return
     const nextValue = value
@@ -78,144 +82,133 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
       onValueChange("")
       setAttachments([])
     } catch {
-      // errors handled by parent hook
+      // errors handled by parent
     }
   }, [attachments, onSend, value, onValueChange])
 
+  // ── Command select ───────────────────────────────────────────────────────
   const selectCommand = React.useCallback(
-    (command: SlashCommandDefinition) => {
-      onValueChange(`/${command.id} `)
+    (cmd: SlashCommandDefinition) => {
+      onValueChange(`/${cmd.id} `)
       setTimeout(() => textareaRef.current?.focus(), 0)
     },
     [onValueChange]
   )
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  // ── Keyboard navigation ──────────────────────────────────────────────────
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showCommandSuggestions) {
-      if (event.key === "ArrowDown") {
-        event.preventDefault()
-        setActiveCommandIndex((index) => (index + 1) % commandSuggestions.length)
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setActiveCommandIndex((i) => (i + 1) % commandSuggestions.length)
         return
       }
-      if (event.key === "ArrowUp") {
-        event.preventDefault()
+      if (e.key === "ArrowUp") {
+        e.preventDefault()
         setActiveCommandIndex(
-          (index) => (index - 1 + commandSuggestions.length) % commandSuggestions.length
+          (i) => (i - 1 + commandSuggestions.length) % commandSuggestions.length
         )
         return
       }
-      if (event.key === "Enter" || event.key === "Tab") {
-        event.preventDefault()
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault()
         selectCommand(commandSuggestions[activeCommandIndex] ?? commandSuggestions[0])
         return
       }
-      if (event.key === "Escape") {
-        event.preventDefault()
+      if (e.key === "Escape") {
+        e.preventDefault()
         onValueChange("")
         return
       }
     }
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault()
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
       void handleSend()
     }
   }
 
+  const isSendDisabled =
+    disabled || isLoading || (value.trim().length === 0 && attachments.length === 0)
+
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="relative">
-      {showCommandSuggestions ? (
-        <div className="bg-popover/95 text-popover-foreground absolute right-0 bottom-full left-0 z-30 mb-2 overflow-hidden rounded-xl border shadow-(--shadow-float) backdrop-blur-xl">
-          <div className="bg-surface-2/70 border-b px-3 py-2">
-            <p className="rk-section-label text-foreground">Slash commands</p>
-            <p className="text-muted-foreground mt-0.5 text-[11px]">
-              Use ↑/↓ to choose, Enter or Tab to insert.
-            </p>
-          </div>
-          <div className="max-h-64 overflow-y-auto p-1.5">
-            {commandSuggestions.map((command, index) => (
+      {/* ── Slash command suggestions ────────────────────────────────────── */}
+      {showCommandSuggestions && (
+        <div className="rk-command-popover">
+          <div className="rk-scrollbar max-h-56 overflow-y-auto p-1.5">
+            {commandSuggestions.map((cmd, index) => (
               <button
-                key={command.id}
-                ref={(element) => {
-                  commandItemRefs.current[index] = element
+                key={cmd.id}
+                ref={(el) => {
+                  commandItemRefs.current[index] = el
                 }}
                 type="button"
                 className={[
-                  "flex w-full items-start gap-3 rounded-lg border border-transparent px-2.5 py-2 text-left transition-colors",
-                  index === activeCommandIndex
-                    ? "bg-primary/10 border-primary/20 text-primary"
-                    : "hover:bg-muted/70",
+                  "rk-command-item",
+                  index === activeCommandIndex ? "rk-command-item--active" : "",
                 ].join(" ")}
                 onMouseEnter={() => setActiveCommandIndex(index)}
-                onClick={() => selectCommand(command)}
+                onClick={() => selectCommand(cmd)}
               >
-                <span className="bg-surface-0 text-primary border-primary/20 mt-0.5 rounded-md border px-1.5 py-0.5 font-mono text-xs font-semibold">
-                  /{command.id}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="text-foreground block text-xs font-semibold">
-                    {command.label}
-                  </span>
-                  <span className="text-muted-foreground line-clamp-1 block text-[11px]">
-                    {command.description}
-                  </span>
-                  <span className="text-muted-foreground/80 mt-0.5 block font-mono text-[10px]">
-                    {command.usage}
-                  </span>
-                </span>
+                <span className="rk-command-name">/{cmd.id}</span>
+                <span className="rk-command-desc">{cmd.description}</span>
               </button>
             ))}
           </div>
         </div>
-      ) : null}
-      <div
-        id="tour-chat-input"
-        className="bg-surface-1/95 ring-border/50 focus-within:ring-primary/30 rounded-xl border shadow-(--shadow-float) ring-1 backdrop-blur-xl transition-shadow"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
+      )}
+
+      {/* ── Input container ──────────────────────────────────────────────── */}
+      <div id="tour-chat-input" className="rk-input-container">
+        {/* Attachment chips */}
         {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 px-3 pt-2">
+          <div className="flex flex-wrap gap-1.5 px-3 pt-2.5">
             {attachments.map((file) => (
               <Badge
                 key={file.name}
                 variant="secondary"
-                className="border-border/70 bg-surface-2 cursor-pointer font-mono text-[10px]"
-                onClick={() =>
-                  setAttachments((prev) => prev.filter((item) => item.name !== file.name))
-                }
+                className="border-border bg-surface-5 h-6 cursor-pointer rounded-md border font-mono text-[10px]"
+                onClick={() => setAttachments((prev) => prev.filter((f) => f.name !== file.name))}
               >
                 {file.name}
               </Badge>
             ))}
           </div>
         )}
+
+        {/* Textarea + action buttons */}
         <div className="flex items-end gap-1.5 p-2">
+          {/* Attach */}
           <Button
             type="button"
             size="icon"
             variant="ghost"
-            className="text-muted-foreground hover:text-foreground hover:bg-surface-2 h-8 w-8 shrink-0 rounded-lg"
+            className="text-muted-foreground hover:bg-surface-5 hover:text-foreground h-8 w-8 shrink-0 rounded-md"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || isLoading}
           >
             <PaperClip className="h-3.5 w-3.5" />
             <span className="sr-only">Attach files</span>
           </Button>
+
+          {/* Textarea */}
           <Textarea
             ref={textareaRef}
             value={value}
-            onChange={(event) => onValueChange(event.target.value)}
+            onChange={(e) => onValueChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask Rekdin to research or run commands..."
+            placeholder="Ask Rekdin to research or run commands…"
             disabled={disabled || isLoading}
-            className="placeholder:text-muted-foreground/60 max-h-36 min-h-18 flex-1 resize-none border-0 bg-transparent p-1.5 text-base leading-relaxed focus-visible:ring-0 focus-visible:outline-none sm:text-sm"
+            className="placeholder:text-muted-foreground max-h-40 min-h-[44px] flex-1 resize-none border-0 bg-transparent p-1.5 text-sm leading-relaxed focus-visible:ring-0 focus-visible:outline-none"
           />
+
+          {/* Send */}
           <Button
             onClick={() => void handleSend()}
             size="icon"
-            className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 w-9 shrink-0 rounded-lg shadow-sm disabled:opacity-40"
-            disabled={
-              disabled || isLoading || (value.trim().length === 0 && attachments.length === 0)
-            }
+            className="bg-primary text-primary-foreground disabled:bg-surface-4 disabled:text-muted-foreground h-8 w-8 shrink-0 rounded-md hover:bg-[#4a80ff] disabled:opacity-100"
+            disabled={isSendDisabled}
           >
             {isLoading ? (
               <Loader className="h-3.5 w-3.5 animate-spin" />
@@ -224,20 +217,19 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
             )}
           </Button>
         </div>
+
+        {/* Hidden file input */}
         <input
           ref={fileInputRef}
           type="file"
           multiple
           className="hidden"
-          onChange={(event) => {
-            if (!event.target.files) return
-            setAttachments((prev) => [...prev, ...Array.from(event.target.files!)])
-            event.target.value = ""
+          onChange={(e) => {
+            if (!e.target.files) return
+            setAttachments((prev) => [...prev, ...Array.from(e.target.files!)])
+            e.target.value = ""
           }}
         />
-        <p className="text-muted-foreground/60 px-3 pb-2 font-mono text-[10px] tracking-[0.08em] uppercase">
-          Enter send · Shift+Enter newline · / commands
-        </p>
       </div>
     </div>
   )

@@ -5,14 +5,16 @@ import { spawn } from "child_process"
 import crypto from "crypto"
 import { createPatch } from "diff"
 import { unzipSync, zipSync } from "fflate"
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "fs/promises"
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, unlink, writeFile } from "fs/promises"
 import { JSDOM } from "jsdom"
+import keywordExtractor from "keyword-extractor"
 import os from "os"
 import path from "path"
 import type { Browser, Page } from "puppeteer"
 import puppeteer from "puppeteer-extra"
 import RecaptchaPlugin from "puppeteer-extra-plugin-recaptcha"
 import StealthPlugin from "puppeteer-extra-plugin-stealth"
+import { Project } from "ts-morph"
 import TurndownService from "turndown"
 import { pathToFileURL } from "url"
 import { z } from "zod"
@@ -21,9 +23,21 @@ import { ArtifactRef } from "@/types/runtime"
 
 import { storeArtifact } from "./artifact-store"
 import { getBrowserSessionManager } from "./browser-session-manager"
+import { estimateTokens } from "./token-budget"
 import { getToolExecutionContext } from "./tool-execution-context"
 import { searchPublicWeb } from "./web-search"
-import { ensureWorkspaceDirs, getWorkspaceRoot, resolveWorkspacePath } from "./workspace"
+import {
+  assertWorkspacePathAllowed,
+  BLOCKED_WORKSPACE_DIRECTORIES,
+  ensureWorkspaceDirs,
+  findBlockedWorkspaceDirectoryReference,
+  findBlockedWorkspacePathSegment,
+  getArtifactsDir,
+  getWorkspaceRoot,
+  isBlockedWorkspaceDirectoryName,
+  protectedWorkspaceAccessAllowed,
+  resolveWorkspacePath,
+} from "./workspace"
 
 const turndown = new TurndownService({ headingStyle: "atx" })
 
@@ -190,6 +204,15 @@ async function centerOfSelector(page: Page, selector: string) {
 function truncateString(value: string, max = 4000) {
   if (value.length <= max) return value
   return `${value.slice(0, max)}\n\n...(truncated, ${value.length} chars total)`
+}
+
+function assertNoBlockedDirectoryReference(value: string) {
+  if (protectedWorkspaceAccessAllowed()) return
+  const blockedDirectory = findBlockedWorkspaceDirectoryReference(value)
+  if (!blockedDirectory) return
+  throw new Error(
+    `Access to protected workspace directory "${blockedDirectory}" is blocked. Use a narrower project path and never inspect generated dependency/build folders.`
+  )
 }
 
 /**
@@ -483,6 +506,20 @@ async function loadSharp() {
     } catch {
       return null
     }
+  }
+}
+
+/**
+ * Loads OCR support only when requested. Tesseract is intentionally optional
+ * because most Rekdin installs do not need the worker payload on the hot path.
+ */
+async function loadTesseract() {
+  try {
+    // Keep this dynamic so the app can build without bundling OCR workers.
+    const dynamicImport = new Function("specifier", "return import(specifier)")
+    return await dynamicImport("tesseract.js")
+  } catch {
+    return null
   }
 }
 
@@ -1018,6 +1055,621 @@ async function fetchJson<T = unknown>(url: string): Promise<T> {
   if (!res.ok) throw new Error(`Failed request (${res.status})`)
   return (await res.json()) as T
 }
+
+function unique<T>(items: T[]) {
+  return Array.from(new Set(items))
+}
+
+function safeShellArg(value: string) {
+  return `'${value.replace(/'/g, "'\"'\"'")}'`
+}
+
+function isReadOnlySql(query: string) {
+  return /^\s*(select|with|pragma)\b/i.test(query) && !/;\s*\S/.test(query.trim())
+}
+
+function parseSimpleCsv(input: string, delimiter = ",", maxRows = 50) {
+  const rows: string[][] = []
+  let row: string[] = []
+  let cell = ""
+  let quoted = false
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index]
+    const next = input[index + 1]
+    if (quoted) {
+      if (char === '"' && next === '"') {
+        cell += '"'
+        index += 1
+      } else if (char === '"') {
+        quoted = false
+      } else {
+        cell += char
+      }
+      continue
+    }
+    if (char === '"') {
+      quoted = true
+      continue
+    }
+    if (char === delimiter) {
+      row.push(cell)
+      cell = ""
+      continue
+    }
+    if (char === "\n") {
+      row.push(cell)
+      rows.push(row)
+      if (rows.length >= maxRows) return rows
+      row = []
+      cell = ""
+      continue
+    }
+    if (char !== "\r") cell += char
+  }
+  row.push(cell)
+  if (row.length > 1 || row[0]) rows.push(row)
+  return rows
+}
+
+function getJsonPath(value: unknown, query: string) {
+  if (!query || query === "$") return value
+  const normalized = query.startsWith("$.") ? query.slice(2) : query.replace(/^\//, "")
+  const parts = normalized.split(/[./]/).flatMap((part) => {
+    const tokens: string[] = []
+    const re = /([^[\]]+)|\[(\d+)\]/g
+    for (const match of part.matchAll(re)) tokens.push(match[1] ?? match[2] ?? "")
+    return tokens.filter(Boolean)
+  })
+  let cursor = value as unknown
+  for (const part of parts) {
+    if (Array.isArray(cursor)) {
+      cursor = cursor[Number(part)]
+    } else if (cursor && typeof cursor === "object") {
+      cursor = (cursor as Record<string, unknown>)[part]
+    } else {
+      return undefined
+    }
+  }
+  return cursor
+}
+
+function parseFrontmatter(markdown: string) {
+  const match = markdown.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/)
+  if (!match) return { frontmatter: null, body: markdown }
+  const body = markdown.slice(match[0].length)
+  const raw = match[1]
+  const frontmatter: Record<string, string | string[]> = {}
+  for (const line of raw.split(/\r?\n/)) {
+    const separator = line.indexOf(":")
+    if (separator <= 0) continue
+    const key = line.slice(0, separator).trim()
+    const value = line.slice(separator + 1).trim()
+    if (value.startsWith("[") && value.endsWith("]")) {
+      frontmatter[key] = value
+        .slice(1, -1)
+        .split(",")
+        .map((item) => item.trim().replace(/^["']|["']$/g, ""))
+        .filter(Boolean)
+    } else {
+      frontmatter[key] = value.replace(/^["']|["']$/g, "")
+    }
+  }
+  return { frontmatter, body }
+}
+
+async function collectWorkspaceFiles(options?: {
+  path?: string
+  maxFiles?: number
+  extensions?: string[]
+  includeHidden?: boolean
+}) {
+  const root = options?.path ? resolveWorkspacePath(options.path) : getWorkspaceRoot()
+  const relRoot = options?.path?.replace(/^\.\//, "") ?? ""
+  const maxFiles = Math.min(Math.max(options?.maxFiles ?? 500, 1), 5000)
+  const extensions = options?.extensions
+    ? new Set(options.extensions.map((ext) => ext.toLowerCase()))
+    : null
+  const files: Array<{ path: string; abs: string; size: number; modified: string }> = []
+  const skipped: Array<{ path: string; reason: string }> = []
+
+  async function visit(absPath: string, relPath: string) {
+    if (files.length >= maxFiles) return
+    assertWorkspacePathAllowed(absPath)
+    const info = await stat(absPath)
+    if (info.isDirectory()) {
+      const entries = await readdir(absPath, { withFileTypes: true })
+      for (const entry of entries) {
+        if (files.length >= maxFiles) break
+        if (!options?.includeHidden && entry.name.startsWith(".") && entry.name !== ".env") {
+          continue
+        }
+        const childRel = relPath ? `${relPath}/${entry.name}` : entry.name
+        if (entry.isDirectory() && isBlockedWorkspaceDirectoryName(entry.name)) {
+          skipped.push({ path: childRel, reason: "Protected generated dependency/build directory" })
+          continue
+        }
+        if (entry.isSymbolicLink()) {
+          skipped.push({ path: childRel, reason: "Symlink skipped" })
+          continue
+        }
+        await visit(path.join(absPath, entry.name), childRel)
+      }
+      return
+    }
+    if (!info.isFile()) return
+    const ext = path.extname(absPath).toLowerCase()
+    if (extensions && !extensions.has(ext)) return
+    files.push({
+      path: relPath || path.basename(absPath),
+      abs: absPath,
+      size: info.size,
+      modified: info.mtime.toISOString(),
+    })
+  }
+
+  await visit(root, relRoot)
+  return { files, skipped, truncated: files.length >= maxFiles }
+}
+
+function codeSymbolSummary(sourcePath: string, content: string) {
+  const project = new Project({ useInMemoryFileSystem: true, skipFileDependencyResolution: true })
+  const sourceFile = project.createSourceFile(sourcePath, content, { overwrite: true })
+  const functions = sourceFile
+    .getFunctions()
+    .map((node) => ({ name: node.getName() ?? "(anonymous)", line: node.getStartLineNumber() }))
+  const classes = sourceFile
+    .getClasses()
+    .map((node) => ({ name: node.getName() ?? "(anonymous)", line: node.getStartLineNumber() }))
+  const interfaces = sourceFile
+    .getInterfaces()
+    .map((node) => ({ name: node.getName(), line: node.getStartLineNumber() }))
+  const typeAliases = sourceFile
+    .getTypeAliases()
+    .map((node) => ({ name: node.getName(), line: node.getStartLineNumber() }))
+  const variables = sourceFile
+    .getVariableDeclarations()
+    .map((node) => ({ name: node.getName(), line: node.getStartLineNumber() }))
+  return {
+    imports: sourceFile.getImportDeclarations().map((decl) => decl.getModuleSpecifierValue()),
+    exports: Array.from(sourceFile.getExportedDeclarations().keys()),
+    symbols: { functions, classes, interfaces, typeAliases, variables: variables.slice(0, 100) },
+  }
+}
+
+async function readPackageJson() {
+  try {
+    return JSON.parse(await readWorkspaceText("package.json")) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+async function runPackageCommand(script: string, timeoutMs = 120000) {
+  const pkg = await readPackageJson()
+  const scripts =
+    pkg?.scripts && typeof pkg.scripts === "object" ? (pkg.scripts as Record<string, string>) : {}
+  if (!scripts[script]) throw new Error(`package.json script not found: ${script}`)
+  if (!/^[\w:.-]+$/.test(script)) throw new Error("Script name contains unsupported characters")
+  return runCommandUnsafe(`npm run ${script}`, getWorkspaceRoot(), timeoutMs)
+}
+
+const DEV_SERVERS = new Map<
+  string,
+  {
+    child: ReturnType<typeof spawn>
+    startedAt: string
+    command: string
+    port?: number
+    cwd: string
+  }
+>()
+
+function parseArtifactName(value: string) {
+  const cleaned = value.startsWith("/api/artifacts/") ? value.split("/api/artifacts/")[1] : value
+  return path.basename(decodeURIComponent(cleaned))
+}
+
+export const fileStatTool = tool(
+  async ({ path: filePath }) => {
+    await ensureWorkspaceDirs()
+    const resolved = resolveWorkspacePath(filePath)
+    const info = await stat(resolved)
+    return {
+      type: "file_stat",
+      path: filePath,
+      kind: info.isDirectory() ? "directory" : info.isFile() ? "file" : "other",
+      size: info.size,
+      modified: info.mtime.toISOString(),
+      created: info.birthtime.toISOString(),
+    }
+  },
+  {
+    name: "file_stat",
+    description: "Return metadata for a workspace file or directory.",
+    schema: z.object({ path: z.string().min(1) }),
+  }
+)
+
+export const workspaceStatsTool = tool(
+  async ({ path: inputPath, maxFiles }) => {
+    const { files, skipped, truncated } = await collectWorkspaceFiles({
+      path: inputPath,
+      maxFiles: maxFiles ?? 2000,
+      includeHidden: true,
+    })
+    const byExtension: Record<string, number> = {}
+    let totalBytes = 0
+    for (const file of files) {
+      totalBytes += file.size
+      const ext = path.extname(file.path).toLowerCase() || "(none)"
+      byExtension[ext] = (byExtension[ext] ?? 0) + 1
+    }
+    return {
+      type: "workspace_stats",
+      path: inputPath ?? ".",
+      fileCount: files.length,
+      totalBytes,
+      byExtension,
+      largestFiles: files
+        .slice()
+        .sort((a, b) => b.size - a.size)
+        .slice(0, 25)
+        .map(({ path, size }) => ({ path, size })),
+      skipped,
+      truncated,
+    }
+  },
+  {
+    name: "workspace_stats",
+    description: "Summarize workspace file counts, sizes, extensions, and largest files.",
+    schema: z.object({
+      path: z.string().optional(),
+      maxFiles: z.number().int().min(1).max(5000).optional(),
+    }),
+  }
+)
+
+export const fileHeadTailTool = tool(
+  async ({ path: filePath, head, tail }) => {
+    const content = await readWorkspaceText(filePath)
+    const lines = content.split(/\r?\n/)
+    const headCount = Math.min(Math.max(head ?? 40, 0), 500)
+    const tailCount = Math.min(Math.max(tail ?? 40, 0), 500)
+    return {
+      type: "file_head_tail",
+      path: filePath,
+      lineCount: lines.length,
+      head: lines.slice(0, headCount).map((text, index) => ({ line: index + 1, text })),
+      tail: lines
+        .slice(Math.max(lines.length - tailCount, 0))
+        .map((text, index) => ({ line: Math.max(lines.length - tailCount, 0) + index + 1, text })),
+    }
+  },
+  {
+    name: "file_head_tail",
+    description: "Read only the beginning and end of a workspace text file.",
+    schema: z.object({
+      path: z.string().min(1),
+      head: z.number().int().min(0).max(500).optional(),
+      tail: z.number().int().min(0).max(500).optional(),
+    }),
+  }
+)
+
+export const fileOutlineTool = tool(
+  async ({ path: filePath }) => {
+    const content = await readWorkspaceText(filePath)
+    return { type: "file_outline", path: filePath, ...codeSymbolSummary(filePath, content) }
+  },
+  {
+    name: "file_outline",
+    description: "Return imports, exports, and top-level symbols for a TypeScript/JavaScript file.",
+    schema: z.object({ path: z.string().min(1) }),
+  }
+)
+
+export const symbolSearchTool = tool(
+  async ({ query, path: inputPath, maxResults }) => {
+    const { files, skipped } = await collectWorkspaceFiles({
+      path: inputPath,
+      maxFiles: 1000,
+      extensions: [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts"],
+    })
+    const q = query.toLowerCase()
+    const limit = Math.min(Math.max(maxResults ?? 50, 1), 200)
+    const results: Array<Record<string, unknown>> = []
+    for (const file of files) {
+      if (results.length >= limit) break
+      const content = await readFile(file.abs, "utf-8").catch(() => "")
+      if (!content) continue
+      const outline = codeSymbolSummary(file.path, content)
+      for (const [kind, values] of Object.entries(outline.symbols)) {
+        for (const value of values as Array<{ name: string; line: number }>) {
+          if (String(value.name).toLowerCase().includes(q)) {
+            results.push({ path: file.path, kind, name: value.name, line: value.line })
+            if (results.length >= limit) break
+          }
+        }
+      }
+    }
+    return { type: "symbol_search", query, results, skipped, truncated: results.length >= limit }
+  },
+  {
+    name: "symbol_search",
+    description: "Search TypeScript/JavaScript symbols by name without reading full files.",
+    schema: z.object({
+      query: z.string().min(1),
+      path: z.string().optional(),
+      maxResults: z.number().int().min(1).max(200).optional(),
+    }),
+  }
+)
+
+export const symbolReferencesTool = tool(
+  async ({ symbol, path: searchPath, maxResults }) => {
+    const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const result = (await fileSearchTool.invoke({
+      query: `\\b${escaped}\\b`,
+      path: searchPath,
+      maxResults: maxResults ?? 100,
+    })) as Record<string, unknown>
+    return { ...result, type: "symbol_references", symbol }
+  },
+  {
+    name: "symbol_references",
+    description: "Find textual references to a symbol in workspace files.",
+    schema: z.object({
+      symbol: z.string().min(1),
+      path: z.string().optional(),
+      maxResults: z.number().int().min(1).max(1000).optional(),
+    }),
+  }
+)
+
+export const dependencyGraphTool = tool(
+  async ({ path: inputPath, maxFiles }) => {
+    const { files, skipped, truncated } = await collectWorkspaceFiles({
+      path: inputPath,
+      maxFiles: maxFiles ?? 250,
+      extensions: [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts"],
+    })
+    const nodes = files.map((file) => file.path)
+    const nodeSet = new Set(nodes)
+    const edges: Array<{ from: string; to: string; specifier: string; external: boolean }> = []
+    for (const file of files) {
+      const content = await readFile(file.abs, "utf-8").catch(() => "")
+      if (!content) continue
+      const outline = codeSymbolSummary(file.path, content)
+      for (const specifier of outline.imports) {
+        const external = !specifier.startsWith(".") && !specifier.startsWith("@/")
+        let target = specifier
+        if (specifier.startsWith(".")) {
+          const joined = path.normalize(path.join(path.dirname(file.path), specifier))
+          target =
+            nodes.find((candidate) => candidate === joined || candidate.startsWith(`${joined}.`)) ??
+            joined
+        } else if (specifier.startsWith("@/")) {
+          const joined = specifier.replace(/^@\//, "src/")
+          target =
+            nodes.find((candidate) => candidate === joined || candidate.startsWith(`${joined}.`)) ??
+            joined
+        }
+        edges.push({
+          from: file.path,
+          to: target,
+          specifier,
+          external: external || !nodeSet.has(target),
+        })
+      }
+    }
+    return {
+      type: "dependency_graph",
+      path: inputPath ?? ".",
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      nodes: nodes.slice(0, 300),
+      edges: edges.slice(0, 800),
+      skipped,
+      truncated,
+    }
+  },
+  {
+    name: "dependency_graph",
+    description: "Build a bounded import dependency graph for JS/TS files.",
+    schema: z.object({
+      path: z.string().optional(),
+      maxFiles: z.number().int().min(1).max(500).optional(),
+    }),
+  }
+)
+
+export const routeMapTool = tool(
+  async () => {
+    const { files } = await collectWorkspaceFiles({
+      maxFiles: 1000,
+      extensions: [".ts", ".tsx", ".js", ".jsx"],
+      includeHidden: false,
+    })
+    const routes = files
+      .filter((file) =>
+        /(^|\/)(page|layout|route|loading|error|template)\.[tj]sx?$/.test(file.path)
+      )
+      .map((file) => {
+        const appMatch = file.path.match(
+          /^src\/app\/(.+)\/(page|route|layout|loading|error|template)\.[tj]sx?$/
+        )
+        const kind = path.basename(file.path).split(".")[0]
+        const route = appMatch
+          ? `/${appMatch[1]
+              .replace(/\([^)]*\)\//g, "")
+              .replace(/\/?page$/, "")
+              .replace(/\/route$/, "")}`.replace(/\/+/g, "/")
+          : null
+        return { path: file.path, kind, route: route === "/." ? "/" : route }
+      })
+    return { type: "route_map", routes }
+  },
+  {
+    name: "route_map",
+    description: "Map Next.js app route files to route-like paths.",
+    schema: z.object({}),
+  }
+)
+
+export const testMapTool = tool(
+  async () => {
+    const { files } = await collectWorkspaceFiles({
+      maxFiles: 2000,
+      extensions: [".ts", ".tsx", ".js", ".jsx"],
+    })
+    const tests = files
+      .filter((file) => /(^|\/)__tests__\/|[.-](test|spec)\.[tj]sx?$/.test(file.path))
+      .map((file) => ({ path: file.path, size: file.size }))
+    return {
+      type: "test_map",
+      testCount: tests.length,
+      tests,
+      scripts: ((await readPackageJson())?.scripts as Record<string, string> | undefined) ?? {},
+    }
+  },
+  {
+    name: "test_map",
+    description: "List test files and package test scripts.",
+    schema: z.object({}),
+  }
+)
+
+export const configInventoryTool = tool(
+  async () => {
+    const configPattern =
+      /(^|\/)(package\.json|tsconfig.*\.json|next\.config\.[cm]?[tj]s|vite\.config\.[cm]?[tj]s|vitest\.config\.[cm]?[tj]s|tailwind\.config\.[cm]?[tj]s|postcss\.config\.[cm]?[tj]s|eslint\.config\.[cm]?[tj]s|\.prettierrc.*|components\.json)$/
+    const { files } = await collectWorkspaceFiles({ maxFiles: 2000, includeHidden: true })
+    return {
+      type: "config_inventory",
+      configs: files
+        .filter((file) => configPattern.test(file.path))
+        .map(({ path, size, modified }) => ({ path, size, modified })),
+    }
+  },
+  {
+    name: "config_inventory",
+    description: "List common project configuration files.",
+    schema: z.object({}),
+  }
+)
+
+export const envInventoryTool = tool(
+  async () => {
+    const { files } = await collectWorkspaceFiles({ maxFiles: 200, includeHidden: true })
+    const envFiles = files.filter((file) => /(^|\/)\.env($|\.)/.test(file.path))
+    const entries = await Promise.all(
+      envFiles.map(async (file) => {
+        const content = await readFile(file.abs, "utf-8").catch(() => "")
+        return {
+          path: file.path,
+          keys: content
+            .split(/\r?\n/)
+            .map((line) => line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/)?.[1])
+            .filter(Boolean),
+        }
+      })
+    )
+    return { type: "env_inventory", files: entries }
+  },
+  {
+    name: "env_inventory",
+    description: "List .env files and variable names only; never returns secret values.",
+    schema: z.object({}),
+  }
+)
+
+export const lockfileSummaryTool = tool(
+  async () => {
+    const lockfiles = ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb"]
+    const found = []
+    for (const file of lockfiles) {
+      const resolved = path.join(getWorkspaceRoot(), file)
+      if (!(await fileExists(resolved))) continue
+      const info = await stat(resolved)
+      let packageCount: number | undefined
+      if (file === "package-lock.json") {
+        const parsed = JSON.parse(await readFile(resolved, "utf-8")) as { packages?: object }
+        packageCount = Object.keys(parsed.packages ?? {}).length
+      }
+      found.push({ path: file, size: info.size, modified: info.mtime.toISOString(), packageCount })
+    }
+    return { type: "lockfile_summary", lockfiles: found }
+  },
+  { name: "lockfile_summary", description: "Summarize dependency lockfiles.", schema: z.object({}) }
+)
+
+export const duplicateCodeCandidatesTool = tool(
+  async ({ minBytes }) => {
+    const { files } = await collectWorkspaceFiles({
+      maxFiles: 2000,
+      extensions: [".ts", ".tsx", ".js", ".jsx", ".css", ".md"],
+    })
+    const groups = new Map<string, Array<{ path: string; size: number }>>()
+    for (const file of files) {
+      if (file.size < (minBytes ?? 80)) continue
+      const content = await readFile(file.abs, "utf-8").catch(() => "")
+      const normalized = content.replace(/\s+/g, " ").trim()
+      if (!normalized) continue
+      const hash = crypto.createHash("sha1").update(normalized).digest("hex")
+      groups.set(hash, [...(groups.get(hash) ?? []), { path: file.path, size: file.size }])
+    }
+    return {
+      type: "duplicate_code_candidates",
+      groups: Array.from(groups.entries())
+        .filter(([, entries]) => entries.length > 1)
+        .map(([hash, entries]) => ({ hash, entries }))
+        .slice(0, 50),
+    }
+  },
+  {
+    name: "duplicate_code_candidates",
+    description: "Find exact normalized duplicate text/code files as refactor candidates.",
+    schema: z.object({ minBytes: z.number().int().min(1).max(10000).optional() }),
+  }
+)
+
+export const deadCodeCandidatesTool = tool(
+  async ({ path: inputPath }) => {
+    const { files } = await collectWorkspaceFiles({
+      path: inputPath,
+      maxFiles: 1000,
+      extensions: [".ts", ".tsx", ".js", ".jsx"],
+    })
+    const contents = await Promise.all(
+      files.map(async (file) => ({
+        file,
+        content: await readFile(file.abs, "utf-8").catch(() => ""),
+      }))
+    )
+    const allText = contents.map((entry) => entry.content).join("\n")
+    const candidates: Array<Record<string, unknown>> = []
+    for (const { file, content } of contents) {
+      if (!content) continue
+      const outline = codeSymbolSummary(file.path, content)
+      for (const exported of outline.exports) {
+        const count = (
+          allText.match(
+            new RegExp(`\\b${exported.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g")
+          ) ?? []
+        ).length
+        if (count <= 1)
+          candidates.push({ path: file.path, export: exported, referenceCount: count })
+      }
+    }
+    return { type: "dead_code_candidates", candidates: candidates.slice(0, 100) }
+  },
+  {
+    name: "dead_code_candidates",
+    description: "Best-effort exported symbol list with few/no textual references.",
+    schema: z.object({ path: z.string().optional() }),
+  }
+)
 
 /**
  * Searches the public web for current information and source candidates.
@@ -1839,24 +2491,398 @@ export const browserEvaluateTool = tool(
   }
 )
 
+export const browserAccessibilitySnapshotTool = tool(
+  async ({ url }) => {
+    return await withPage(async (page) => {
+      await goto(page, url, "domcontentloaded")
+      const snapshot = await page.accessibility.snapshot({ interestingOnly: true })
+      return {
+        type: "browser_accessibility_snapshot",
+        url: page.url(),
+        title: await page.title(),
+        snapshot,
+      }
+    })
+  },
+  {
+    name: "browser_accessibility_snapshot",
+    description: "Return Puppeteer accessibility tree snapshot for a page.",
+    schema: z.object({ url: z.string().url() }),
+  }
+)
+
+export const browserConsoleLogsTool = tool(
+  async ({ url, waitMs }) => {
+    return await withPage(async (page) => {
+      const logs: Array<{ type: string; text: string }> = []
+      const handler = (msg: { type: () => string; text: () => string }) => {
+        logs.push({ type: msg.type(), text: truncateString(msg.text(), 1000) })
+      }
+      page.on("console", handler)
+      try {
+        await goto(page, url, "domcontentloaded")
+        if (waitMs) await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 10000)))
+        return {
+          type: "browser_console_logs",
+          url: page.url(),
+          title: await page.title(),
+          logs: logs.slice(0, 200),
+        }
+      } finally {
+        page.off("console", handler)
+      }
+    })
+  },
+  {
+    name: "browser_console_logs",
+    description: "Load a page and capture browser console logs.",
+    schema: z.object({
+      url: z.string().url(),
+      waitMs: z.number().int().min(0).max(10000).optional(),
+    }),
+  }
+)
+
+export const browserNetworkLogTool = tool(
+  async ({ url, waitMs }) => {
+    return await withPage(async (page) => {
+      const requests: Array<Record<string, unknown>> = []
+      const onResponse = (res: {
+        url: () => string
+        status: () => number
+        request: () => { method: () => string; resourceType: () => string }
+      }) => {
+        requests.push({
+          url: res.url(),
+          status: res.status(),
+          method: res.request().method(),
+          resourceType: res.request().resourceType(),
+        })
+      }
+      page.on("response", onResponse)
+      try {
+        await goto(page, url, "domcontentloaded")
+        if (waitMs) await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 10000)))
+        return {
+          type: "browser_network_log",
+          url: page.url(),
+          title: await page.title(),
+          requests: requests.slice(0, 300),
+        }
+      } finally {
+        page.off("response", onResponse)
+      }
+    })
+  },
+  {
+    name: "browser_network_log",
+    description: "Load a page and capture response status metadata.",
+    schema: z.object({
+      url: z.string().url(),
+      waitMs: z.number().int().min(0).max(10000).optional(),
+    }),
+  }
+)
+
+export const browserStorageSnapshotTool = tool(
+  async ({ url }) => {
+    return await withPage(async (page) => {
+      await goto(page, url, "domcontentloaded")
+      const cookies = await page.cookies()
+      const storage = await page.evaluate(() => ({
+        localStorage: Object.keys(window.localStorage),
+        sessionStorage: Object.keys(window.sessionStorage),
+      }))
+      return {
+        type: "browser_storage_snapshot",
+        url: page.url(),
+        title: await page.title(),
+        cookies: cookies.map((cookie) => ({
+          name: cookie.name,
+          domain: cookie.domain,
+          path: cookie.path,
+          expires: cookie.expires,
+        })),
+        storage,
+      }
+    })
+  },
+  {
+    name: "browser_storage_snapshot",
+    description: "Read cookie metadata and storage keys for a page, without values.",
+    schema: z.object({ url: z.string().url() }),
+  }
+)
+
+export const browserSetViewportTool = tool(
+  async ({ url, width, height, deviceScaleFactor }) => {
+    return await withPage(async (page) => {
+      await page.setViewport({ width, height, deviceScaleFactor: deviceScaleFactor ?? 1 })
+      await goto(page, url, "domcontentloaded")
+      const screenshot = await screenshotDataUrl(page, true)
+      return {
+        type: "browser_set_viewport",
+        url: page.url(),
+        title: await page.title(),
+        width,
+        height,
+        screenshot,
+      }
+    })
+  },
+  {
+    name: "browser_set_viewport",
+    description: "Set browser viewport dimensions and capture the page.",
+    schema: z.object({
+      url: z.string().url(),
+      width: z.number().int().min(100).max(3840),
+      height: z.number().int().min(100).max(3840),
+      deviceScaleFactor: z.number().min(0.1).max(4).optional(),
+    }),
+  }
+)
+
+export const browserSelectorScreenshotTool = tool(
+  async ({ url, selector }) => {
+    return await withPage(async (page) => {
+      await goto(page, url, "domcontentloaded")
+      const element = await page.$(selector)
+      if (!element) throw new Error(`Selector not found: ${selector}`)
+      const shot = (await element.screenshot({ encoding: "binary" })) as Buffer
+      const artifact = await storeArtifact({
+        filename: "selector-screenshot.png",
+        bytes: shot,
+        mimeType: "image/png",
+      })
+      return {
+        type: "browser_selector_screenshot",
+        url: page.url(),
+        title: await page.title(),
+        selector,
+        screenshot: artifact.url,
+        artifact,
+      }
+    })
+  },
+  {
+    name: "browser_selector_screenshot",
+    description: "Capture a screenshot of a specific page element.",
+    schema: z.object({ url: z.string().url(), selector: z.string().min(1) }),
+  }
+)
+
+export const browserFullPageScreenshotTool = tool(
+  async ({ url }) => {
+    return await withPage(async (page) => {
+      await goto(page, url, "networkidle0")
+      const artifact = await screenshotArtifact(page, true, "full-page-screenshot.png")
+      return {
+        type: "browser_full_page_screenshot",
+        url: page.url(),
+        title: await page.title(),
+        screenshot: artifact.url,
+        artifact,
+      }
+    })
+  },
+  {
+    name: "browser_full_page_screenshot",
+    description: "Capture a full-page browser screenshot.",
+    schema: z.object({ url: z.string().url() }),
+  }
+)
+
+export const browserPrintPdfTool = tool(
+  async ({ url, filename }) => {
+    return await withPage(async (page) => {
+      await goto(page, url, "networkidle0")
+      const pdf = Buffer.from(await page.pdf({ format: "A4", printBackground: true }))
+      const artifact = await storeArtifact({
+        filename: filename ?? "browser-page.pdf",
+        bytes: pdf,
+        mimeType: "application/pdf",
+      })
+      return {
+        type: "browser_print_pdf",
+        url: page.url(),
+        title: await page.title(),
+        artifact,
+        artifactUrl: artifact.url,
+      }
+    })
+  },
+  {
+    name: "browser_print_pdf",
+    description: "Print a web page to PDF artifact.",
+    schema: z.object({ url: z.string().url(), filename: z.string().optional() }),
+  }
+)
+
+export const browserDownloadsTool = tool(
+  async ({ url, selector, waitMs, maxBytes }) => {
+    const downloadDir = await mkdtemp(path.join(os.tmpdir(), "rekdin-browser-downloads-"))
+    try {
+      return await withPage(async (page) => {
+        const client = await page.target().createCDPSession()
+        await client.send("Page.setDownloadBehavior", {
+          behavior: "allow",
+          downloadPath: downloadDir,
+        })
+
+        await goto(page, url, "domcontentloaded")
+        if (selector) {
+          await page.click(selector)
+        }
+        await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs ?? 5000, 20000)))
+
+        const entries = await readdir(downloadDir, { withFileTypes: true }).catch(() => [])
+        const files = []
+        const pending = []
+        for (const entry of entries) {
+          if (!entry.isFile()) continue
+          const filePath = path.join(downloadDir, entry.name)
+          const info = await stat(filePath)
+          if (entry.name.endsWith(".crdownload")) {
+            pending.push({ name: entry.name, size: info.size })
+            continue
+          }
+
+          const limit = maxBytes ?? 15_000_000
+          if (info.size > limit) {
+            files.push({
+              name: entry.name,
+              size: info.size,
+              stored: false,
+              omittedReason: `File exceeds maxBytes (${limit}).`,
+            })
+            continue
+          }
+
+          const bytes = await readFile(filePath)
+          const artifact = await storeArtifact({
+            filename: entry.name,
+            bytes,
+            mimeType: "application/octet-stream",
+          })
+          files.push({ name: entry.name, size: info.size, stored: true, artifact })
+        }
+
+        return {
+          type: "browser_downloads",
+          url: page.url(),
+          title: await page.title(),
+          selector: selector ?? null,
+          files,
+          pending,
+        }
+      })
+    } finally {
+      await rm(downloadDir, { recursive: true, force: true })
+    }
+  },
+  {
+    name: "browser_downloads",
+    description: "Capture browser-triggered downloads as bounded Rekdin artifacts.",
+    schema: z.object({
+      url: z.string().url(),
+      selector: z.string().min(1).optional(),
+      waitMs: z.number().int().min(0).max(20000).optional(),
+      maxBytes: z.number().int().min(1024).max(50_000_000).optional(),
+    }),
+  }
+)
+
+export const browserFormSchemaTool = tool(
+  async ({ url }) => {
+    return await withPage(async (page) => {
+      await goto(page, url, "domcontentloaded")
+      const forms = await page.$$eval("form", (formEls) =>
+        formEls.map((form, formIndex) => ({
+          index: formIndex,
+          action: (form as HTMLFormElement).action,
+          method: (form as HTMLFormElement).method,
+          fields: Array.from(form.querySelectorAll("input, textarea, select")).map((field) => {
+            const el = field as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+            return {
+              tag: el.tagName.toLowerCase(),
+              name: el.getAttribute("name"),
+              id: el.id,
+              type: (el as HTMLInputElement).type,
+              placeholder: el.getAttribute("placeholder"),
+              required: el.hasAttribute("required"),
+            }
+          }),
+        }))
+      )
+      return { type: "browser_form_schema", url: page.url(), title: await page.title(), forms }
+    })
+  },
+  {
+    name: "browser_form_schema",
+    description: "Extract forms and field metadata from a page.",
+    schema: z.object({ url: z.string().url() }),
+  }
+)
+
+export const browserTableExtractTool = tool(
+  async ({ url }) => {
+    return await withPage(async (page) => {
+      await goto(page, url, "domcontentloaded")
+      const tables = await page.$$eval("table", (tableEls) =>
+        tableEls.slice(0, 20).map((table, index) => ({
+          index,
+          rows: Array.from(table.querySelectorAll("tr"))
+            .slice(0, 200)
+            .map((row) =>
+              Array.from(row.querySelectorAll("th,td")).map((cell) =>
+                (cell.textContent ?? "").trim()
+              )
+            ),
+        }))
+      )
+      return { type: "browser_table_extract", url: page.url(), title: await page.title(), tables }
+    })
+  },
+  {
+    name: "browser_table_extract",
+    description: "Extract HTML tables from a rendered page.",
+    schema: z.object({ url: z.string().url() }),
+  }
+)
+
 /**
  * Searches workspace files with ripgrep, falling back to grep when rg is unavailable.
  */
 export const fileSearchTool = tool(
   async ({ query, path: searchPath, maxResults }) => {
     await ensureWorkspaceDirs()
+    if (searchPath) resolveWorkspacePath(searchPath)
     const escapedQuery = query.replace(/'/g, "'\"'\"'")
     const targetPath = searchPath ? searchPath.replace(/'/g, "'\"'\"'") : "."
     const limit = Math.min(Math.max(maxResults ?? 200, 1), 1000)
+    const searchTargetsProtectedDirectory =
+      Boolean(searchPath && findBlockedWorkspacePathSegment(searchPath)) &&
+      protectedWorkspaceAccessAllowed()
+    const rgExcludes = searchTargetsProtectedDirectory
+      ? ""
+      : BLOCKED_WORKSPACE_DIRECTORIES.flatMap((directoryName) => [
+          `--glob '!${directoryName}/**'`,
+          `--glob '!**/${directoryName}/**'`,
+        ]).join(" ")
+    const grepExcludes = searchTargetsProtectedDirectory
+      ? ""
+      : BLOCKED_WORKSPACE_DIRECTORIES.map(
+          (directoryName) => `--exclude-dir='${directoryName}'`
+        ).join(" ")
     let res = await runCommand(
-      `rg --line-number --no-heading --color=never -m ${limit} '${escapedQuery}' '${targetPath}'`,
+      `rg ${rgExcludes} --line-number --no-heading --color=never -m ${limit} '${escapedQuery}' '${targetPath}'`,
       undefined,
       20000
     )
     // Fall back to grep when rg is not installed (exit code 127 = command not found)
     if (res.exitCode === 127) {
       res = await runCommand(
-        `grep -rn --color=never -m ${limit} '${escapedQuery}' '${targetPath}'`,
+        `grep -rn ${grepExcludes} --color=never -m ${limit} '${escapedQuery}' '${targetPath}'`,
         undefined,
         20000
       )
@@ -2010,6 +3036,253 @@ export const downloadFetchTool = tool(
   }
 )
 
+export const fetchManyTool = tool(
+  async ({ urls, timeoutMs }) => {
+    const limit = Math.min(urls.length, 10)
+    const results = await Promise.all(
+      urls.slice(0, limit).map(async (url) => {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), timeoutMs ?? 15000)
+        try {
+          const res = await fetch(url, {
+            signal: controller.signal,
+            headers: { "User-Agent": "Rekdin/NextJS" },
+          })
+          const text = await res.text().catch(() => "")
+          return {
+            url,
+            status: res.status,
+            ok: res.ok,
+            contentType: res.headers.get("content-type"),
+            textPreview: truncateString(text, 2000),
+          }
+        } catch (err) {
+          return { url, error: err instanceof Error ? err.message : "Fetch failed" }
+        } finally {
+          clearTimeout(timer)
+        }
+      })
+    )
+    return { type: "fetch_many", results, omittedUrls: Math.max(urls.length - limit, 0) }
+  },
+  {
+    name: "fetch_many",
+    description: "Fetch up to 10 URLs and return compact text previews.",
+    schema: z.object({
+      urls: z.array(z.string().url()).min(1).max(25),
+      timeoutMs: z.number().int().min(1000).max(60000).optional(),
+    }),
+  }
+)
+
+export const searchBatchTool = tool(
+  async ({ queries, maxResults }) => {
+    const results = await Promise.all(
+      queries.slice(0, 8).map(async (query) => ({
+        query,
+        results: await searchPublicWeb(query, { maxResults: Math.min(maxResults ?? 5, 10) }),
+      }))
+    )
+    return { type: "search_batch", results, omittedQueries: Math.max(queries.length - 8, 0) }
+  },
+  {
+    name: "search_batch",
+    description: "Run several public web searches at once.",
+    schema: z.object({
+      queries: z.array(z.string().min(1)).min(1).max(20),
+      maxResults: z.number().int().min(1).max(10).optional(),
+    }),
+  }
+)
+
+export const robotsTxtTool = tool(
+  async ({ origin }) => {
+    const url = new URL("/robots.txt", origin).href
+    const res = await fetch(url, { headers: { "User-Agent": "Rekdin/NextJS" } })
+    const text = await res.text().catch(() => "")
+    return { type: "robots_txt", url, status: res.status, content: truncateString(text, 8000) }
+  },
+  {
+    name: "robots_txt",
+    description: "Fetch robots.txt for an origin.",
+    schema: z.object({ origin: z.string().url() }),
+  }
+)
+
+export const sitemapFetchTool = tool(
+  async ({ url, maxUrls }) => {
+    const res = await fetch(url, { headers: { "User-Agent": "Rekdin/NextJS" } })
+    const xml = await res.text()
+    const dom = new JSDOM(xml, { contentType: "text/xml" })
+    const limit = Math.min(maxUrls ?? 100, 500)
+    const urls = Array.from(dom.window.document.querySelectorAll("url > loc, sitemap > loc"))
+      .map((node) => node.textContent?.trim())
+      .filter(Boolean)
+      .slice(0, limit)
+    return { type: "sitemap_fetch", url, status: res.status, urls, truncated: urls.length >= limit }
+  },
+  {
+    name: "sitemap_fetch",
+    description: "Fetch and parse sitemap XML URLs.",
+    schema: z.object({
+      url: z.string().url(),
+      maxUrls: z.number().int().min(1).max(500).optional(),
+    }),
+  }
+)
+
+export const rssFetchTool = tool(
+  async ({ url, maxItems }) => {
+    const res = await fetch(url, { headers: { "User-Agent": "Rekdin/NextJS" } })
+    const xml = await res.text()
+    const dom = new JSDOM(xml, { contentType: "text/xml" })
+    const limit = Math.min(maxItems ?? 20, 100)
+    const items = Array.from(dom.window.document.querySelectorAll("item, entry"))
+      .slice(0, limit)
+      .map((item) => ({
+        title: item.querySelector("title")?.textContent?.trim() ?? "",
+        link:
+          item.querySelector("link")?.textContent?.trim() ||
+          item.querySelector("link")?.getAttribute("href") ||
+          "",
+        date: item.querySelector("pubDate, updated, published")?.textContent?.trim() ?? "",
+        summary: truncateString(
+          item.querySelector("description, summary, content")?.textContent?.trim() ?? "",
+          1000
+        ),
+      }))
+    return { type: "rss_fetch", url, status: res.status, items }
+  },
+  {
+    name: "rss_fetch",
+    description: "Fetch and parse RSS/Atom feed items.",
+    schema: z.object({
+      url: z.string().url(),
+      maxItems: z.number().int().min(1).max(100).optional(),
+    }),
+  }
+)
+
+export const pageMetadataBatchTool = tool(
+  async ({ urls }) => {
+    const results = await Promise.all(
+      urls.slice(0, 10).map((url) => linkPreviewTool.invoke({ url }))
+    )
+    return { type: "page_metadata_batch", results, omittedUrls: Math.max(urls.length - 10, 0) }
+  },
+  {
+    name: "page_metadata_batch",
+    description: "Fetch metadata for several pages.",
+    schema: z.object({ urls: z.array(z.string().url()).min(1).max(25) }),
+  }
+)
+
+export const pageDiffSnapshotTool = tool(
+  async ({ beforeUrl, afterUrl }) => {
+    const before = (await visitUrlTool.invoke({ url: beforeUrl })) as {
+      markdown?: string
+      title?: string
+    }
+    const after = (await visitUrlTool.invoke({ url: afterUrl })) as {
+      markdown?: string
+      title?: string
+    }
+    return {
+      type: "page_diff_snapshot",
+      beforeUrl,
+      afterUrl,
+      beforeTitle: before.title,
+      afterTitle: after.title,
+      diff: truncateString(
+        createPatch("page.md", before.markdown ?? "", after.markdown ?? "", "before", "after"),
+        16000
+      ),
+    }
+  },
+  {
+    name: "page_diff_snapshot",
+    description: "Fetch two pages and return a markdown diff.",
+    schema: z.object({ beforeUrl: z.string().url(), afterUrl: z.string().url() }),
+  }
+)
+
+export const citationMetadataTool = tool(
+  async ({ url }) => {
+    const preview = (await linkPreviewTool.invoke({ url })) as Record<string, unknown>
+    const visited = (await visitUrlTool.invoke({ url })) as Record<string, unknown>
+    return {
+      type: "citation_metadata",
+      url,
+      title: preview.title ?? visited.title,
+      description: preview.description,
+      excerpt: visited.excerpt,
+      accessedAt: new Date().toISOString(),
+    }
+  },
+  {
+    name: "citation_metadata",
+    description: "Create compact citation metadata for a URL.",
+    schema: z.object({ url: z.string().url() }),
+  }
+)
+
+export const domainInfoTool = tool(
+  async ({ domain }) => {
+    const dns = await import("dns/promises")
+    const [addresses, mx, txt] = await Promise.all([
+      dns.resolve4(domain).catch(() => []),
+      dns.resolveMx(domain).catch(() => []),
+      dns.resolveTxt(domain).catch(() => []),
+    ])
+    return { type: "domain_info", domain, addresses, mx, txt: txt.slice(0, 20) }
+  },
+  {
+    name: "domain_info",
+    description: "Resolve basic DNS information for a domain.",
+    schema: z.object({ domain: z.string().min(1) }),
+  }
+)
+
+export const githubRepoInfoTool = tool(
+  async ({ owner, repo }) => {
+    const data = await fetchJson<Record<string, unknown>>(
+      `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`
+    )
+    return {
+      type: "github_repo_info",
+      owner,
+      repo,
+      name: data.full_name,
+      description: data.description,
+      stars: data.stargazers_count,
+      forks: data.forks_count,
+      openIssues: data.open_issues_count,
+      license: (data.license as Record<string, unknown> | null)?.spdx_id ?? null,
+      updatedAt: data.updated_at,
+      defaultBranch: data.default_branch,
+    }
+  },
+  {
+    name: "github_repo_info",
+    description: "Fetch public GitHub repository metadata.",
+    schema: z.object({ owner: z.string().min(1), repo: z.string().min(1) }),
+  }
+)
+
+export const packageCompareTool = tool(
+  async ({ names }) => {
+    const packages = await Promise.all(
+      names.slice(0, 8).map((name) => npmPackageInfoTool.invoke({ name }))
+    )
+    return { type: "package_compare", packages, omittedPackages: Math.max(names.length - 8, 0) }
+  },
+  {
+    name: "package_compare",
+    description: "Compare npm metadata for several packages.",
+    schema: z.object({ names: z.array(z.string().min(1)).min(1).max(20) }),
+  }
+)
+
 /**
  * Records a lightweight browser control step with a screenshot for visual timelines.
  */
@@ -2089,6 +3362,7 @@ export const browserActionTool = tool(
  */
 export const nodeExecuteTool = tool(
   async ({ code }) => {
+    assertNoBlockedDirectoryReference(code)
     const dir = await mkdtemp(path.join(os.tmpdir(), "Rekdin-node-"))
     const filePath = path.join(dir, "script.js")
     await writeFile(filePath, code, "utf-8")
@@ -2115,6 +3389,7 @@ export const nodeExecuteTool = tool(
  */
 export const pythonExecuteTool = tool(
   async ({ code }) => {
+    assertNoBlockedDirectoryReference(code)
     const dir = await mkdtemp(path.join(os.tmpdir(), "Rekdin-python-"))
     const filePath = path.join(dir, "script.py")
     await writeFile(filePath, code, "utf-8")
@@ -2189,6 +3464,7 @@ export const pythonCodeActTool = tool(
  */
 export const shellCodeActTool = tool(
   async ({ code, filename }) => {
+    assertNoBlockedDirectoryReference(code)
     const started = Date.now()
     const dir = await mkdtemp(path.join(os.tmpdir(), "Rekdin-shell-"))
     const filePath = path.join(dir, filename ?? "code.sh")
@@ -2381,10 +3657,12 @@ export const archiveCreateTool = tool(
     }
 
     const addTree = async (absPath: string, zipPrefix: string) => {
+      assertWorkspacePathAllowed(absPath)
       const info = await stat(absPath)
       if (info.isDirectory()) {
         const entries = await readdir(absPath, { withFileTypes: true })
         for (const entry of entries) {
+          if (entry.isDirectory() && isBlockedWorkspaceDirectoryName(entry.name)) continue
           const childAbs = path.join(absPath, entry.name)
           const childZip = zipPrefix ? `${zipPrefix}/${entry.name}` : entry.name
           if (entry.isDirectory()) {
@@ -2645,8 +3923,9 @@ async function walkDirForTodos(
   const entries = await readdir(dirPath, { withFileTypes: true })
   const results: { file?: string; line?: number; text: string; type: string }[] = []
   for (const entry of entries) {
-    if (entry.name.startsWith(".") || entry.name === "node_modules") continue
+    if (entry.name.startsWith(".") || isBlockedWorkspaceDirectoryName(entry.name)) continue
     const fullPath = path.join(dirPath, entry.name)
+    assertWorkspacePathAllowed(fullPath)
     if (entry.isDirectory()) {
       results.push(...(await walkDirForTodos(fullPath, baseDir)))
     } else {
@@ -2685,6 +3964,536 @@ export const extractTodosTool = tool(
     description:
       "Extract TODO/FIXME/HACK-style comments from a workspace file or directory (scanned recursively).",
     schema: z.object({ text: z.string().optional(), path: z.string().optional() }),
+  }
+)
+
+export const pdfExtractTextTool = tool(
+  async ({ path: filePath, source, maxChars }) => {
+    const bytes = filePath
+      ? await readFile(resolveWorkspacePath(filePath))
+      : await fetchBuffer(source!)
+    const { PDFParse } = await import("pdf-parse")
+    const parser = new PDFParse({ data: new Uint8Array(bytes) })
+    try {
+      const result = await parser.getText()
+      const text = result.text ?? ""
+      return {
+        type: "pdf_extract_text",
+        path: filePath,
+        source,
+        pages: result.pages?.length ?? undefined,
+        text: truncateString(text, maxChars ?? 12000),
+        chars: text.length,
+      }
+    } finally {
+      await parser.destroy()
+    }
+  },
+  {
+    name: "pdf_extract_text",
+    description: "Extract text from a PDF workspace file, URL, or data URL.",
+    schema: z
+      .object({
+        path: z.string().optional(),
+        source: z.string().optional(),
+        maxChars: z.number().int().min(100).max(50000).optional(),
+      })
+      .refine((value) => value.path || value.source, { message: "Provide path or source" }),
+  }
+)
+
+export const docxExtractTextTool = tool(
+  async ({ path: filePath, maxChars }) => {
+    const bytes = await readFile(resolveWorkspacePath(filePath))
+    const files = unzipSync(bytes)
+    const documentXml = files["word/document.xml"]
+    if (!documentXml) throw new Error("DOCX missing word/document.xml")
+    const xml = Buffer.from(documentXml).toString("utf-8")
+    const dom = new JSDOM(xml, { contentType: "text/xml" })
+    const text = Array.from(dom.window.document.querySelectorAll("w\\:t, t"))
+      .map((node) => node.textContent ?? "")
+      .join("")
+    return {
+      type: "docx_extract_text",
+      path: filePath,
+      text: truncateString(text, maxChars ?? 12000),
+      chars: text.length,
+    }
+  },
+  {
+    name: "docx_extract_text",
+    description: "Extract plain text from a DOCX workspace file.",
+    schema: z.object({
+      path: z.string().min(1),
+      maxChars: z.number().int().min(100).max(50000).optional(),
+    }),
+  }
+)
+
+export const csvPreviewTool = tool(
+  async ({ path: filePath, delimiter, maxRows }) => {
+    const content = await readWorkspaceText(filePath)
+    const rows = parseSimpleCsv(content, delimiter ?? ",", Math.min(maxRows ?? 25, 200))
+    return {
+      type: "csv_preview",
+      path: filePath,
+      rowCountPreviewed: rows.length,
+      headers: rows[0] ?? [],
+      rows: rows.slice(1),
+    }
+  },
+  {
+    name: "csv_preview",
+    description: "Preview rows from a CSV workspace file.",
+    schema: z.object({
+      path: z.string().min(1),
+      delimiter: z.string().length(1).optional(),
+      maxRows: z.number().int().min(1).max(200).optional(),
+    }),
+  }
+)
+
+export const csvQueryTool = tool(
+  async ({ path: filePath, delimiter, whereColumn, whereEquals, columns, maxRows }) => {
+    const content = await readWorkspaceText(filePath)
+    const rows = parseSimpleCsv(content, delimiter ?? ",", 5000)
+    const headers = rows[0] ?? []
+    const selectedColumns = columns?.length ? columns : headers
+    const whereIndex = whereColumn ? headers.indexOf(whereColumn) : -1
+    const selectedIndexes = selectedColumns
+      .map((column) => headers.indexOf(column))
+      .filter((index) => index >= 0)
+    const resultRows = rows
+      .slice(1)
+      .filter((row) => whereIndex < 0 || row[whereIndex] === whereEquals)
+      .slice(0, Math.min(maxRows ?? 50, 500))
+      .map((row) =>
+        Object.fromEntries(selectedIndexes.map((index) => [headers[index], row[index] ?? ""]))
+      )
+    return {
+      type: "csv_query",
+      path: filePath,
+      headers,
+      rows: resultRows,
+      truncated: resultRows.length >= (maxRows ?? 50),
+    }
+  },
+  {
+    name: "csv_query",
+    description: "Filter and project rows from a CSV workspace file.",
+    schema: z.object({
+      path: z.string().min(1),
+      delimiter: z.string().length(1).optional(),
+      whereColumn: z.string().optional(),
+      whereEquals: z.string().optional(),
+      columns: z.array(z.string()).optional(),
+      maxRows: z.number().int().min(1).max(500).optional(),
+    }),
+  }
+)
+
+export const jsonQueryTool = tool(
+  async ({ path: filePath, query }) => {
+    const parsed = JSON.parse(await readWorkspaceText(filePath))
+    return {
+      type: "json_query",
+      path: filePath,
+      query: query ?? "$",
+      value: getJsonPath(parsed, query ?? "$"),
+    }
+  },
+  {
+    name: "json_query",
+    description: "Read a JSON file and return a simple path query result.",
+    schema: z.object({ path: z.string().min(1), query: z.string().optional() }),
+  }
+)
+
+export const yamlQueryTool = tool(
+  async ({ path: filePath, query }) => {
+    const yaml = await loadYamlModule()
+    if (!yaml) throw new Error("YAML module unavailable")
+    const parsed = yaml.parse(await readWorkspaceText(filePath))
+    return {
+      type: "yaml_query",
+      path: filePath,
+      query: query ?? "$",
+      value: getJsonPath(parsed, query ?? "$"),
+    }
+  },
+  {
+    name: "yaml_query",
+    description: "Read a YAML file and return a simple path query result.",
+    schema: z.object({ path: z.string().min(1), query: z.string().optional() }),
+  }
+)
+
+export const sqliteQueryTool = tool(
+  async ({ path: filePath, query }) => {
+    if (!isReadOnlySql(query))
+      throw new Error("Only a single read-only SELECT/WITH/PRAGMA query is allowed")
+    const safePath = path.relative(getWorkspaceRoot(), resolveWorkspacePath(filePath))
+    const res = await runCommandUnsafe(
+      `sqlite3 -json ${safeShellArg(safePath)} ${safeShellArg(query)}`,
+      getWorkspaceRoot(),
+      15000
+    )
+    let rows: unknown = res.stdout
+    try {
+      rows = JSON.parse(res.stdout || "[]")
+    } catch {
+      // keep raw stdout
+    }
+    return {
+      type: "sqlite_query",
+      path: filePath,
+      query,
+      rows,
+      exitCode: res.exitCode,
+      stderr: truncateString(res.stderr, 2000),
+    }
+  },
+  {
+    name: "sqlite_query",
+    description: "Run one read-only sqlite3 query against a workspace database file.",
+    schema: z.object({ path: z.string().min(1), query: z.string().min(1) }),
+  }
+)
+
+export const htmlTableExtractTool = tool(
+  async ({ html, url }) => {
+    const content = html ?? (await fetch(url!).then((res) => res.text()))
+    const dom = new JSDOM(content, url ? { url } : undefined)
+    const tables = Array.from(dom.window.document.querySelectorAll("table"))
+      .slice(0, 20)
+      .map((table, index) => ({
+        index,
+        rows: Array.from(table.querySelectorAll("tr"))
+          .slice(0, 200)
+          .map((row) =>
+            Array.from(row.querySelectorAll("th,td")).map((cell) => cell.textContent?.trim() ?? "")
+          ),
+      }))
+    return { type: "html_table_extract", url, tables }
+  },
+  {
+    name: "html_table_extract",
+    description: "Extract tables from raw HTML or a URL.",
+    schema: z
+      .object({ html: z.string().optional(), url: z.string().url().optional() })
+      .refine((value) => value.html || value.url, { message: "Provide html or url" }),
+  }
+)
+
+export const markdownFrontmatterTool = tool(
+  async ({ path: filePath, markdown }) => {
+    const content = markdown ?? (await readWorkspaceText(filePath!))
+    const parsed = parseFrontmatter(content)
+    return {
+      type: "markdown_frontmatter",
+      path: filePath,
+      frontmatter: parsed.frontmatter,
+      bodyPreview: truncateString(parsed.body, 4000),
+    }
+  },
+  {
+    name: "markdown_frontmatter",
+    description: "Parse YAML-like frontmatter from Markdown.",
+    schema: z
+      .object({ path: z.string().optional(), markdown: z.string().optional() })
+      .refine((value) => value.path || value.markdown, { message: "Provide path or markdown" }),
+  }
+)
+
+export const tokenCountTool = tool(
+  async ({ text }) => ({ type: "token_count", tokens: estimateTokens(text), chars: text.length }),
+  {
+    name: "token_count",
+    description: "Estimate tokenizer token count for text.",
+    schema: z.object({ text: z.string() }),
+  }
+)
+
+export const textKeywordsTool = tool(
+  async ({ text, maxKeywords }) => ({
+    type: "text_keywords",
+    keywords: keywordExtractor
+      .extract(text, { language: "english", remove_duplicates: true })
+      .slice(0, maxKeywords ?? 50),
+  }),
+  {
+    name: "text_keywords",
+    description: "Extract keywords from text without using an LLM.",
+    schema: z.object({
+      text: z.string(),
+      maxKeywords: z.number().int().min(1).max(200).optional(),
+    }),
+  }
+)
+
+export const textEntitiesTool = tool(
+  async ({ text }) => {
+    const urls = unique(text.match(/https?:\/\/[^\s)]+/g) ?? [])
+    const emails = unique(text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) ?? [])
+    const capitalizedPhrases = unique(
+      text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,4}\b/g) ?? []
+    ).slice(0, 100)
+    return { type: "text_entities", urls, emails, capitalizedPhrases }
+  },
+  {
+    name: "text_entities",
+    description: "Extract simple URLs, emails, and capitalized phrase entities from text.",
+    schema: z.object({ text: z.string() }),
+  }
+)
+
+const SECRET_PATTERNS = [
+  { type: "openai_key", pattern: /sk-[A-Za-z0-9_-]{20,}/g },
+  {
+    type: "generic_api_key",
+    pattern: /\b(api[_-]?key|secret|token|password)\s*[:=]\s*["']?([A-Za-z0-9_./+=-]{16,})/gi,
+  },
+  { type: "aws_access_key", pattern: /AKIA[0-9A-Z]{16}/g },
+  { type: "private_key", pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g },
+]
+
+export const secretScanTool = tool(
+  async ({ path: inputPath, maxFiles }) => {
+    const { files, skipped } = await collectWorkspaceFiles({
+      path: inputPath,
+      maxFiles: maxFiles ?? 1000,
+      includeHidden: true,
+    })
+    const findings: Array<Record<string, unknown>> = []
+    for (const file of files) {
+      const content = await readFile(file.abs, "utf-8").catch(() => "")
+      const lines = content.split(/\r?\n/)
+      lines.forEach((line, index) => {
+        for (const { type, pattern } of SECRET_PATTERNS) {
+          pattern.lastIndex = 0
+          if (pattern.test(line))
+            findings.push({
+              type,
+              file: file.path,
+              line: index + 1,
+              preview: line.replace(/([:=]\s*["']?).{4,}/, "$1[redacted]"),
+            })
+        }
+      })
+    }
+    return { type: "secret_scan", findings: findings.slice(0, 200), skipped }
+  },
+  {
+    name: "secret_scan",
+    description: "Scan workspace text files for likely secrets without returning secret values.",
+    schema: z.object({
+      path: z.string().optional(),
+      maxFiles: z.number().int().min(1).max(5000).optional(),
+    }),
+  }
+)
+
+export const dependencyAuditTool = tool(
+  async () => {
+    const res = await runCommandUnsafe("npm audit --json", getWorkspaceRoot(), 120000)
+    let parsed: Record<string, unknown> | null = null
+    try {
+      parsed = JSON.parse(res.stdout || "{}") as Record<string, unknown>
+    } catch {
+      parsed = null
+    }
+    return {
+      type: "dependency_audit",
+      exitCode: res.exitCode,
+      audit: parsed,
+      stderr: truncateString(res.stderr, 4000),
+    }
+  },
+  {
+    name: "dependency_audit",
+    description: "Run npm audit and return JSON vulnerability metadata.",
+    schema: z.object({}),
+  }
+)
+
+export const licenseSummaryTool = tool(
+  async () => {
+    const lockPath = resolveWorkspacePath("package-lock.json")
+    const lock = JSON.parse(await readFile(lockPath, "utf-8")) as {
+      packages?: Record<string, { license?: string }>
+    }
+    const counts: Record<string, number> = {}
+    for (const pkg of Object.values(lock.packages ?? {})) {
+      const license = pkg.license ?? "UNKNOWN"
+      counts[license] = (counts[license] ?? 0) + 1
+    }
+    return { type: "license_summary", licenses: counts }
+  },
+  {
+    name: "license_summary",
+    description: "Summarize package-lock license fields.",
+    schema: z.object({}),
+  }
+)
+
+export const sbomGenerateTool = tool(
+  async () => {
+    const lock = JSON.parse(await readWorkspaceText("package-lock.json")) as {
+      packages?: Record<string, { version?: string; resolved?: string; license?: string }>
+    }
+    const components = Object.entries(lock.packages ?? {})
+      .filter(([name]) => name.startsWith("node_modules/"))
+      .map(([name, info]) => ({
+        type: "library",
+        name: name.replace(/^node_modules\//, ""),
+        version: info.version,
+        licenses: info.license ? [{ license: { id: info.license } }] : undefined,
+        purl: `pkg:npm/${name.replace(/^node_modules\//, "")}@${info.version ?? ""}`,
+      }))
+    return {
+      type: "sbom_generate",
+      format: "cyclonedx-lite",
+      componentCount: components.length,
+      bom: { bomFormat: "CycloneDX", specVersion: "1.5", components: components.slice(0, 2000) },
+    }
+  },
+  {
+    name: "sbom_generate",
+    description: "Generate a lightweight CycloneDX-style SBOM from package-lock.",
+    schema: z.object({}),
+  }
+)
+
+export const lockfileRiskSummaryTool = tool(
+  async () => {
+    const lock = JSON.parse(await readWorkspaceText("package-lock.json")) as {
+      packages?: Record<
+        string,
+        { version?: string; resolved?: string; integrity?: string; dev?: boolean }
+      >
+    }
+    const packages = Object.entries(lock.packages ?? {}).filter(([name]) =>
+      name.startsWith("node_modules/")
+    )
+    return {
+      type: "lockfile_risk_summary",
+      packageCount: packages.length,
+      missingIntegrity: packages
+        .filter(([, info]) => !info.integrity)
+        .map(([name]) => name)
+        .slice(0, 100),
+      gitResolved: packages
+        .filter(([, info]) => String(info.resolved ?? "").startsWith("git"))
+        .map(([name, info]) => ({ name, resolved: info.resolved }))
+        .slice(0, 100),
+      devCount: packages.filter(([, info]) => info.dev).length,
+    }
+  },
+  {
+    name: "lockfile_risk_summary",
+    description: "Summarize package-lock supply-chain risk signals.",
+    schema: z.object({}),
+  }
+)
+
+export const semgrepScanTool = tool(
+  async ({ config }) => {
+    const res = await runCommandUnsafe(
+      `semgrep --json --config ${safeShellArg(config ?? "auto")} .`,
+      getWorkspaceRoot(),
+      120000
+    )
+    let findings: unknown = res.stdout
+    try {
+      findings = JSON.parse(res.stdout || "{}")
+    } catch {
+      // keep raw output
+    }
+    return {
+      type: "semgrep_scan",
+      exitCode: res.exitCode,
+      findings,
+      stderr: truncateString(res.stderr, 4000),
+    }
+  },
+  {
+    name: "semgrep_scan",
+    description: "Run semgrep if installed and return JSON findings.",
+    schema: z.object({ config: z.string().optional() }),
+  }
+)
+
+export const dockerfileScanTool = tool(
+  async () => {
+    const { files } = await collectWorkspaceFiles({ maxFiles: 1000, includeHidden: true })
+    const dockerfiles = files.filter((file) => /(^|\/)(Dockerfile|.*\.Dockerfile)$/.test(file.path))
+    const findings = []
+    for (const file of dockerfiles) {
+      const content = await readFile(file.abs, "utf-8").catch(() => "")
+      if (/FROM\s+[^:\s]+(?=\s|$)/i.test(content))
+        findings.push({ path: file.path, issue: "Base image has no explicit tag" })
+      if (/USER\s+root/i.test(content) || !/\nUSER\s+/i.test(content))
+        findings.push({ path: file.path, issue: "Container may run as root" })
+      if (/ADD\s+https?:/i.test(content))
+        findings.push({ path: file.path, issue: "Remote ADD detected" })
+    }
+    return { type: "dockerfile_scan", dockerfiles: dockerfiles.map((file) => file.path), findings }
+  },
+  {
+    name: "dockerfile_scan",
+    description: "Run lightweight Dockerfile safety checks.",
+    schema: z.object({}),
+  }
+)
+
+export const urlSafetyCheckTool = tool(
+  async ({ url }) => {
+    const parsed = new URL(url)
+    const warnings = []
+    if (parsed.protocol !== "https:") warnings.push("URL is not HTTPS")
+    if (/(\d{1,3}\.){3}\d{1,3}/.test(parsed.hostname)) warnings.push("URL uses a raw IPv4 address")
+    if (parsed.username || parsed.password) warnings.push("URL contains credentials")
+    if (parsed.hostname === "localhost" || parsed.hostname.endsWith(".local"))
+      warnings.push("URL targets a local hostname")
+    return {
+      type: "url_safety_check",
+      url,
+      hostname: parsed.hostname,
+      protocol: parsed.protocol,
+      warnings,
+    }
+  },
+  {
+    name: "url_safety_check",
+    description: "Check URL syntax and simple safety signals.",
+    schema: z.object({ url: z.string().url() }),
+  }
+)
+
+export const workspacePermissionsScanTool = tool(
+  async ({ path: inputPath }) => {
+    const { files } = await collectWorkspaceFiles({
+      path: inputPath,
+      maxFiles: 3000,
+      includeHidden: true,
+    })
+    const executable = []
+    const worldWritable = []
+    for (const file of files) {
+      const info = await stat(file.abs)
+      if ((info.mode & 0o111) !== 0) executable.push(file.path)
+      if ((info.mode & 0o002) !== 0) worldWritable.push(file.path)
+    }
+    return {
+      type: "workspace_permissions_scan",
+      executable: executable.slice(0, 200),
+      worldWritable: worldWritable.slice(0, 200),
+    }
+  },
+  {
+    name: "workspace_permissions_scan",
+    description: "Find executable and world-writable files.",
+    schema: z.object({ path: z.string().optional() }),
   }
 )
 
@@ -2773,6 +4582,240 @@ export const imageConvertTool = tool(
     name: "image_convert",
     description: "Convert an image to png/jpg/webp (requires `sharp`).",
     schema: z.object({ source: z.string().min(1), format: z.enum(["png", "jpeg", "webp"]) }),
+  }
+)
+
+export const imageExifTool = tool(
+  async ({ source }) => {
+    const sharp = await loadSharp()
+    if (!sharp) return { type: "image_exif", error: "Image tooling requires `sharp`." }
+    const buf = await fetchBuffer(source)
+    const meta = await sharp(buf).metadata()
+    return {
+      type: "image_exif",
+      width: meta.width,
+      height: meta.height,
+      format: meta.format,
+      space: meta.space,
+      density: meta.density,
+      hasAlpha: meta.hasAlpha,
+      orientation: meta.orientation,
+      exifBytes: meta.exif?.length ?? 0,
+      iccBytes: meta.icc?.length ?? 0,
+    }
+  },
+  {
+    name: "image_exif",
+    description: "Read image metadata and EXIF/ICC byte presence.",
+    schema: z.object({ source: z.string().min(1) }),
+  }
+)
+
+export const imageOcrTool = tool(
+  async ({ source, language }) => {
+    const tesseract = await loadTesseract()
+    if (!tesseract?.createWorker) {
+      return {
+        type: "image_ocr",
+        error: "OCR tooling requires optional dependency `tesseract.js`.",
+      }
+    }
+
+    const worker = await tesseract.createWorker(language ?? "eng")
+    try {
+      const bytes = await fetchBuffer(source)
+      const result = await worker.recognize(bytes)
+      const data = result?.data ?? {}
+      return {
+        type: "image_ocr",
+        language: language ?? "eng",
+        confidence: data.confidence ?? null,
+        text: truncateString(String(data.text ?? ""), 12000),
+        lines: Array.isArray(data.lines)
+          ? data.lines.slice(0, 80).map((line: { text?: string; confidence?: number }) => ({
+              text: truncateString(String(line.text ?? ""), 500),
+              confidence: line.confidence ?? null,
+            }))
+          : [],
+      }
+    } finally {
+      await worker.terminate()
+    }
+  },
+  {
+    name: "image_ocr",
+    description:
+      "Extract text from a remote or data URL image using optional local OCR support (`tesseract.js`).",
+    schema: z.object({
+      source: z.string().min(1),
+      language: z.string().min(2).max(20).optional(),
+    }),
+  }
+)
+
+export const imageDiffTool = tool(
+  async ({ before, after }) => {
+    const sharp = await loadSharp()
+    if (!sharp) return { type: "image_diff", error: "Image tooling requires `sharp`." }
+    const beforeImage = sharp(await fetchBuffer(before))
+      .resize(256, 256, { fit: "contain", background: "white" })
+      .raw()
+    const afterImage = sharp(await fetchBuffer(after))
+      .resize(256, 256, { fit: "contain", background: "white" })
+      .raw()
+    const [beforeBuffer, afterBuffer] = await Promise.all([
+      beforeImage.toBuffer(),
+      afterImage.toBuffer(),
+    ])
+    const length = Math.min(beforeBuffer.length, afterBuffer.length)
+    let changed = 0
+    let totalDelta = 0
+    for (let index = 0; index < length; index += 1) {
+      const delta = Math.abs(beforeBuffer[index] - afterBuffer[index])
+      totalDelta += delta
+      if (delta > 12) changed += 1
+    }
+    return {
+      type: "image_diff",
+      comparedBytes: length,
+      changedBytes: changed,
+      changedRatio: length ? changed / length : 0,
+      averageDelta: length ? totalDelta / length : 0,
+    }
+  },
+  {
+    name: "image_diff",
+    description: "Compute a lightweight pixel difference between two images.",
+    schema: z.object({ before: z.string().min(1), after: z.string().min(1) }),
+  }
+)
+
+export const svgOptimizeTool = tool(
+  async ({ path: filePath, svg }) => {
+    const input = svg ?? (await readWorkspaceText(filePath!))
+    const optimized = input
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(/>\s+</g, "><")
+      .replace(/\s{2,}/g, " ")
+      .trim()
+    return {
+      type: "svg_optimize",
+      path: filePath,
+      originalBytes: Buffer.byteLength(input),
+      optimizedBytes: Buffer.byteLength(optimized),
+      optimized,
+    }
+  },
+  {
+    name: "svg_optimize",
+    description: "Minify SVG text without changing files.",
+    schema: z
+      .object({ path: z.string().optional(), svg: z.string().optional() })
+      .refine((value) => value.path || value.svg, { message: "Provide path or svg" }),
+  }
+)
+
+export const assetManifestTool = tool(
+  async ({ path: inputPath }) => {
+    const { files } = await collectWorkspaceFiles({
+      path: inputPath,
+      maxFiles: 3000,
+      extensions: [
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+        ".gif",
+        ".svg",
+        ".ico",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".otf",
+      ],
+    })
+    return {
+      type: "asset_manifest",
+      assets: files.map(({ path, size, modified }) => ({ path, size, modified })).slice(0, 1000),
+      count: files.length,
+    }
+  },
+  {
+    name: "asset_manifest",
+    description: "List image/font/static assets in the workspace.",
+    schema: z.object({ path: z.string().optional() }),
+  }
+)
+
+export const artifactListTool = tool(
+  async () => {
+    await ensureWorkspaceDirs()
+    const dir = getArtifactsDir()
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
+    const artifacts = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile())
+        .slice(0, 500)
+        .map(async (entry) => {
+          const info = await stat(path.join(dir, entry.name))
+          return {
+            name: entry.name,
+            url: `/api/artifacts/${entry.name}`,
+            size: info.size,
+            modified: info.mtime.toISOString(),
+          }
+        })
+    )
+    return { type: "artifact_list", artifacts }
+  },
+  { name: "artifact_list", description: "List stored Rekdin artifacts.", schema: z.object({}) }
+)
+
+export const artifactReadTool = tool(
+  async ({ artifact }) => {
+    const name = parseArtifactName(artifact)
+    const artifactsDir = getArtifactsDir()
+    const fullPath = path.join(artifactsDir, name)
+    const relative = path.relative(path.resolve(artifactsDir), path.resolve(fullPath))
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new Error("Artifact path escapes artifact directory")
+    }
+    const info = await stat(fullPath)
+    const bytes = await readFile(fullPath)
+    const textLike = /\.(txt|md|json|csv|html|xml|svg)$/i.test(name)
+    return {
+      type: "artifact_read",
+      artifact,
+      name,
+      size: info.size,
+      content: textLike ? truncateString(bytes.toString("utf-8"), 12000) : undefined,
+      base64: textLike ? undefined : bytes.toString("base64").slice(0, 12000),
+      truncated: !textLike && bytes.length > 9000,
+    }
+  },
+  {
+    name: "artifact_read",
+    description: "Read a stored artifact by URL or filename.",
+    schema: z.object({ artifact: z.string().min(1) }),
+  }
+)
+
+export const artifactDeleteTool = tool(
+  async ({ artifact }) => {
+    const name = parseArtifactName(artifact)
+    const artifactsDir = getArtifactsDir()
+    const fullPath = path.join(artifactsDir, name)
+    const relative = path.relative(path.resolve(artifactsDir), path.resolve(fullPath))
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new Error("Artifact path escapes artifact directory")
+    }
+    await unlink(fullPath)
+    return { type: "artifact_delete", artifact, deleted: true }
+  },
+  {
+    name: "artifact_delete",
+    description: "Delete a stored Rekdin artifact.",
+    schema: z.object({ artifact: z.string().min(1) }),
   }
 )
 
@@ -2992,6 +5035,478 @@ export const gitFileHistoryTool = tool(
   }
 )
 
+export const gitStatusTool = tool(
+  async () => {
+    const res = await runCommandUnsafe("git status --short --branch", getWorkspaceRoot(), 10000)
+    return { type: "git_status", output: res.stdout.trim(), exitCode: res.exitCode }
+  },
+  {
+    name: "git_status",
+    description: "Show compact git branch and working tree status.",
+    schema: z.object({}),
+  }
+)
+
+export const gitChangedFilesTool = tool(
+  async () => {
+    const res = await runCommandUnsafe("git status --porcelain=v1", getWorkspaceRoot(), 10000)
+    const files = res.stdout
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => ({ status: line.slice(0, 2), path: line.slice(3).trim() }))
+    return { type: "git_changed_files", files, exitCode: res.exitCode }
+  },
+  {
+    name: "git_changed_files",
+    description: "List changed files with porcelain status codes.",
+    schema: z.object({}),
+  }
+)
+
+export const gitStagedDiffTool = tool(
+  async ({ path: filePath }) => {
+    const safePath = filePath
+      ? path.relative(getWorkspaceRoot(), resolveWorkspacePath(filePath))
+      : ""
+    const pathArg = safePath ? ` -- ${safeShellArg(safePath)}` : ""
+    const res = await runCommandUnsafe(`git diff --cached${pathArg}`, getWorkspaceRoot(), 15000)
+    return {
+      type: "git_staged_diff",
+      path: filePath,
+      diff: truncateString(res.stdout, 12000),
+      exitCode: res.exitCode,
+    }
+  },
+  {
+    name: "git_staged_diff",
+    description: "Show staged git diff, optionally scoped to a file.",
+    schema: z.object({ path: z.string().optional() }),
+  }
+)
+
+export const gitShowTool = tool(
+  async ({ ref, path: filePath }) => {
+    const safeRef = ref.replace(/[^a-zA-Z0-9_.~^:/-]/g, "")
+    const safePath = filePath
+      ? path.relative(getWorkspaceRoot(), resolveWorkspacePath(filePath))
+      : ""
+    const pathArg = safePath ? ` -- ${safeShellArg(safePath)}` : ""
+    const res = await runCommandUnsafe(
+      `git show --stat --patch ${safeRef}${pathArg}`,
+      getWorkspaceRoot(),
+      15000
+    )
+    return {
+      type: "git_show",
+      ref: safeRef,
+      path: filePath,
+      output: truncateString(res.stdout, 16000),
+      exitCode: res.exitCode,
+      error: res.stderr.trim(),
+    }
+  },
+  {
+    name: "git_show",
+    description: "Show a git ref/commit with stat and patch.",
+    schema: z.object({ ref: z.string().min(1), path: z.string().optional() }),
+  }
+)
+
+export const gitCompareRefsTool = tool(
+  async ({ base, head }) => {
+    const safeBase = base.replace(/[^a-zA-Z0-9_.~^:/-]/g, "")
+    const safeHead = head.replace(/[^a-zA-Z0-9_.~^:/-]/g, "")
+    const res = await runCommandUnsafe(
+      `git diff --stat --patch ${safeBase}..${safeHead}`,
+      getWorkspaceRoot(),
+      20000
+    )
+    return {
+      type: "git_compare_refs",
+      base: safeBase,
+      head: safeHead,
+      diff: truncateString(res.stdout, 20000),
+      exitCode: res.exitCode,
+      error: res.stderr.trim(),
+    }
+  },
+  {
+    name: "git_compare_refs",
+    description: "Compare two git refs with stat and patch.",
+    schema: z.object({ base: z.string().min(1), head: z.string().min(1) }),
+  }
+)
+
+export const gitConflictsTool = tool(
+  async () => {
+    const res = await runCommandUnsafe(
+      "git diff --name-only --diff-filter=U",
+      getWorkspaceRoot(),
+      10000
+    )
+    return {
+      type: "git_conflicts",
+      files: res.stdout.split(/\r?\n/).filter(Boolean),
+      exitCode: res.exitCode,
+    }
+  },
+  {
+    name: "git_conflicts",
+    description: "List files with unresolved git merge conflicts.",
+    schema: z.object({}),
+  }
+)
+
+export const gitTagsTool = tool(
+  async ({ limit }) => {
+    const n = Math.min(Math.max(limit ?? 50, 1), 200)
+    const res = await runCommandUnsafe(
+      `git tag --sort=-creatordate | head -n ${n}`,
+      getWorkspaceRoot(),
+      10000
+    )
+    return {
+      type: "git_tags",
+      tags: res.stdout.split(/\r?\n/).filter(Boolean),
+      exitCode: res.exitCode,
+    }
+  },
+  {
+    name: "git_tags",
+    description: "List recent git tags.",
+    schema: z.object({ limit: z.number().int().min(1).max(200).optional() }),
+  }
+)
+
+export const gitRemoteInfoTool = tool(
+  async () => {
+    const remotes = await runCommandUnsafe("git remote -v", getWorkspaceRoot(), 10000)
+    const branch = await runCommandUnsafe("git branch -vv", getWorkspaceRoot(), 10000)
+    return {
+      type: "git_remote_info",
+      remotes: remotes.stdout.trim(),
+      branches: branch.stdout.trim(),
+      exitCode: remotes.exitCode || branch.exitCode,
+    }
+  },
+  {
+    name: "git_remote_info",
+    description: "Show git remotes and branch tracking info.",
+    schema: z.object({}),
+  }
+)
+
+export const gitCommitSearchTool = tool(
+  async ({ query, limit }) => {
+    const n = Math.min(Math.max(limit ?? 20, 1), 100)
+    const res = await runCommandUnsafe(
+      `git log --all --grep=${safeShellArg(query)} --oneline -n ${n}`,
+      getWorkspaceRoot(),
+      10000
+    )
+    return {
+      type: "git_commit_search",
+      query,
+      commits: res.stdout.split(/\r?\n/).filter(Boolean),
+      exitCode: res.exitCode,
+    }
+  },
+  {
+    name: "git_commit_search",
+    description: "Search git commit messages.",
+    schema: z.object({
+      query: z.string().min(1),
+      limit: z.number().int().min(1).max(100).optional(),
+    }),
+  }
+)
+
+export const gitPatchPreviewTool = tool(
+  async ({ path: filePath, newContent }) => {
+    const oldContent = await readWorkspaceText(filePath)
+    return {
+      type: "git_patch_preview",
+      path: filePath,
+      diff: createPatch(filePath, oldContent, newContent, "before", "after"),
+    }
+  },
+  {
+    name: "git_patch_preview",
+    description: "Create a unified diff preview for replacing one workspace file.",
+    schema: z.object({ path: z.string().min(1), newContent: z.string() }),
+  }
+)
+
+export const gitApplyPatchTool = tool(
+  async ({ patch, checkOnly }) => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "rekdin-patch-"))
+    const patchPath = path.join(tempDir, "change.patch")
+    try {
+      await writeFile(patchPath, patch, "utf-8")
+      const command = `git apply ${checkOnly ? "--check " : ""}${safeShellArg(patchPath)}`
+      const res = await runCommandUnsafe(command, getWorkspaceRoot(), 20000)
+      return {
+        type: "git_apply_patch",
+        checkOnly: checkOnly ?? false,
+        applied: !checkOnly && res.exitCode === 0,
+        exitCode: res.exitCode,
+        stdout: truncateString(res.stdout, 4000),
+        stderr: truncateString(res.stderr, 4000),
+      }
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {})
+    }
+  },
+  {
+    name: "git_apply_patch",
+    description:
+      "Apply or validate a unified patch with git apply. Mutates files when checkOnly is false.",
+    schema: z.object({ patch: z.string().min(1), checkOnly: z.boolean().optional() }),
+  }
+)
+
+export const npmScriptsTool = tool(
+  async () => {
+    const pkg = await readPackageJson()
+    return {
+      type: "npm_scripts",
+      scripts: (pkg?.scripts as Record<string, string> | undefined) ?? {},
+    }
+  },
+  { name: "npm_scripts", description: "List package.json scripts.", schema: z.object({}) }
+)
+
+export const runNpmScriptTool = tool(
+  async ({ script, timeoutMs }) => {
+    const res = await runPackageCommand(script, timeoutMs ?? 120000)
+    return {
+      type: "run_npm_script",
+      script,
+      exitCode: res.exitCode,
+      stdout: truncateString(res.stdout, 12000),
+      stderr: truncateString(res.stderr, 8000),
+      duration: res.duration,
+    }
+  },
+  {
+    name: "run_npm_script",
+    description: "Run a package.json script in the workspace.",
+    schema: z.object({
+      script: z.string().min(1),
+      timeoutMs: z.number().int().min(1000).max(300000).optional(),
+    }),
+  }
+)
+
+function createScriptWrapperTool(
+  name: string,
+  scriptCandidates: string[],
+  description: string,
+  timeoutMs: number
+) {
+  return tool(
+    async () => {
+      const scripts =
+        ((await readPackageJson())?.scripts as Record<string, string> | undefined) ?? {}
+      const script = scriptCandidates.find((candidate) => scripts[candidate])
+      if (!script)
+        return { type: name, error: `No matching script found: ${scriptCandidates.join(", ")}` }
+      const res = await runPackageCommand(script, timeoutMs)
+      return {
+        type: name,
+        script,
+        exitCode: res.exitCode,
+        stdout: truncateString(res.stdout, 12000),
+        stderr: truncateString(res.stderr, 8000),
+        duration: res.duration,
+      }
+    },
+    { name, description, schema: z.object({}) }
+  )
+}
+
+export const typecheckProjectTool = createScriptWrapperTool(
+  "typecheck_project",
+  ["typecheck", "tsc"],
+  "Run the project typecheck script.",
+  180000
+)
+export const lintProjectTool = createScriptWrapperTool(
+  "lint_project",
+  ["lint"],
+  "Run the project lint script.",
+  180000
+)
+export const testProjectTool = createScriptWrapperTool(
+  "test_project",
+  ["test"],
+  "Run the project test script.",
+  180000
+)
+export const formatCheckTool = createScriptWrapperTool(
+  "format_check",
+  ["format:check", "prettier:check"],
+  "Run the project formatting check script.",
+  180000
+)
+export const buildProjectTool = createScriptWrapperTool(
+  "build_project",
+  ["build"],
+  "Run the project production build script.",
+  300000
+)
+
+export const devServerStartTool = tool(
+  async ({ script, port }) => {
+    const key = `${script ?? "dev"}:${port ?? ""}`
+    const existing = DEV_SERVERS.get(key)
+    if (existing && !existing.child.killed)
+      return {
+        type: "dev_server_start",
+        key,
+        status: "already_running",
+        port: existing.port,
+        startedAt: existing.startedAt,
+      }
+    const pkg = await readPackageJson()
+    const scripts = (pkg?.scripts as Record<string, string> | undefined) ?? {}
+    const scriptName = script ?? "dev"
+    if (!scripts[scriptName]) throw new Error(`package.json script not found: ${scriptName}`)
+    const child = spawn(
+      "npm",
+      ["run", scriptName, ...(port ? ["--", "--port", String(port)] : [])],
+      {
+        cwd: getWorkspaceRoot(),
+        env: process.env,
+        stdio: "ignore",
+        detached: true,
+      }
+    )
+    DEV_SERVERS.set(key, {
+      child,
+      startedAt: new Date().toISOString(),
+      command: `npm run ${scriptName}`,
+      port,
+      cwd: getWorkspaceRoot(),
+    })
+    child.unref()
+    return { type: "dev_server_start", key, status: "started", script: scriptName, port }
+  },
+  {
+    name: "dev_server_start",
+    description: "Start a package.json dev server in the background.",
+    schema: z.object({
+      script: z.string().optional(),
+      port: z.number().int().min(1).max(65535).optional(),
+    }),
+  }
+)
+
+export const devServerStopTool = tool(
+  async ({ key }) => {
+    const entries = key ? [[key, DEV_SERVERS.get(key)] as const] : Array.from(DEV_SERVERS.entries())
+    const stopped: string[] = []
+    for (const [entryKey, entry] of entries) {
+      if (!entry) continue
+      entry.child.kill("SIGTERM")
+      DEV_SERVERS.delete(entryKey)
+      stopped.push(entryKey)
+    }
+    return { type: "dev_server_stop", stopped }
+  },
+  {
+    name: "dev_server_stop",
+    description: "Stop Rekdin-started dev servers.",
+    schema: z.object({ key: z.string().optional() }),
+  }
+)
+
+export const devServerStatusTool = tool(
+  async () => ({
+    type: "dev_server_status",
+    servers: Array.from(DEV_SERVERS.entries()).map(([key, value]) => ({
+      key,
+      startedAt: value.startedAt,
+      command: value.command,
+      port: value.port,
+      killed: value.child.killed,
+    })),
+  }),
+  {
+    name: "dev_server_status",
+    description: "List Rekdin-started dev servers.",
+    schema: z.object({}),
+  }
+)
+
+export const portProbeTool = tool(
+  async ({ port, host }) => {
+    const started = Date.now()
+    try {
+      const res = await fetch(`http://${host ?? "127.0.0.1"}:${port}`, { method: "HEAD" })
+      return {
+        type: "port_probe",
+        port,
+        host: host ?? "127.0.0.1",
+        open: true,
+        status: res.status,
+        duration: Date.now() - started,
+      }
+    } catch (err) {
+      return {
+        type: "port_probe",
+        port,
+        host: host ?? "127.0.0.1",
+        open: false,
+        error: err instanceof Error ? err.message : "Probe failed",
+        duration: Date.now() - started,
+      }
+    }
+  },
+  {
+    name: "port_probe",
+    description: "Probe a local HTTP port.",
+    schema: z.object({ port: z.number().int().min(1).max(65535), host: z.string().optional() }),
+  }
+)
+
+export const httpHealthCheckTool = tool(
+  async ({ url, timeoutMs }) => {
+    const controller = new AbortController()
+    const started = Date.now()
+    const timer = setTimeout(() => controller.abort(), timeoutMs ?? 10000)
+    try {
+      const res = await fetch(url, { method: "GET", signal: controller.signal })
+      return {
+        type: "http_health_check",
+        url,
+        ok: res.ok,
+        status: res.status,
+        contentType: res.headers.get("content-type"),
+        duration: Date.now() - started,
+      }
+    } catch (err) {
+      return {
+        type: "http_health_check",
+        url,
+        ok: false,
+        error: err instanceof Error ? err.message : "Health check failed",
+        duration: Date.now() - started,
+      }
+    } finally {
+      clearTimeout(timer)
+    }
+  },
+  {
+    name: "http_health_check",
+    description: "Check a URL and return status/latency metadata.",
+    schema: z.object({
+      url: z.string().url(),
+      timeoutMs: z.number().int().min(1000).max(60000).optional(),
+    }),
+  }
+)
+
 /**
  * Creates a LaTeX-to-PDF tool with request-specific Cloudinary credentials.
  */
@@ -3013,6 +5528,175 @@ function createGenerateLatexPdfTool(context?: { headers?: HeadersInit }) {
     }
   )
 }
+
+const CODE_MAP_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mts", ".cts"])
+const CODE_MAP_MAX_FILE_BYTES = 1_000_000
+
+function isLikelyReactComponentName(name: string) {
+  return /^[A-Z][A-Za-z0-9]*$/.test(name)
+}
+
+async function readPackageMetadata() {
+  try {
+    const raw = await readFile(resolveWorkspacePath("package.json"), "utf-8")
+    const parsed = JSON.parse(raw) as {
+      name?: string
+      scripts?: Record<string, string>
+      dependencies?: Record<string, string>
+      devDependencies?: Record<string, string>
+    }
+    return {
+      name: parsed.name,
+      scripts: parsed.scripts ?? {},
+      dependencies: Object.keys(parsed.dependencies ?? {}),
+      devDependencies: Object.keys(parsed.devDependencies ?? {}),
+    }
+  } catch {
+    return null
+  }
+}
+
+async function collectCodeMapFiles({
+  root,
+  relativeRoot,
+  maxDepth,
+  maxFiles,
+}: {
+  root: string
+  relativeRoot: string
+  maxDepth: number
+  maxFiles: number
+}) {
+  const files: Array<{ abs: string; rel: string; size: number }> = []
+  const skipped: Array<{ path: string; reason: string }> = []
+
+  async function visit(absPath: string, relPath: string, depth: number) {
+    if (files.length >= maxFiles) return
+    assertWorkspacePathAllowed(absPath)
+    const info = await stat(absPath)
+
+    if (info.isFile()) {
+      const ext = path.extname(absPath)
+      if (!CODE_MAP_EXTENSIONS.has(ext)) return
+      if (info.size > CODE_MAP_MAX_FILE_BYTES) {
+        skipped.push({
+          path: relPath,
+          reason: `File is larger than ${CODE_MAP_MAX_FILE_BYTES} bytes`,
+        })
+        return
+      }
+      files.push({ abs: absPath, rel: relPath || path.basename(absPath), size: info.size })
+      return
+    }
+
+    if (!info.isDirectory() || depth >= maxDepth) return
+    const entries = (await readdir(absPath, { withFileTypes: true })).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    )
+    for (const entry of entries) {
+      if (files.length >= maxFiles) break
+      const childRel = relPath ? `${relPath}/${entry.name}` : entry.name
+      if (entry.isDirectory() && isBlockedWorkspaceDirectoryName(entry.name)) {
+        skipped.push({ path: childRel, reason: "Protected generated dependency/build directory" })
+        continue
+      }
+      if (entry.isSymbolicLink()) {
+        skipped.push({ path: childRel, reason: "Symlink skipped" })
+        continue
+      }
+      await visit(path.join(absPath, entry.name), childRel, depth + 1)
+    }
+  }
+
+  await visit(root, relativeRoot, 0)
+  return { files, skipped, truncated: files.length >= maxFiles }
+}
+
+/**
+ * Builds a bounded AST map of the workspace without sending full source text to the model.
+ */
+export const codeMapTool = tool(
+  async ({ path: inputPath, maxFiles, maxDepth }) => {
+    await ensureWorkspaceDirs()
+    const target = inputPath ? resolveWorkspacePath(inputPath) : getWorkspaceRoot()
+    const relativeRoot = inputPath?.replace(/^\.\//, "") ?? ""
+    const limit = Math.min(Math.max(maxFiles ?? 120, 1), 500)
+    const depthLimit = Math.min(Math.max(maxDepth ?? 6, 1), 12)
+    const { files, skipped, truncated } = await collectCodeMapFiles({
+      root: target,
+      relativeRoot,
+      maxDepth: depthLimit,
+      maxFiles: limit,
+    })
+    const project = new Project({ skipFileDependencyResolution: true })
+    const fileSummaries = files.map((file) => {
+      try {
+        const sourceFile = project.addSourceFileAtPath(file.abs)
+        const functions = sourceFile
+          .getFunctions()
+          .map((fn) => fn.getName())
+          .filter((name): name is string => Boolean(name))
+        const classes = sourceFile.getClasses().map((cls) => cls.getName() ?? "(anonymous)")
+        const interfaces = sourceFile.getInterfaces().map((node) => node.getName())
+        const typeAliases = sourceFile.getTypeAliases().map((node) => node.getName())
+        const enums = sourceFile.getEnums().map((node) => node.getName())
+        const variables = sourceFile
+          .getVariableDeclarations()
+          .map((node) => node.getName())
+          .filter(Boolean)
+        const exported = Array.from(sourceFile.getExportedDeclarations().keys()).slice(0, 80)
+        const components = [...functions, ...classes, ...variables].filter(
+          isLikelyReactComponentName
+        )
+
+        return {
+          path: file.rel,
+          size: file.size,
+          imports: sourceFile
+            .getImportDeclarations()
+            .map((decl) => decl.getModuleSpecifierValue())
+            .slice(0, 80),
+          exports: exported,
+          symbols: {
+            functions,
+            classes,
+            interfaces,
+            typeAliases,
+            enums,
+            variables: variables.slice(0, 60),
+          },
+          reactComponents: components,
+        }
+      } catch (err) {
+        return {
+          path: file.rel,
+          size: file.size,
+          error: err instanceof Error ? err.message : "Unable to parse file",
+        }
+      }
+    })
+
+    return {
+      type: "code_map",
+      path: inputPath ?? ".",
+      fileCount: files.length,
+      truncated,
+      skipped,
+      package: await readPackageMetadata(),
+      files: fileSummaries,
+    }
+  },
+  {
+    name: "code_map",
+    description:
+      "Inspect TypeScript/JavaScript repository structure using AST metadata without reading full source contents.",
+    schema: z.object({
+      path: z.string().optional(),
+      maxFiles: z.number().int().min(1).max(500).optional(),
+      maxDepth: z.number().int().min(1).max(12).optional(),
+    }),
+  }
+)
 
 /**
  * Reads a UTF-8 text file from the workspace.
@@ -3038,11 +5722,18 @@ export const listFilesTool = tool(
   async ({ path: dirPath, recursive }) => {
     await ensureWorkspaceDirs()
     const gather = async (target: string, relative: string) => {
+      assertWorkspacePathAllowed(target)
       const entries = await readdir(target, { withFileTypes: true })
       const output: Array<Record<string, unknown>> = []
       for (const entry of entries) {
         const relPath = relative ? `${relative}/${entry.name}` : entry.name
-        const abs = resolveWorkspacePath(relPath)
+        const isProtectedDirectory =
+          entry.isDirectory() &&
+          isBlockedWorkspaceDirectoryName(entry.name) &&
+          !protectedWorkspaceAccessAllowed()
+        const abs = isProtectedDirectory
+          ? path.join(target, entry.name)
+          : resolveWorkspacePath(relPath)
         const info = await stat(abs)
         output.push({
           name: entry.name,
@@ -3050,8 +5741,13 @@ export const listFilesTool = tool(
           type: entry.isDirectory() ? "directory" : "file",
           size: info.size,
           modified: info.mtime.toISOString(),
+          protected: isProtectedDirectory,
+          skipped: isProtectedDirectory,
+          reason: isProtectedDirectory
+            ? "Skipped by default because this generated dependency/build folder is expected to be large. Ask explicitly to inspect it and Rekdin will request approval."
+            : undefined,
         })
-        if (recursive && entry.isDirectory()) {
+        if (recursive && entry.isDirectory() && !isProtectedDirectory) {
           const nested = await gather(abs, relPath)
           output.push(...nested)
         }
@@ -3110,6 +5806,7 @@ export const writeFileTool = tool(
 export const executeCommandTool = tool(
   async ({ command, cwd, timeout }) => {
     await ensureWorkspaceDirs()
+    assertNoBlockedDirectoryReference(command)
     const workingDir = cwd ? resolveWorkspacePath(cwd) : getWorkspaceRoot()
     return await new Promise((resolve) => {
       const child = spawn(command, {
@@ -3164,13 +5861,39 @@ export function createToolset(context?: { headers?: HeadersInit; allowedToolName
   const tools = [
     // Content/API tools
     webSearchTool,
+    searchBatchTool,
     visitUrlTool,
+    fetchManyTool,
     httpRequestTool,
     downloadFetchTool,
+    robotsTxtTool,
+    sitemapFetchTool,
+    rssFetchTool,
+    pageMetadataBatchTool,
+    pageDiffSnapshotTool,
+    citationMetadataTool,
+    domainInfoTool,
+    githubRepoInfoTool,
+    packageCompareTool,
     linkPreviewTool,
     npmPackageInfoTool,
 
     // File system + search
+    codeMapTool,
+    fileStatTool,
+    workspaceStatsTool,
+    fileHeadTailTool,
+    fileOutlineTool,
+    symbolSearchTool,
+    symbolReferencesTool,
+    dependencyGraphTool,
+    routeMapTool,
+    testMapTool,
+    configInventoryTool,
+    envInventoryTool,
+    lockfileSummaryTool,
+    duplicateCodeCandidatesTool,
+    deadCodeCandidatesTool,
     fileSearchTool,
     fileReplaceTool,
     jsonPatchTool,
@@ -3202,6 +5925,17 @@ export function createToolset(context?: { headers?: HeadersInit; allowedToolName
     browserGetTextTool,
     browserGetLinksTool,
     browserGetClickableElementsTool,
+    browserAccessibilitySnapshotTool,
+    browserConsoleLogsTool,
+    browserNetworkLogTool,
+    browserStorageSnapshotTool,
+    browserSetViewportTool,
+    browserSelectorScreenshotTool,
+    browserFullPageScreenshotTool,
+    browserPrintPdfTool,
+    browserDownloadsTool,
+    browserFormSchemaTool,
+    browserTableExtractTool,
     browserDragAndDropTool,
     browserDragTool,
     browserKeyPressTool,
@@ -3216,10 +5950,24 @@ export function createToolset(context?: { headers?: HeadersInit; allowedToolName
     shellCodeActTool,
     shellExecuteTool,
     executeCommandTool,
+    npmScriptsTool,
+    runNpmScriptTool,
+    typecheckProjectTool,
+    lintProjectTool,
+    testProjectTool,
+    formatCheckTool,
+    buildProjectTool,
+    devServerStartTool,
+    devServerStopTool,
+    devServerStatusTool,
+    portProbeTool,
+    httpHealthCheckTool,
 
     // Document & conversions
     generateLatexPdfTool,
     markdownToPdfTool,
+    pdfExtractTextTool,
+    docxExtractTextTool,
 
     // Data transforms
     base64EncodeTool,
@@ -3228,8 +5976,35 @@ export function createToolset(context?: { headers?: HeadersInit; allowedToolName
     textSummarizeTool,
     textRewriteTool,
     extractTodosTool,
+    csvPreviewTool,
+    csvQueryTool,
+    jsonQueryTool,
+    yamlQueryTool,
+    sqliteQueryTool,
+    htmlTableExtractTool,
+    markdownFrontmatterTool,
+    tokenCountTool,
+    textKeywordsTool,
+    textEntitiesTool,
     imageInfoTool,
     imageConvertTool,
+    imageExifTool,
+    imageOcrTool,
+    imageDiffTool,
+    svgOptimizeTool,
+    assetManifestTool,
+    artifactListTool,
+    artifactReadTool,
+    artifactDeleteTool,
+    secretScanTool,
+    dependencyAuditTool,
+    licenseSummaryTool,
+    sbomGenerateTool,
+    lockfileRiskSummaryTool,
+    semgrepScanTool,
+    dockerfileScanTool,
+    urlSafetyCheckTool,
+    workspacePermissionsScanTool,
 
     // Repo info
     gitLogSummaryTool,
@@ -3237,8 +6012,19 @@ export function createToolset(context?: { headers?: HeadersInit; allowedToolName
     gitDiffSummaryTool,
     gitBlameTool,
     gitFileHistoryTool,
+    gitStatusTool,
+    gitChangedFilesTool,
+    gitStagedDiffTool,
+    gitShowTool,
+    gitCompareRefsTool,
+    gitConflictsTool,
+    gitTagsTool,
+    gitRemoteInfoTool,
+    gitCommitSearchTool,
+    gitPatchPreviewTool,
+    gitApplyPatchTool,
   ]
-  if (!context?.allowedToolNames || context.allowedToolNames.length === 0) {
+  if (!context || !context.allowedToolNames) {
     return tools
   }
   const allowed = new Set(context.allowedToolNames)

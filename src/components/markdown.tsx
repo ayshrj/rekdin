@@ -27,7 +27,7 @@ export function Markdown({ children, className }: { children: string; className?
             return typeof safeSrc === "string" && safeSrc.length > 0 ? (
               <Image
                 className={cn(
-                  "border-border my-3 h-auto max-w-full rounded-lg border shadow-sm",
+                  "border-border my-3 h-auto max-w-full rounded-md border shadow-none",
                   imgClassName
                 )}
                 alt={alt ?? ""}
@@ -62,6 +62,7 @@ export function Markdown({ children, className }: { children: string; className?
             <pre
               className={cn(
                 "bg-muted my-2 overflow-x-auto rounded-md border p-3 font-mono text-xs",
+                "bg-surface-3 border-border text-tool-code",
                 preClassName
               )}
               {...props}
@@ -73,8 +74,8 @@ export function Markdown({ children, className }: { children: string; className?
               <code
                 className={cn(
                   !isBlock
-                    ? "bg-muted rounded px-1 py-0.5 font-mono text-[0.85em]"
-                    : "bg-transparent p-0 font-mono text-xs",
+                    ? "bg-surface-3 text-tool-code rounded-sm px-1 py-0.5 font-mono text-[0.85em]"
+                    : "text-tool-code bg-transparent p-0 font-mono text-xs",
                   codeClassName
                 )}
                 {...props}

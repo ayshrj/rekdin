@@ -1,44 +1,62 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useState } from "react"
 
-import { Check, ClipboardDocumentList as Copy, FileSearch, FileText } from "@/lib/icons"
+import { FileExtensionIcon } from "@/components/file-extension-icon"
+import { FileSearch } from "@/lib/icons"
 
+import { CopyButton, InlineToolResult, useToolInvoke } from "./renderer-primitives"
+import { SimpleCodeEditor } from "./simple-code-editor"
 import { ToolResultContentPart } from "./tool-result-renderer"
 
-function CopyBtn({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      /* ignore */
-    }
-  }
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      className="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5 opacity-0 transition-colors group-hover:opacity-100"
-      title="Copy"
-    >
-      {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-    </button>
-  )
-}
+type FileReadResult = { path?: string; content?: string; truncated?: boolean }
+type Match = { file?: string; line?: number; text?: unknown }
 
 export function FileSearchRenderer({ part }: { part: ToolResultContentPart }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = (part.toolResult || {}) as Record<string, any>
-  const matches = Array.isArray(result.matches) ? result.matches : []
+  const matches: Match[] = Array.isArray(result.matches) ? result.matches : []
   const query: string = result.query || ""
   const path: string = result.path || "."
   const exitCode = result.exitCode
   const error = result.error
 
   const isSuccess = typeof exitCode !== "number" || exitCode === 0 || matches.length > 0
+
+  const {
+    loading,
+    result: fileResult,
+    error: fileError,
+    invoke,
+    reset,
+  } = useToolInvoke<FileReadResult>("file_read")
+  const [activePath, setActivePath] = useState<string | null>(null)
+  const [activeLine, setActiveLine] = useState<number | undefined>(undefined)
+
+  const handleMatchClick = useCallback(
+    async (filePath: string, line?: number) => {
+      if (activePath === filePath) {
+        reset()
+        setActivePath(null)
+        setActiveLine(undefined)
+        return
+      }
+      setActivePath(filePath)
+      setActiveLine(line)
+      await invoke({ path: filePath })
+    },
+    [activePath, invoke, reset]
+  )
+
+  const fileContent = fileResult?.content ?? ""
+  const filePath = fileResult?.path ?? activePath ?? ""
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? ""
+  const fileName = filePath.split("/").pop() ?? filePath
+  const inlineTitle = loading
+    ? `Loading ${activePath ?? ""}…`
+    : activeLine !== undefined
+      ? `${filePath} :${activeLine}`
+      : filePath
 
   return (
     <div className="w-full min-w-0 overflow-hidden rounded-lg">
@@ -84,13 +102,19 @@ export function FileSearchRenderer({ part }: { part: ToolResultContentPart }) {
           No matches found
         </div>
       ) : (
-        <div className="max-h-[60vh] divide-y overflow-auto">
-          {matches.map((match: { file?: string; line?: number; text?: unknown }, idx: number) => (
+        <div className="rk-scrollbar max-h-[60vh] divide-y overflow-auto">
+          {matches.map((match, idx) => (
             <div
               key={`${match.file}-${match.line}-${idx}`}
-              className="group hover:bg-muted/30 flex items-start gap-2 px-3 py-2"
+              className={`group flex cursor-pointer items-start gap-2 px-3 py-2 transition-colors ${
+                activePath === match.file ? "bg-primary/10" : "hover:bg-muted/30"
+              }`}
+              onClick={() => handleMatchClick(match.file ?? "", match.line)}
             >
-              <FileText className="text-muted-foreground/50 mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <FileExtensionIcon
+                extensionName={match.file ?? ""}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0"
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1">
                   <span className="text-foreground/80 font-mono text-[11px] font-medium">
@@ -108,12 +132,47 @@ export function FileSearchRenderer({ part }: { part: ToolResultContentPart }) {
                   </div>
                 )}
               </div>
-              <CopyBtn
+              <CopyButton
                 text={`${match.file}:${match.line ?? ""}\n${typeof match.text === "string" ? match.text : JSON.stringify(match.text)}`}
+                className="opacity-0 group-hover:opacity-100"
               />
             </div>
           ))}
         </div>
+      )}
+
+      {/* Inline file reader */}
+      {(activePath || loading) && (
+        <InlineToolResult
+          title={inlineTitle}
+          onDismiss={() => {
+            reset()
+            setActivePath(null)
+            setActiveLine(undefined)
+          }}
+          error={fileError}
+        >
+          {fileContent && (
+            <div>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <span className="text-muted-foreground font-mono text-[10px]">
+                  {fileContent.split("\n").length} lines
+                  {fileResult?.truncated ? " (truncated)" : ""}
+                </span>
+                <CopyButton text={fileContent} />
+              </div>
+              <SimpleCodeEditor
+                code={fileContent}
+                language={ext}
+                fileName={fileName}
+                showHeader={false}
+                maxHeight="40vh"
+                fontSize={12}
+                readOnly
+              />
+            </div>
+          )}
+        </InlineToolResult>
       )}
     </div>
   )

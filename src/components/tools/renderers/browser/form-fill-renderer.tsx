@@ -3,7 +3,7 @@
 import { motion } from "motion/react"
 import React from "react"
 
-import { Image } from "@/components/ui/image"
+import { ClickableImage } from "@/components/ui/image-lightbox"
 import { Check, PencilSquare as Edit3, XMark } from "@/lib/icons"
 
 import { BrowserShell } from "../browser-shell"
@@ -26,7 +26,7 @@ export const FormFillRenderer: React.FC<FormFillRendererProps> = ({ part }) => {
     <div className="space-y-4">
       {screenshot ? (
         <BrowserShell>
-          <Image
+          <ClickableImage
             src={screenshot}
             alt="Form fill screenshot"
             className="h-auto w-full object-contain"
@@ -34,7 +34,7 @@ export const FormFillRenderer: React.FC<FormFillRendererProps> = ({ part }) => {
         </BrowserShell>
       ) : null}
 
-      <div className="border-tool-action/20 bg-card overflow-hidden rounded-xl border shadow-sm">
+      <div className="border-tool-action/20 bg-surface-3 overflow-hidden rounded-lg border shadow-none">
         <div className="border-tool-action/20 bg-tool-action/10 flex items-center border-b px-4 py-3">
           <Edit3 className="text-tool-action mr-2.5" size={18} />
           <div className="text-foreground font-medium">Form Input Fill</div>

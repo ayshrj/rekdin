@@ -30,7 +30,6 @@ import {
   ArrowDownTray,
   ArrowUpTray,
   Check,
-  ChevronRight,
   Cog8Tooth as Settings,
   Eye,
   EyeSlash,
@@ -57,20 +56,6 @@ type OpenRouterModel = {
 type OpenAIModel = {
   id: string
   owned_by: string
-}
-
-type WorkspaceDirectory = {
-  name: string
-  path: string
-  hidden: boolean
-}
-
-type WorkspaceBrowseResponse = {
-  currentPath: string
-  parentPath: string | null
-  defaultPath: string
-  directories: WorkspaceDirectory[]
-  error?: string
 }
 
 type SettingsExport = {
@@ -187,14 +172,7 @@ export function OpenRouterSettings({
   const [isLoadingModels, setIsLoadingModels] = React.useState(false)
   const [openAIModels, setOpenAIModels] = React.useState<OpenAIModel[]>([])
   const [isLoadingOpenAIModels, setIsLoadingOpenAIModels] = React.useState(false)
-  const [settingsTab, setSettingsTab] = React.useState<
-    "model" | "workspace" | "workflows" | "uploads"
-  >("model")
-  const [workspaceBrowserPath, setWorkspaceBrowserPath] = React.useState("")
-  const [workspaceDefaultPath, setWorkspaceDefaultPath] = React.useState("")
-  const [workspaceParentPath, setWorkspaceParentPath] = React.useState<string | null>(null)
-  const [workspaceDirectories, setWorkspaceDirectories] = React.useState<WorkspaceDirectory[]>([])
-  const [isLoadingWorkspace, setIsLoadingWorkspace] = React.useState(false)
+  const [settingsTab, setSettingsTab] = React.useState<"model" | "workflows" | "uploads">("model")
   const [customWorkflowsDraft, setCustomWorkflowsDraft] = React.useState<WorkflowPreset[]>([])
   const [workflowTitleDraft, setWorkflowTitleDraft] = React.useState("")
   const [workflowDescriptionDraft, setWorkflowDescriptionDraft] = React.useState("")
@@ -257,14 +235,13 @@ export function OpenRouterSettings({
 
   React.useEffect(() => {
     const onOpenSettings = (event: Event) => {
-      const detail = (event as CustomEvent<{ tab?: typeof settingsTab }>).detail
+      const detail = (event as CustomEvent<{ tab?: typeof settingsTab | "workspace" }>).detail
+      if (detail?.tab === "workspace") {
+        window.dispatchEvent(new CustomEvent("rekdin:open-workspace"))
+        return
+      }
       setOpen(true)
-      if (
-        detail?.tab === "model" ||
-        detail?.tab === "workspace" ||
-        detail?.tab === "workflows" ||
-        detail?.tab === "uploads"
-      ) {
+      if (detail?.tab === "model" || detail?.tab === "workflows" || detail?.tab === "uploads") {
         setSettingsTab(detail.tab)
       }
     }
@@ -327,32 +304,6 @@ export function OpenRouterSettings({
       setIsLoadingOpenAIModels(false)
     }
   }, [openAIApiKeyDraft])
-
-  const browseWorkspace = React.useCallback(async (targetPath?: string) => {
-    try {
-      setIsLoadingWorkspace(true)
-      const params = targetPath ? `?path=${encodeURIComponent(targetPath)}` : ""
-      const res = await fetch(`/api/workspace/browse${params}`, { cache: "no-store" })
-      const data = (await res.json()) as WorkspaceBrowseResponse
-      if (!res.ok) {
-        toast.error(data.error ?? "Unable to browse workspace folders")
-        return
-      }
-      setWorkspaceBrowserPath(data.currentPath)
-      setWorkspaceDefaultPath(data.defaultPath)
-      setWorkspaceParentPath(data.parentPath)
-      setWorkspaceDirectories(data.directories ?? [])
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to browse workspace folders")
-    } finally {
-      setIsLoadingWorkspace(false)
-    }
-  }, [])
-
-  React.useEffect(() => {
-    if (!open || settingsTab !== "workspace") return
-    void browseWorkspace(workspaceRootDraft || workspaceRoot || undefined)
-  }, [browseWorkspace, open, settingsTab, workspaceRoot])
 
   const save = React.useCallback(() => {
     updateLlmSettings({
@@ -676,7 +627,7 @@ export function OpenRouterSettings({
         </Button>
       </DialogTrigger>
       <DialogShell
-        className="bg-surface-1 w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] border shadow-(--shadow-float) sm:w-auto sm:max-w-3xl"
+        className="bg-surface-2 w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] border shadow-none sm:w-140 sm:max-w-140"
         footer={
           <>
             {onRestartTour ? (
@@ -710,9 +661,7 @@ export function OpenRouterSettings({
           </>
         }
         title={"Settings"}
-        description={
-          "Configure model, workspace, workflow, and upload settings for this local Rekdin server."
-        }
+        description={"Configure model, workflow, and upload settings."}
       >
         <input
           ref={fileInputRef}
@@ -723,32 +672,26 @@ export function OpenRouterSettings({
         />
 
         {/* Tab bar */}
-        <div className="bg-surface-2/40 flex shrink-0 border-b px-6">
-          {(["model", "workspace", "workflows", "uploads"] as const).map((tab) => (
+        <div className="bg-surface-2 border-border sticky top-0 z-10 flex shrink-0 border-b px-6">
+          {(["model", "workflows", "uploads"] as const).map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setSettingsTab(tab)}
               className={cn(
-                "-mb-px border-b-2 px-4 py-3 font-mono text-[10px] font-semibold tracking-[0.12em] uppercase transition-colors",
+                "-mb-px border-b-2 px-4 py-3 text-sm font-medium transition-colors",
                 settingsTab === tab
-                  ? "border-primary text-primary"
+                  ? "border-primary text-foreground"
                   : "text-muted-foreground hover:text-foreground border-transparent"
               )}
             >
-              {tab === "model"
-                ? "Model"
-                : tab === "workspace"
-                  ? "Workspace"
-                  : tab === "workflows"
-                    ? "Workflows"
-                    : "Uploads"}
+              {tab === "model" ? "Model" : tab === "workflows" ? "Workflows" : "Uploads"}
             </button>
           ))}
         </div>
 
         {settingsTab === "model" ? (
-          <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">
+          <div className="min-w-0 space-y-4 px-6 py-5">
             <div className="space-y-2">
               <Label>LLM provider</Label>
               <Select
@@ -772,7 +715,7 @@ export function OpenRouterSettings({
               </p>
             </div>
 
-            <div className="bg-surface-2/50 flex items-center justify-between gap-6 rounded-lg border px-3 py-2">
+            <div className="bg-surface-3 border-border flex items-center justify-between gap-6 rounded-lg border px-3 py-2">
               <div className="min-w-0">
                 <Label className="text-sm">Live mode</Label>
                 <p className="text-muted-foreground text-xs">
@@ -826,7 +769,7 @@ export function OpenRouterSettings({
                       {isLoadingModels ? "Fetching..." : "Fetch models"}
                     </Button>
 
-                    <Command className="bg-surface-1 w-full max-w-full min-w-0 rounded-lg border shadow-md">
+                    <Command className="bg-surface-3 border-border w-full max-w-full min-w-0 rounded-lg border shadow-none">
                       <CommandInput placeholder="Search models..." />
                       <CommandList className="max-w-full">
                         {models.length === 0 && (
@@ -932,7 +875,7 @@ export function OpenRouterSettings({
                       {isLoadingOpenAIModels ? "Fetching..." : "Fetch models"}
                     </Button>
 
-                    <Command className="bg-surface-1 w-full max-w-full min-w-0 rounded-lg border shadow-md">
+                    <Command className="bg-surface-3 border-border w-full max-w-full min-w-0 rounded-lg border shadow-none">
                       <CommandInput placeholder="Search models..." />
                       <CommandList className="max-w-full">
                         {openAIModels.length === 0 && (
@@ -1089,123 +1032,8 @@ export function OpenRouterSettings({
               </>
             )}
           </div>
-        ) : settingsTab === "workspace" ? (
-          <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">
-            <div className="bg-surface-2/50 rounded-lg border px-3 py-3">
-              <Label className="text-sm">Selected workspace</Label>
-              <p className="text-muted-foreground mt-1 font-mono text-xs break-all">
-                {workspaceRootDraft || "Default app root"}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="workspace-root">Workspace root</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="workspace-root"
-                  placeholder={workspaceRoot || "Default app root"}
-                  value={workspaceRootDraft}
-                  onChange={(event) => setWorkspaceRootDraft(event.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void browseWorkspace(workspaceRootDraft || undefined)}
-                >
-                  Open
-                </Button>
-              </div>
-              <p className="text-muted-foreground text-xs">
-                Rekdin tools, repo audit, file access, and git helpers use this directory as their
-                project boundary. Leave empty to use the app root.
-              </p>
-            </div>
-
-            <div className="bg-surface-1 overflow-hidden rounded-xl border">
-              <div className="bg-surface-2/50 flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold">Folder browser</p>
-                  <p className="text-muted-foreground truncate font-mono text-xs">
-                    {workspaceBrowserPath || workspaceDefaultPath || "Loading..."}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={isLoadingWorkspace || !workspaceParentPath}
-                    onClick={() => workspaceParentPath && void browseWorkspace(workspaceParentPath)}
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    disabled={isLoadingWorkspace}
-                    onClick={() => void browseWorkspace(workspaceDefaultPath || undefined)}
-                  >
-                    Repo root
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={!workspaceBrowserPath}
-                    onClick={() => setWorkspaceRootDraft(workspaceBrowserPath)}
-                  >
-                    Select
-                  </Button>
-                </div>
-              </div>
-
-              <div className="max-h-64 overflow-y-auto p-2">
-                {isLoadingWorkspace ? (
-                  <div className="text-muted-foreground px-2 py-6 text-center text-sm">
-                    Loading folders...
-                  </div>
-                ) : workspaceDirectories.length === 0 ? (
-                  <div className="text-muted-foreground px-2 py-6 text-center text-sm">
-                    No child folders found.
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {workspaceDirectories.map((directory) => (
-                      <button
-                        key={directory.path}
-                        type="button"
-                        className="hover:bg-surface-2/70 flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors"
-                        onClick={() => void browseWorkspace(directory.path)}
-                      >
-                        <span className="min-w-0 truncate">
-                          {directory.name}
-                          {directory.hidden ? (
-                            <span className="text-muted-foreground ml-2 text-xs">hidden</span>
-                          ) : null}
-                        </span>
-                        <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setWorkspaceRootDraft("")
-                  void browseWorkspace(workspaceDefaultPath || undefined)
-                }}
-              >
-                Use app root
-              </Button>
-            </div>
-          </div>
         ) : settingsTab === "workflows" ? (
-          <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">
+          <div className="min-w-0 space-y-4 px-6 py-5">
             <div className="space-y-1">
               <div className="text-sm font-semibold">Custom workflow presets</div>
               <p className="text-muted-foreground text-xs">
@@ -1214,7 +1042,7 @@ export function OpenRouterSettings({
               </p>
             </div>
 
-            <div className="bg-surface-1 space-y-2 rounded-xl border p-3">
+            <div className="bg-surface-3 border-border space-y-3 rounded-lg border p-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="workflow-title">Title</Label>
@@ -1305,7 +1133,7 @@ export function OpenRouterSettings({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex flex-col items-start gap-3 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="border-border flex flex-col items-start gap-3 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <Label className="text-sm">Background capable</Label>
                     <p className="text-muted-foreground text-xs">Allow queueing this workflow.</p>
@@ -1326,12 +1154,15 @@ export function OpenRouterSettings({
 
             <div className="space-y-2">
               {customWorkflowsDraft.length === 0 ? (
-                <div className="text-muted-foreground rounded-xl border px-3 py-6 text-center text-sm">
+                <div className="text-muted-foreground border-border rounded-lg border px-3 py-6 text-center text-sm">
                   No custom workflows yet.
                 </div>
               ) : (
                 customWorkflowsDraft.map((workflow) => (
-                  <div key={workflow.id} className="bg-surface-1 rounded-xl border p-3">
+                  <div
+                    key={workflow.id}
+                    className="bg-surface-3 border-border rounded-lg border p-3"
+                  >
                     <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -1370,7 +1201,7 @@ export function OpenRouterSettings({
             </div>
           </div>
         ) : (
-          <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-4">
+          <div className="min-w-0 space-y-4 px-6 py-5">
             <div className="space-y-1">
               <div className="text-sm font-semibold">Cloudinary uploads</div>
               <p className="text-muted-foreground text-xs">

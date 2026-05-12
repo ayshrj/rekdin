@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Instrument+Serif:ital@0;1&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -7,8 +8,9 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-manrope);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-dm-mono, "DM Mono", monospace);
   --font-manrope: var(--font-manrope);
+  --font-instrument-serif: var(--font-instrument-serif, "Instrument Serif", serif);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -34,6 +36,8 @@
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
+  --color-surface-5: var(--surface-5);
   --color-status-success: var(--status-success);
   --color-status-warning: var(--status-warning);
   --color-status-info: var(--status-info);
@@ -66,109 +70,113 @@
 
 :root {
   --radius: 0.5rem;
-  --background: oklch(0.975 0.004 260);
-  --foreground: oklch(0.14 0.012 260);
-  --surface-0: oklch(0.985 0.004 260);
-  --surface-1: oklch(1 0 0);
-  --surface-2: oklch(0.955 0.006 260);
-  --surface-3: oklch(0.92 0.01 260);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.13 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.13 0 0);
-  --primary: oklch(0.52 0.2 265);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.94 0 0);
-  --secondary-foreground: oklch(0.25 0 0);
-  --muted: oklch(0.94 0.006 260);
-  --muted-foreground: oklch(0.5 0.015 260);
-  --accent: oklch(0.94 0.01 265);
-  --accent-foreground: oklch(0.25 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.86 0.01 260);
-  --input: oklch(0.86 0.01 260);
-  --ring: oklch(0.62 0.19 265);
+  --background: #f6f6f6;
+  --foreground: #171717;
+  --surface-0: #f6f6f6;
+  --surface-1: #ededed;
+  --surface-2: #ffffff;
+  --surface-3: #f2f2f2;
+  --surface-4: #e7e7e7;
+  --surface-5: #dedede;
+  --card: var(--surface-3);
+  --card-foreground: var(--foreground);
+  --popover: var(--surface-5);
+  --popover-foreground: var(--foreground);
+  --primary: #3b72f6;
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-4);
+  --secondary-foreground: #252525;
+  --muted: var(--surface-3);
+  --muted-foreground: #5d5d5d;
+  --accent: var(--surface-4);
+  --accent-foreground: #171717;
+  --destructive: #e24b4a;
+  --border: rgb(0 0 0 / 10%);
+  --input: rgb(0 0 0 / 14%);
+  --ring: #3b72f6;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --tool-browser: oklch(0.62 0.18 240);
-  --tool-action: oklch(0.68 0.18 60);
-  --tool-search: oklch(0.66 0.17 160);
-  --tool-json: oklch(0.62 0.18 300);
-  --tool-code: oklch(0.7 0.15 100);
-  --tool-command: oklch(0.6 0.19 20);
-  --tool-doc: oklch(0.63 0.17 330);
-  --tool-research: oklch(0.6 0.18 210);
-  --tool-data: oklch(0.64 0.16 135);
-  --tool-generic: oklch(0.58 0 0);
-  --status-success: oklch(0.56 0.16 155);
-  --status-warning: oklch(0.68 0.16 65);
-  --status-info: oklch(0.6 0.17 250);
-  --sidebar: oklch(0.175 0.01 265);
-  --sidebar-foreground: oklch(0.88 0 0);
-  --sidebar-primary: oklch(0.62 0.19 265);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.24 0.01 265);
-  --sidebar-accent-foreground: oklch(0.92 0 0);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.62 0.19 265);
-  --shadow-panel: 0 18px 55px oklch(0.18 0.02 260 / 8%), 0 1px 0 oklch(1 0 0 / 80%) inset;
-  --shadow-float: 0 22px 70px oklch(0.18 0.02 260 / 16%), 0 0 0 1px oklch(1 0 0 / 70%) inset;
+  --tool-browser: #3b72f6;
+  --tool-action: #e8a020;
+  --tool-search: #22c78b;
+  --tool-json: #7f77dd;
+  --tool-code: #7abf72;
+  --tool-command: #e8755c;
+  --tool-doc: #d45ea8;
+  --tool-research: #2d8ed6;
+  --tool-data: #22c78b;
+  --tool-generic: #606060;
+  --status-success: #22c78b;
+  --status-warning: #e8a020;
+  --status-info: #3b72f6;
+  --sidebar: var(--surface-1);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--surface-3);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --shadow-panel: none;
+  --shadow-float: none;
 }
 
 .dark {
-  --background: oklch(0.105 0.008 265);
-  --foreground: oklch(0.92 0.006 260);
-  --surface-0: oklch(0.085 0.008 265);
-  --surface-1: oklch(0.13 0.01 265);
-  --surface-2: oklch(0.17 0.012 265);
-  --surface-3: oklch(0.22 0.014 265);
-  --card: oklch(0.145 0.01 265);
-  --card-foreground: oklch(0.93 0 0);
-  --popover: oklch(0.19 0.007 265);
-  --popover-foreground: oklch(0.93 0 0);
-  --primary: oklch(0.72 0.16 262);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.22 0.007 265);
-  --secondary-foreground: oklch(0.88 0 0);
-  --muted: oklch(0.2 0.01 265);
-  --muted-foreground: oklch(0.64 0.015 260);
-  --accent: oklch(0.22 0.01 265);
-  --accent-foreground: oklch(0.88 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.62 0.2 265);
+  --background: #080808;
+  --foreground: #ffffff;
+  --surface-0: #080808;
+  --surface-1: #0e0e0e;
+  --surface-2: #141414;
+  --surface-3: #1a1a1a;
+  --surface-4: #212121;
+  --surface-5: #2a2a2a;
+  --card: var(--surface-3);
+  --card-foreground: var(--foreground);
+  --popover: var(--surface-5);
+  --popover-foreground: var(--foreground);
+  --primary: #3b72f6;
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-4);
+  --secondary-foreground: #ffffff;
+  --muted: var(--surface-3);
+  --muted-foreground: #787878;
+  --accent: var(--surface-4);
+  --accent-foreground: #ffffff;
+  --destructive: #e24b4a;
+  --border: rgb(255 255 255 / 6%);
+  --input: rgb(255 255 255 / 11%);
+  --ring: #3b72f6;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --tool-browser: oklch(0.72 0.16 240);
-  --tool-action: oklch(0.76 0.16 60);
-  --tool-search: oklch(0.74 0.15 160);
-  --tool-json: oklch(0.72 0.16 300);
-  --tool-code: oklch(0.78 0.12 100);
-  --tool-command: oklch(0.72 0.17 20);
-  --tool-doc: oklch(0.72 0.15 330);
-  --tool-research: oklch(0.72 0.15 210);
-  --tool-data: oklch(0.74 0.14 135);
-  --tool-generic: oklch(0.72 0 0);
-  --status-success: oklch(0.78 0.15 155);
-  --status-warning: oklch(0.78 0.16 70);
-  --status-info: oklch(0.74 0.15 250);
-  --sidebar: oklch(0.09 0.005 265);
-  --sidebar-foreground: oklch(0.82 0 0);
-  --sidebar-primary: oklch(0.65 0.19 265);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.17 0.007 265);
-  --sidebar-accent-foreground: oklch(0.88 0 0);
-  --sidebar-border: oklch(1 0 0 / 6%);
-  --sidebar-ring: oklch(0.65 0.19 265);
-  --shadow-panel: 0 22px 60px oklch(0 0 0 / 35%), 0 1px 0 oklch(1 0 0 / 6%) inset;
-  --shadow-float: 0 26px 80px oklch(0 0 0 / 50%), 0 0 0 1px oklch(1 0 0 / 7%) inset;
+  --tool-browser: #3b72f6;
+  --tool-action: #e8a020;
+  --tool-search: #22c78b;
+  --tool-json: #7f77dd;
+  --tool-code: #a8d5a2;
+  --tool-command: #e8755c;
+  --tool-doc: #d45ea8;
+  --tool-research: #55a8e8;
+  --tool-data: #22c78b;
+  --tool-generic: #787878;
+  --status-success: #22c78b;
+  --status-warning: #e8a020;
+  --status-info: #3b72f6;
+  --sidebar: var(--surface-1);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--surface-3);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --shadow-panel: none;
+  --shadow-float: none;
 }
 
 @layer base {
@@ -181,42 +189,144 @@
       "ss01" 1,
       "cv01" 1;
   }
+
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 35%, transparent);
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    letter-spacing: 0;
+  }
 }
 
 @layer utilities {
-  .rk-shell-grid {
-    background-image:
-      linear-gradient(to right, oklch(1 0 0 / 4%) 1px, transparent 1px),
-      linear-gradient(to bottom, oklch(1 0 0 / 4%) 1px, transparent 1px);
-    background-size: 42px 42px;
-  }
+  /* ─── Original rk-* utilities ────────────────────────────────────────────── */
 
   .rk-panel {
-    @apply bg-card border-border rounded-xl border shadow-(--shadow-panel);
+    @apply bg-surface-2 border-border rounded-none border shadow-none;
   }
 
   .rk-panel-subtle {
-    @apply bg-surface-1/80 border-border/70 rounded-xl border;
+    @apply bg-surface-3 border-border rounded-lg border shadow-none;
   }
 
   .rk-section-label {
-    @apply text-muted-foreground font-mono text-[10px] font-semibold tracking-[0.18em] uppercase;
+    @apply text-muted-foreground font-mono text-[10px] font-medium tracking-[0.12em] uppercase;
   }
 
   .rk-meta-chip {
-    @apply bg-surface-2 text-muted-foreground border-border/80 inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[10px] font-medium;
+    @apply bg-surface-4 text-muted-foreground border-border inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 font-mono text-[10px] font-medium;
   }
 
   .rk-status-live {
-    @apply border-status-success/30 bg-status-success/10 text-status-success inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase;
+    @apply bg-surface-3 text-muted-foreground inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-mono text-[11px] font-normal;
   }
 
   .rk-status-warning {
-    @apply border-status-warning/35 bg-status-warning/10 text-status-warning inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase;
+    @apply border-status-warning/35 bg-status-warning/10 text-status-warning inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[11px] font-medium;
   }
 
   .rk-path-chip {
-    @apply bg-surface-0 text-foreground border-border inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px];
+    @apply bg-surface-4 text-foreground border-border inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px];
+  }
+
+  .rk-icon-button {
+    @apply bg-surface-3 text-muted-foreground hover:bg-surface-4 hover:text-foreground inline-flex size-8 items-center justify-center rounded-full transition-colors duration-150 ease-out disabled:pointer-events-none disabled:opacity-40;
+  }
+
+  .rk-flat-button {
+    @apply border-border bg-surface-3 text-muted-foreground hover:bg-surface-4 hover:text-foreground inline-flex h-8 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors duration-150 ease-out disabled:pointer-events-none disabled:opacity-40;
+  }
+
+  .rk-primary-button {
+    @apply bg-primary text-primary-foreground inline-flex h-8 items-center justify-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors duration-150 ease-out hover:bg-[#4a80ff] disabled:pointer-events-none disabled:opacity-40;
+  }
+
+  .rk-tab {
+    @apply text-muted-foreground hover:text-foreground flex h-10 items-center justify-center gap-1.5 border-b-2 border-transparent px-3 text-xs font-medium transition-colors duration-150 ease-out;
+  }
+
+  .rk-tab-active {
+    @apply border-primary text-foreground;
+  }
+
+  .rk-field {
+    @apply bg-surface-4 border-border text-foreground placeholder:text-muted-foreground focus-visible:border-primary/50 min-h-9 rounded-md border px-3 py-2 text-sm transition-colors duration-150 ease-out focus-visible:ring-0 focus-visible:outline-none;
+  }
+
+  .rk-code-block {
+    @apply bg-surface-2 border-border text-foreground max-h-80 overflow-auto rounded-md border p-3 font-mono text-xs leading-relaxed;
+  }
+
+  .rk-tool-card {
+    @apply bg-surface-3 border-border w-full min-w-0 overflow-hidden rounded-lg border p-4 shadow-none;
+  }
+
+  .rk-tool-card pre,
+  .rk-tool-card code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .rk-tool-card pre,
+  .rk-tool-card .codeact-result pre {
+    @apply bg-surface-2 border-border text-foreground max-h-80 overflow-auto rounded-md border p-3 font-mono text-xs leading-relaxed;
+  }
+
+  .rk-tool-card table {
+    @apply w-full text-sm;
+  }
+
+  .rk-tool-card th,
+  .rk-tool-card td {
+    @apply border-border border px-2 py-1 align-top;
+  }
+
+  .rk-tool-card img {
+    @apply max-h-72 rounded-md object-contain;
+  }
+
+  .rk-tool-card [class*="shadow-"] {
+    box-shadow: none !important;
+  }
+
+  .rk-empty-state {
+    @apply text-muted-foreground flex h-full min-h-40 flex-col items-center justify-center gap-2 text-center text-sm;
+  }
+
+  .rk-scrollbar {
+    overscroll-behavior: contain;
+    scrollbar-color: var(--border) transparent;
+    scrollbar-width: thin;
+  }
+
+  .rk-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .rk-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 9999px;
+  }
+
+  .rk-running-line {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .rk-running-line::after {
+    position: absolute;
+    right: 100%;
+    bottom: -1px;
+    width: 60px;
+    height: 1px;
+    content: "";
+    background: var(--primary);
+    animation: rk-run-line 1.4s ease-out infinite;
   }
 
   /* Radix ScrollArea inserts <div style="min-width:100%; display:table"> inside the viewport.
@@ -230,5 +340,1105 @@
   /* Prevent scroll chaining to the page when wheeling inside a scroll area. */
   .no-scroll-min-width [data-radix-scroll-area-viewport] {
     overscroll-behavior: contain;
+  }
+
+  .wrap-anywhere {
+    overflow-wrap: anywhere;
+  }
+
+  /* ─── ChatMessage redesign utilities ─────────────────────────────────────── */
+
+  /* Message root */
+  .rk-msg-root {
+    @apply relative flex w-full flex-col gap-1.5 pb-5;
+  }
+
+  /* Message header row */
+  .rk-msg-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  .rk-msg-header--user {
+    margin-left: auto;
+    flex-direction: row-reverse;
+  }
+
+  /* Avatar */
+  .rk-msg-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    flex-shrink: 0;
+  }
+
+  .rk-msg-avatar--ai {
+    background: rgba(59, 114, 246, 0.1);
+    border-color: rgba(59, 114, 246, 0.2);
+    color: var(--primary);
+  }
+
+  .rk-msg-avatar--user {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--muted-foreground);
+  }
+
+  /* In light mode override the user avatar bg */
+  :root .rk-msg-avatar--user {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.1);
+  }
+
+  /* Sender name */
+  .rk-msg-name {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  /* Agent / workflow badge */
+  .rk-agent-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    padding: 0 6px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: var(--surface-3);
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  .rk-agent-badge--blue {
+    background: rgba(59, 114, 246, 0.1);
+    border-color: rgba(59, 114, 246, 0.2);
+    color: var(--primary);
+  }
+
+  .rk-agent-badge--purple {
+    background: rgba(139, 127, 240, 0.1);
+    border-color: rgba(139, 127, 240, 0.2);
+    color: #8b7ff0;
+  }
+
+  /* Message body wrapper */
+  .rk-msg-body {
+    overflow: hidden;
+    transition: opacity 150ms ease-out;
+  }
+
+  /* User bubble */
+  .rk-msg-body--user {
+    margin-left: auto;
+    max-width: 72%;
+    border-radius: 10px 10px 3px 10px;
+    background: #1b2545;
+    border: 1px solid rgba(59, 114, 246, 0.14);
+    padding: 10px 14px;
+    color: #dde5ff;
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 13px;
+    font-weight: 300;
+    line-height: 1.65;
+    letter-spacing: -0.01em;
+  }
+
+  /* AI body — no bubble, renders directly on panel background */
+  .rk-msg-body--ai {
+    width: 100%;
+    padding: 4px 28px 4px 0;
+    color: var(--muted-foreground);
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 13px;
+    font-weight: 300;
+    line-height: 1.7;
+    position: relative;
+  }
+
+  /* Copy button */
+  .rk-copy-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 5px;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    color: var(--muted-foreground);
+    opacity: 0;
+    cursor: pointer;
+    transition:
+      opacity 120ms ease-out,
+      background 120ms ease-out,
+      color 120ms ease-out;
+  }
+
+  .group:hover .rk-copy-btn {
+    opacity: 1;
+  }
+
+  .rk-copy-btn:hover {
+    background: var(--surface-4);
+    color: var(--foreground);
+  }
+
+  .rk-copy-btn--copied {
+    color: var(--status-success);
+    opacity: 1;
+  }
+
+  /* ── Markdown overrides (inside AI message body) ──────────────────────────── */
+
+  .rk-markdown {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 13px;
+    font-weight: 300;
+    line-height: 1.7;
+    color: var(--muted-foreground);
+  }
+
+  .rk-markdown strong {
+    font-weight: 500;
+    color: var(--foreground);
+  }
+
+  .rk-markdown code {
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 11.5px;
+    color: var(--tool-code);
+    font-family: var(--font-mono, "DM Mono", monospace);
+  }
+
+  .rk-markdown pre {
+    @apply bg-surface-2 border-border text-foreground max-h-80 overflow-auto rounded-md border p-3 font-mono text-xs leading-relaxed;
+    margin: 8px 0;
+  }
+
+  .rk-markdown pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: 12px;
+    color: var(--foreground);
+  }
+
+  .rk-markdown h1,
+  .rk-markdown h2,
+  .rk-markdown h3 {
+    color: var(--foreground);
+    font-weight: 500;
+    margin-top: 16px;
+    margin-bottom: 6px;
+    font-family: var(--font-mono, "DM Mono", monospace);
+  }
+
+  .rk-markdown h1 {
+    font-size: 16px;
+  }
+  .rk-markdown h2 {
+    font-size: 14px;
+  }
+  .rk-markdown h3 {
+    font-size: 13px;
+  }
+
+  .rk-markdown p {
+    margin-bottom: 8px;
+  }
+
+  .rk-markdown p:last-child {
+    margin-bottom: 0;
+  }
+
+  .rk-markdown ul,
+  .rk-markdown ol {
+    padding-left: 18px;
+    margin-bottom: 8px;
+  }
+
+  .rk-markdown li {
+    margin-bottom: 4px;
+  }
+
+  .rk-markdown a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .rk-markdown a:hover {
+    opacity: 0.75;
+  }
+
+  .rk-markdown blockquote {
+    border-left: 2px solid var(--border);
+    padding-left: 12px;
+    color: var(--muted-foreground);
+    font-style: italic;
+    margin: 8px 0;
+  }
+
+  /* ── Tool call chips ──────────────────────────────────────────────────────── */
+
+  .rk-tool-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .rk-tool-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--surface-3);
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+    cursor: default;
+    transition:
+      background 120ms ease-out,
+      border-color 120ms ease-out,
+      color 120ms ease-out;
+  }
+
+  .rk-tool-chip:hover {
+    background: var(--surface-4);
+    border-color: var(--input);
+    color: var(--foreground);
+  }
+
+  .rk-tool-chip--overflow {
+    font-style: italic;
+    color: var(--muted-foreground);
+  }
+
+  /* ── Attachment chips ─────────────────────────────────────────────────────── */
+
+  .rk-attach-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .rk-attach-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0 8px;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 10px;
+    color: var(--muted-foreground);
+    text-decoration: none;
+    transition:
+      background 120ms ease-out,
+      color 120ms ease-out;
+  }
+
+  .rk-attach-chip:hover {
+    background: var(--surface-4);
+    color: var(--foreground);
+  }
+
+  .rk-attach-icon {
+    font-size: 11px;
+    opacity: 0.5;
+  }
+
+  /* ── Structured workflow card ─────────────────────────────────────────────── */
+
+  .rk-structured-card {
+    background: var(--surface-3);
+    border: 1px solid var(--input);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 2px;
+  }
+
+  .rk-structured-card-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .rk-structured-eyebrow {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--primary);
+  }
+
+  /* Instrument Serif italic — editorial contrast against mono body */
+  .rk-structured-title {
+    font-family: var(--font-instrument-serif, "Instrument Serif", serif);
+    font-style: italic;
+    font-size: 15px;
+    font-weight: 400;
+    color: var(--foreground);
+    line-height: 1.3;
+    margin: 0;
+  }
+
+  .rk-structured-summary {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 12.5px;
+    font-weight: 300;
+    color: var(--muted-foreground);
+    line-height: 1.65;
+    margin: 4px 0 0;
+    white-space: pre-wrap;
+  }
+
+  .rk-structured-card-body {
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* Section label inside structured card — overrides the original .rk-section-label
+     with slightly reduced opacity for nesting clarity */
+  .rk-structured-card-body .rk-section-label {
+    opacity: 0.7;
+    margin-bottom: 8px;
+  }
+
+  /* ── Lists inside structured card ─────────────────────────────────────────── */
+
+  .rk-list {
+    list-style: disc;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 12px;
+    font-weight: 300;
+    color: var(--muted-foreground);
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  .rk-arrow-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 12px;
+    font-weight: 300;
+    color: var(--muted-foreground);
+    line-height: 1.55;
+  }
+
+  .rk-arrow-list li {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+
+  .rk-arrow-list li::before {
+    content: "→";
+    color: var(--primary);
+    font-size: 10px;
+    flex-shrink: 0;
+    line-height: 1.55;
+  }
+
+  /* ── Chip group (search queries, entry points) ────────────────────────────── */
+
+  .rk-chip-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .rk-mono-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    background: var(--surface-4);
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+
+  /* ── Finding rows ─────────────────────────────────────────────────────────── */
+
+  .rk-finding-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .rk-finding-row {
+    background: var(--surface-4);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .rk-finding-meta {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .rk-finding-claim {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--foreground);
+    line-height: 1.4;
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .rk-finding-evidence {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 11.5px;
+    font-weight: 300;
+    color: var(--muted-foreground);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    margin: 0;
+  }
+
+  .rk-source-link {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .rk-source-link:hover {
+    opacity: 0.75;
+  }
+
+  /* ── Severity / confidence badges ─────────────────────────────────────────── */
+
+  .rk-severity-badge {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    height: 18px;
+    padding: 0 7px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .rk-severity-badge--red {
+    background: rgba(226, 75, 74, 0.1);
+    border-color: rgba(226, 75, 74, 0.2);
+    color: var(--destructive);
+  }
+
+  .rk-severity-badge--amber {
+    background: rgba(232, 160, 32, 0.1);
+    border-color: rgba(232, 160, 32, 0.2);
+    color: var(--status-warning);
+  }
+
+  .rk-severity-badge--green {
+    background: rgba(34, 199, 139, 0.1);
+    border-color: rgba(34, 199, 139, 0.2);
+    color: var(--status-success);
+  }
+
+  .rk-severity-badge--neutral {
+    background: var(--surface-4);
+    border-color: var(--border);
+    color: var(--muted-foreground);
+  }
+
+  /* ── Draft / building state ───────────────────────────────────────────────── */
+
+  .rk-draft-state {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .rk-draft-pulse {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--primary);
+    flex-shrink: 0;
+    margin-top: 4px;
+    animation: rk-pulse-dot 1.5s ease-in-out infinite;
+  }
+
+  .rk-draft-title {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--foreground);
+    margin: 0;
+  }
+
+  .rk-draft-sub {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 11px;
+    font-weight: 300;
+    color: var(--muted-foreground);
+    margin-top: 3px;
+    line-height: 1.5;
+  }
+
+  .rk-skeleton-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 8px;
+  }
+
+  .rk-skeleton {
+    display: block;
+    height: 9px;
+    border-radius: 4px;
+    background: var(--surface-4);
+    animation: rk-skeleton-pulse 1.5s ease-in-out infinite;
+  }
+
+  /* ─── ChatPanel restructure utilities ───────────────────────────────────── */
+
+  /* Global header bar */
+  .rk-chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 46px;
+    padding: 0 14px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  /* Provider pill — shows active model + connection status in the header */
+  .rk-provider-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--surface-3);
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: var(--muted-foreground);
+    flex-shrink: 0;
+  }
+
+  .rk-provider-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Workflow chip bar — horizontal scrollable row above the composer */
+  .rk-workflow-bar-label {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+    opacity: 0.6;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .rk-workflow-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--surface-3);
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background 120ms ease-out,
+      color 120ms ease-out,
+      border-color 120ms ease-out;
+  }
+
+  .rk-workflow-chip:hover {
+    background: var(--surface-4);
+    color: var(--foreground);
+    border-color: var(--input);
+  }
+
+  .rk-workflow-chip--active {
+    background: var(--primary);
+    color: var(--primary-foreground);
+    border-color: var(--primary);
+  }
+
+  .rk-workflow-chip--active:hover {
+    background: #4a80ff;
+    border-color: #4a80ff;
+  }
+
+  .rk-workflow-bg-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: rgba(139, 127, 240, 0.18);
+    color: #8b7ff0;
+    font-size: 8px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+
+  /* "Queue" text button that appears beside BG-capable workflow chips */
+  .rk-workflow-queue-btn {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 6px;
+    border-radius: 9999px;
+    border: none;
+    background: transparent;
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 9px;
+    font-weight: 500;
+    color: #8b7ff0;
+    cursor: pointer;
+    transition: background 120ms ease-out;
+  }
+
+  .rk-workflow-queue-btn:hover {
+    background: rgba(139, 127, 240, 0.12);
+  }
+
+  .rk-workflow-queue-btn:disabled {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
+  /* Composer meta row — workspace path + policy on one line */
+  .rk-composer-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 5px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+
+  .rk-composer-path {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+    direction: rtl;
+    text-align: left;
+  }
+
+  .rk-composer-change-btn {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 10px;
+    color: var(--primary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    white-space: nowrap;
+    transition: opacity 120ms;
+  }
+
+  .rk-composer-change-btn:hover {
+    opacity: 0.7;
+  }
+
+  /* Policy segmented control */
+  .rk-policy-seg {
+    display: flex;
+    align-items: center;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px;
+    gap: 1px;
+    flex-shrink: 0;
+  }
+
+  .rk-policy-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 3px;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: transparent;
+    color: var(--muted-foreground);
+    transition:
+      background 120ms ease-out,
+      color 120ms ease-out;
+  }
+
+  .rk-policy-btn:hover:not(.rk-policy-btn--read):not(.rk-policy-btn--balanced):not(
+      .rk-policy-btn--auto
+    ) {
+    background: var(--surface-4);
+    color: var(--foreground);
+  }
+
+  .rk-policy-btn:disabled {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
+  .rk-policy-btn--read {
+    background: var(--surface-4);
+    color: var(--foreground);
+  }
+
+  .rk-policy-btn--balanced {
+    background: rgba(232, 160, 32, 0.14);
+    color: var(--status-warning);
+  }
+
+  .rk-policy-btn--auto {
+    background: rgba(59, 114, 246, 0.14);
+    color: var(--primary);
+  }
+
+  .rk-policy-icon {
+    width: 11px;
+    height: 11px;
+    flex-shrink: 0;
+    opacity: 0.82;
+    transition: opacity 120ms ease-out;
+  }
+
+  .rk-policy-btn:hover .rk-policy-icon,
+  .rk-policy-btn--read .rk-policy-icon,
+  .rk-policy-btn--balanced .rk-policy-icon,
+  .rk-policy-btn--auto .rk-policy-icon {
+    opacity: 1;
+  }
+
+  /* Selected workflow card — appears between meta row and input */
+  .rk-selected-workflow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 6px 12px 0;
+    padding: 8px 10px;
+    border-radius: 7px;
+    background: rgba(59, 114, 246, 0.08);
+    border: 1px solid rgba(59, 114, 246, 0.2);
+  }
+
+  /* Composer outer shell — wraps workflow bar + meta row + input */
+  .rk-composer-shell {
+    flex-shrink: 0;
+    background: var(--surface-2);
+    border-top: 1px solid var(--border);
+  }
+
+  .rk-workspace-selector {
+    @apply bg-surface-2 flex min-h-0 flex-1 flex-col overflow-hidden;
+  }
+
+  .rk-workspace-selector-header {
+    @apply border-border/80 bg-surface-2/95 shrink-0 border-b px-4 py-3;
+  }
+
+  .rk-workspace-card {
+    @apply border-border bg-surface-3/70 rounded-lg border p-3;
+  }
+
+  .rk-workspace-browser {
+    @apply border-border bg-surface-3 overflow-hidden rounded-lg border;
+  }
+
+  .rk-workspace-browser-header {
+    @apply border-border bg-surface-4/60 border-b p-3;
+  }
+
+  .rk-workspace-row {
+    @apply hover:bg-surface-4/80 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors;
+  }
+
+  .rk-workspace-badge {
+    @apply bg-status-success/10 text-status-success inline-flex rounded-full px-1.5 py-0.5 font-mono text-[10px] font-medium;
+  }
+
+  .rk-workspace-unsaved {
+    @apply bg-status-warning/10 text-status-warning inline-flex rounded-full px-1.5 py-0.5 font-mono text-[10px] font-medium;
+  }
+
+  /* Preset tile — in the empty state workflow grid */
+  .rk-preset-tile {
+    height: 76px;
+    width: 100%;
+    cursor: pointer;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-3);
+    padding: 12px 14px;
+    text-align: left;
+    transition:
+      background 120ms ease-out,
+      border-color 120ms ease-out;
+  }
+
+  .rk-preset-tile:hover {
+    background: var(--surface-4);
+    border-color: var(--input);
+  }
+
+  .rk-preset-tile:disabled {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  /* Thinking indicator — inline in message stream */
+  .rk-thinking-bar {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(59, 114, 246, 0.14);
+    background: rgba(59, 114, 246, 0.06);
+  }
+
+  .rk-thinking-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--primary);
+    flex-shrink: 0;
+    margin-top: 3px;
+    animation: rk-pulse-dot 1.5s ease-in-out infinite;
+  }
+
+  .rk-thinking-label {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+    margin-bottom: 2px;
+    opacity: 0.7;
+  }
+
+  .rk-thinking-text {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 11px;
+    font-weight: 300;
+    color: var(--muted-foreground);
+    line-height: 1.55;
+  }
+
+  /* ─── ChatInput utilities ────────────────────────────────────────────────── */
+
+  /* Slash command dropdown */
+  .rk-command-popover {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    margin-bottom: 6px;
+    background: var(--surface-5);
+    border: 1px solid var(--input);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: none;
+  }
+
+  .rk-command-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    height: 36px;
+    padding: 0 10px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: background 120ms ease-out;
+  }
+
+  .rk-command-item--active {
+    background: var(--surface-4);
+  }
+
+  .rk-command-item:hover:not(.rk-command-item--active) {
+    background: var(--surface-4);
+  }
+
+  .rk-command-name {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--foreground);
+    flex-shrink: 0;
+  }
+
+  .rk-command-desc {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 11px;
+    font-weight: 300;
+    color: var(--muted-foreground);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  /* Input container */
+  .rk-input-container {
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition: border-color 150ms ease-out;
+  }
+
+  .rk-input-container:focus-within {
+    border-color: rgba(59, 114, 246, 0.4);
+  }
+} /* end @layer utilities */
+
+/* ─── Keyframes (outside @layer so they are always registered) ──────────────── */
+
+@keyframes rk-run-line {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(100vw + 120px));
+  }
+}
+
+@keyframes rk-pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes rk-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
   }
 }

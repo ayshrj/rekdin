@@ -43,7 +43,7 @@ export function LinkPreviewRenderer({ part }: { part: ToolResultContentPart }) {
 
   return (
     <div className="w-full min-w-0 overflow-hidden rounded-lg border">
-      <div className="flex min-h-[80px] items-stretch">
+      <div className="flex min-h-20 items-stretch">
         {/* Thumbnail */}
         {image && (
           <div className="relative h-auto w-28 shrink-0 overflow-hidden rounded-l">

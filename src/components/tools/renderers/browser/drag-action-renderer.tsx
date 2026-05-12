@@ -3,7 +3,7 @@
 import { motion } from "motion/react"
 import React, { useEffect, useMemo, useRef, useState } from "react"
 
-import { Image } from "@/components/ui/image"
+import { ClickableImage } from "@/components/ui/image-lightbox"
 import { ArrowRight, Check, Move, XMark } from "@/lib/icons"
 
 import { BrowserShell } from "../browser-shell"
@@ -58,7 +58,7 @@ export const DragActionRenderer: React.FC<DragActionRendererProps> = ({ part }) 
       {screenshot ? (
         <BrowserShell>
           <div className="relative">
-            <Image
+            <ClickableImage
               ref={imageRef}
               src={screenshot}
               alt="Drag action screenshot"
@@ -117,7 +117,7 @@ export const DragActionRenderer: React.FC<DragActionRendererProps> = ({ part }) 
         </BrowserShell>
       ) : null}
 
-      <div className="border-tool-action/20 bg-card overflow-hidden rounded-xl border shadow-sm">
+      <div className="border-tool-action/20 bg-surface-3 overflow-hidden rounded-lg border shadow-none">
         <div className="border-tool-action/20 bg-tool-action/10 flex items-center border-b px-4 py-3">
           <Move className="text-tool-action mr-2.5" size={18} />
           <div className="text-foreground font-medium">Drag & Drop</div>
