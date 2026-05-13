@@ -14,16 +14,29 @@ tools/
   shared/               ← pure helpers, no tools
   browser/              ← headless Puppeteer automation
   workspace/            ← file I/O, shell, security scans
-  code/                 ← AST analysis, execution, code maps
+  code/                 ← AST analysis, execution, code maps, refactoring, architecture
   web/                  ← search, HTTP, metadata
   pdf/                  ← PDF generation and extraction
   documents/            ← docx, CSV, JSON, YAML, SQLite
   images/               ← image processing and OCR
-  artifacts/            ← Rekdin artifact store
+  artifacts/            ← Rekdin artifact store + preview/conversion tools
   git/                  ← git read and write operations
   sessions/             ← session, replay, trace, settings
-  dev/                  ← dev servers, npm, system
+  dev/                  ← dev servers, npm, system, onboarding helpers
   utilities/            ← text, crypto, encoding, patching, misc
+  api/                  ← API route maps, contract diffs, curl helpers
+  agent/                ← agent plans, worklogs, diff review, regression risk
+  ui/                   ← Tailwind, design, responsive, accessibility audits
+  database/             ← Prisma, Drizzle, SQL schema maps, migration summaries
+  docs/                 ← docs index, README/changelog/release notes, AGENTS sync
+  security/             ← auth, permission, env, client-secret audits
+  performance/          ← bundle, dependency, Next.js boundary and asset audits
+  github/               ← GitHub PR/issue/action analysis
+  llm/                  ← prompt linting, JSON/schema helpers, workflow validation
+  next/                 ← Next.js route segments, metadata, image, API runtime audits
+  testing/              ← test gaps, test draft generation, failure explanations
+  data/                 ← log parsing, data profiling, CSV/JSON schema inference
+  workflows/            ← workflow inventory and validation
 ```
 
 ---
@@ -32,15 +45,17 @@ tools/
 
 Internal helpers shared across domains. Not re-exported from `index.ts`.
 
-| File            | Contents                                               |
-| --------------- | ------------------------------------------------------ |
-| `command.ts`    | `runCommand`, `runCommandUnsafe`, `safeShellArg`       |
-| `formatting.ts` | `truncateString`, `boundedLimit`, `previewString`      |
-| `patching.ts`   | `parseJsonPointer`, `applyOperation`, `applyJsonPatch` |
-| `csv.ts`        | `parseSimpleCsv`, `splitCSVLine`                       |
-| `json.ts`       | `getJsonPath`                                          |
-| `cloudinary.ts` | `parseCloudinaryConfig`, `uploadPdfToCloudinary`       |
-| `loaders.ts`    | `loadSharp`, `loadTesseract`, `loadYamlModule`         |
+| File            | Contents                                                                                                                                                                                                                                        |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tool-base.ts`  | `toolDefinition`, `emptySchema`, `pathLimitSchema`, `dryRunSchema`, `finding`, `Finding`, `TraceStep`                                                                                                                                           |
+| `code-utils.ts` | `CODE_EXTENSIONS`, `TEXT_EXTENSIONS`, `UI_EXTENSIONS`, `WorkspaceFile`, `linesOf`, `readBounded`, `codeFiles`, `collectTextFiles`, `importedSpecifiers`, `exportedNames`, `componentNames`, `hookNames`, `routeFromFile`, `appRouteFromSegment` |
+| `command.ts`    | `runCommand`, `runCommandUnsafe`, `safeShellArg`, `gitOutput`                                                                                                                                                                                   |
+| `formatting.ts` | `truncateString`, `boundedLimit`, `previewString`                                                                                                                                                                                               |
+| `patching.ts`   | `parseJsonPointer`, `applyOperation`, `applyJsonPatch`, `unifiedPatch`                                                                                                                                                                          |
+| `csv.ts`        | `csvRowsToObjects`, `parseSimpleCsv`, `splitCSVLine`                                                                                                                                                                                            |
+| `json.ts`       | `inferJsonSchema`, `safeJsonParse`, `getJsonPath`                                                                                                                                                                                               |
+| `cloudinary.ts` | `parseCloudinaryConfig`, `uploadPdfToCloudinary`                                                                                                                                                                                                |
+| `loaders.ts`    | `loadSharp`, `loadTesseract`, `loadYamlModule`                                                                                                                                                                                                  |
 
 ---
 
@@ -444,6 +459,212 @@ renderHtmlToPdf, persistPdfBuffer
 | `json_to_csv`          | Convert a JSON array of objects to CSV text.                                                     |
 | `xml_to_json`          | Convert XML text or a workspace file to a JSON representation.                                   |
 | `xpath_query`          | Run an XPath expression against HTML/XML text or a workspace file.                               |
+
+---
+
+## api/
+
+### `api-contract-tools.ts`
+
+| Tool name            | Description                                             |
+| -------------------- | ------------------------------------------------------- |
+| `api_contract_map`   | Map frontend API calls to Next.js backend route files.  |
+| `api_route_map`      | Map all Next.js API routes from the app directory.      |
+| `api_payload_infer`  | Infer request/response shape from route handler source. |
+| `api_contract_diff`  | Diff two versions of an API contract.                   |
+| `api_curl_examples`  | Generate curl examples for API routes.                  |
+| `api_postman_export` | Generate a Postman collection from routes.              |
+
+---
+
+## agent/
+
+### `agent-tools.ts`
+
+| Tool name               | Description                                                  |
+| ----------------------- | ------------------------------------------------------------ |
+| `agent_plan_create`     | Create a structured implementation plan from a user request. |
+| `agent_worklog`         | Log an agent work step with file, action, and detail.        |
+| `agent_self_check`      | Validate agent output against a checklist.                   |
+| `agent_diff_review`     | Review a patch diff for risk, coverage, and missing steps.   |
+| `agent_regression_risk` | Estimate regression risk from changed files.                 |
+
+---
+
+## ui/
+
+### `ui-audit-tools.ts`
+
+| Tool name              | Description                                                         |
+| ---------------------- | ------------------------------------------------------------------- |
+| `tailwind_class_audit` | Find Tailwind anti-patterns such as arbitrary values and conflicts. |
+| `design_token_audit`   | Audit CSS/Tailwind for hardcoded values vs design tokens.           |
+| `responsive_audit`     | Find components missing responsive breakpoint classes.              |
+| `accessibility_audit`  | Scan JSX for a11y issues: missing alt, role, aria, label.           |
+| `shadcn_usage_audit`   | Map shadcn/ui component usage across the codebase.                  |
+| `icon_audit`           | Audit icon library usage for consistency.                           |
+
+---
+
+## database/
+
+### `database-tools.ts`
+
+| Tool name                | Description                                                   |
+| ------------------------ | ------------------------------------------------------------- |
+| `prisma_schema_inspect`  | Inspect Prisma schema models, fields, relations, and indexes. |
+| `drizzle_schema_inspect` | Inspect Drizzle schema tables and columns.                    |
+| `sql_schema_map`         | Map SQL migration files to schema evolution.                  |
+| `migration_summary`      | Summarize database migration history.                         |
+| `db_erd_text`            | Generate a text-based ERD from schema inspection.             |
+
+---
+
+## docs/
+
+### `docs-tools.ts`
+
+| Tool name                   | Description                                                          |
+| --------------------------- | -------------------------------------------------------------------- |
+| `docs_index`                | Index project docs, README, AGENTS files, package scripts.           |
+| `docs_missing_report`       | Find missing docs for public APIs, tools, env variables, scripts.    |
+| `readme_generate_or_update` | Generate/update README sections from actual repo structure.          |
+| `agents_md_sync`            | Check whether AGENTS.md is synced with exported tools and renderers. |
+| `changelog_generate`        | Generate changelog markdown from recent git commits.                 |
+| `release_notes_generate`    | Generate user-facing release notes from commits and diff.            |
+
+---
+
+## security/
+
+### `security-tools.ts`
+
+| Tool name                    | Description                                                       |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `auth_flow_audit`            | Scan code for auth/session usage and missing checks.              |
+| `permission_audit`           | Audit role/permission checks in route handlers and middleware.    |
+| `command_injection_audit`    | Scan for unsafe shell/exec calls with interpolated input.         |
+| `dependency_confusion_audit` | Check for dependency confusion risk in package.json.              |
+| `env_usage_audit`            | Map env variable usage and find undefined or unused variables.    |
+| `client_secret_audit`        | Find secrets or tokens that may be exposed to the browser bundle. |
+
+---
+
+## performance/
+
+### `performance-tools.ts`
+
+| Tool name                 | Description                                                            |
+| ------------------------- | ---------------------------------------------------------------------- |
+| `bundle_analyze_summary`  | Summarize Next.js build output artifacts when available.               |
+| `large_dependency_report` | Find heavy dependencies and where they are imported.                   |
+| `client_boundary_audit`   | Find use client files that import server-only code or large libraries. |
+| `render_risk_audit`       | Find React performance risks in render paths.                          |
+| `asset_size_audit`        | Find oversized images/fonts/static files.                              |
+
+### `next-tools.ts` (also under `next/`)
+
+| Tool name                    | Description                                                              |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `next_route_segment_map`     | Map Next.js App Router segments including layouts, pages, handlers.      |
+| `server_client_boundary_map` | Map server/client components and likely illegal imports.                 |
+| `next_metadata_audit`        | Check metadata exports, title, description, OpenGraph, and robots files. |
+| `next_image_audit`           | Find raw img usage where next/image may be better.                       |
+| `next_api_runtime_audit`     | Check route handlers for runtime, dynamic usage, and cache headers.      |
+
+---
+
+## github/
+
+### `github-tools.ts`
+
+| Tool name                     | Description                                          |
+| ----------------------------- | ---------------------------------------------------- |
+| `github_pr_summary`           | Fetch and summarize a GitHub pull request.           |
+| `github_issue_list`           | List open issues for a GitHub repository.            |
+| `github_actions_status`       | Fetch recent workflow run status.                    |
+| `github_pr_description_draft` | Draft a PR description from git diff and commit log. |
+| `github_branch_cleanup`       | List merged branches that may be safe to delete.     |
+
+---
+
+## llm/
+
+### `llm-tools.ts`
+
+| Tool name            | Description                                                            |
+| -------------------- | ---------------------------------------------------------------------- |
+| `prompt_lint`        | Check prompts for ambiguity, conflicting constraints, unsafe patterns. |
+| `json_schema_infer`  | Infer a JSON Schema from a sample JSON value.                          |
+| `llm_eval_draft`     | Draft an evaluation harness for an LLM task.                           |
+| `workflow_inventory` | List Rekdin workflows and settings.                                    |
+| `workflow_validate`  | Validate a workflow preset definition.                                 |
+
+---
+
+## next/
+
+See **performance/** above for the `next-tools.ts` table.
+
+---
+
+## testing/
+
+### `testing-tools.ts`
+
+| Tool name               | Description                                                    |
+| ----------------------- | -------------------------------------------------------------- |
+| `test_gap_analysis`     | Compare source files vs test files and identify missing tests. |
+| `test_draft_generate`   | Generate a test stub for a source file.                        |
+| `test_failure_explain`  | Explain a test failure from error output and source context.   |
+| `snapshot_diff_explain` | Explain a snapshot diff in plain English.                      |
+
+---
+
+## data/
+
+### `data-tools.ts`
+
+| Tool name                | Description                                                          |
+| ------------------------ | -------------------------------------------------------------------- |
+| `log_parse`              | Parse logs and group by error type.                                  |
+| `data_profile`           | Profile a CSV or JSON file: row count, column types, nulls, samples. |
+| `json_schema_infer_file` | Infer JSON Schema from a workspace JSON file.                        |
+
+---
+
+## workflows/
+
+### `workflow-tools.ts`
+
+| Tool name            | Description                            |
+| -------------------- | -------------------------------------- |
+| `workflow_inventory` | List Rekdin workflows and settings.    |
+| `workflow_validate`  | Validate a workflow preset definition. |
+
+---
+
+## artifacts/ (extended)
+
+### `artifact-extended-tools.ts`
+
+| Tool name          | Description                                                |
+| ------------------ | ---------------------------------------------------------- |
+| `artifact_preview` | Return preview metadata for an artifact or workspace file. |
+| `artifact_convert` | Convert an artifact to a different format.                 |
+
+---
+
+## dev/ (extended)
+
+### `dev-extended-tools.ts`
+
+| Tool name              | Description                                               |
+| ---------------------- | --------------------------------------------------------- |
+| `todo_to_issues`       | Convert TODO/FIXME comments into structured issue drafts. |
+| `env_example_generate` | Generate a `.env.example` from env usage in the codebase. |
+| `setup_health_check`   | Run setup validation checks against the workspace.        |
+| `onboarding_summary`   | Summarize the project for a new developer.                |
 
 ---
 

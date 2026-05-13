@@ -10,6 +10,9 @@ export function TextOutputRenderer({ part }: { part: ToolResultContentPart }) {
 
   const result = part.toolResult as
     | {
+        title?: string
+        text?: string
+        markdown?: string
         summary?: string
         output?: string
         length?: number
@@ -17,8 +20,8 @@ export function TextOutputRenderer({ part }: { part: ToolResultContentPart }) {
       }
     | undefined
 
-  const text = result?.summary ?? result?.output ?? ""
-  const label = isSummarize ? "Summary" : "Rewrite"
+  const text = result?.summary ?? result?.output ?? result?.text ?? result?.markdown ?? ""
+  const label = result?.title ?? (isSummarize ? "Summary" : "Text Output")
   const meta = isSummarize
     ? result?.length
       ? `${result.length} chars`

@@ -1,3 +1,15 @@
+export function unifiedPatch(pathName: string, before: string, after: string) {
+  return [
+    `diff --git a/${pathName} b/${pathName}`,
+    `--- a/${pathName}`,
+    `+++ b/${pathName}`,
+    "@@",
+    ...before.split(/\r?\n/).map((line) => `-${line}`),
+    ...after.split(/\r?\n/).map((line) => `+${line}`),
+    "",
+  ].join("\n")
+}
+
 /**
  * Parses a JSON Pointer path into unescaped path segments for JSON/YAML patching.
  */

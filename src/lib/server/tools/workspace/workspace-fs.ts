@@ -51,6 +51,14 @@ export async function fileExists(filePath: string) {
   }
 }
 
+export async function readPackageJson() {
+  try {
+    return JSON.parse(await readWorkspaceText("package.json")) as Record<string, unknown>
+  } catch {
+    return {}
+  }
+}
+
 export async function collectWorkspaceFiles(options?: {
   path?: string
   maxFiles?: number

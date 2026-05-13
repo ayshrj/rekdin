@@ -1,3 +1,13 @@
+export function csvRowsToObjects(rows: string[][]) {
+  const [headers = [], ...body] = rows
+  return {
+    headers,
+    rows: body.map((row) =>
+      Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""]))
+    ),
+  }
+}
+
 export function parseSimpleCsv(input: string, delimiter = ",", maxRows = 50) {
   const rows: string[][] = []
   let row: string[] = []

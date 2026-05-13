@@ -4,9 +4,12 @@ import React from "react"
 
 export { toolLabels } from "../tool-labels"
 
+import { AgentPlanRenderer } from "./agent-plan-renderer"
 import { GraphqlIntrospectRenderer, OpenApiInspectRenderer } from "./api-spec-renderer"
+import { ArchitectureRenderer } from "./architecture-renderer"
 import { ArchiveRenderer } from "./archive-renderer"
 import { ArtifactRenderer } from "./artifact-renderer"
+import { AuditFindingsRenderer } from "./audit-findings-renderer"
 import { BackgroundJobsRenderer } from "./background-jobs-renderer"
 import { Base64Renderer } from "./base64-renderer"
 import {
@@ -24,6 +27,7 @@ import {
 import { BrowserControlRenderer } from "./browser-control-renderer"
 import { BrowserResultRenderer } from "./browser-result-renderer"
 import { CodeActRenderer } from "./code-act-renderer"
+import { CodeMapFlowRenderer } from "./code-map-flow-renderer"
 import { CodeQualityRenderer } from "./code-quality-renderer"
 import { CommandResultRenderer } from "./command-result-renderer"
 import {
@@ -33,6 +37,7 @@ import {
   XmlToJsonRenderer,
   XpathQueryRenderer,
 } from "./data-format-renderer"
+import { DataProfileRenderer } from "./data-profile-renderer"
 import { DataQueryRenderer } from "./data-query-renderer"
 import { DeepResearchRenderer } from "./deep-research-renderer"
 import { DependencyAuditRenderer } from "./dependency-audit-renderer"
@@ -61,6 +66,7 @@ import {
   GitPushRenderer,
   GitStashRenderer,
 } from "./git-write-renderer"
+import { GithubRenderer } from "./github-renderer"
 import { HashRenderer } from "./hash-renderer"
 import { HttpRequestRenderer } from "./http-request-renderer"
 import { ImageAnalysisRenderer } from "./image-analysis-renderer"
@@ -78,14 +84,18 @@ import {
 } from "./network-diagnostics-renderer"
 import { NpmPackageRenderer } from "./npm-package-renderer"
 import { NpmScriptsRenderer } from "./npm-scripts-renderer"
+import { PatchPreviewRenderer } from "./patch-preview-renderer"
 import { PdfRenderer } from "./pdf-renderer"
 import { ReplaySearchRenderer, ReplaySummaryRenderer } from "./replay-renderer"
 import { RouteMapRenderer } from "./route-map-renderer"
+import { SchemaRenderer } from "./schema-renderer"
+import { ScreenshotCompareRenderer } from "./screenshot-compare-renderer"
 import { ScriptResultRenderer } from "./script-result-renderer"
 import { SecretScanRenderer } from "./secret-scan-renderer"
 import { SecurityCheckRenderer } from "./security-check-renderer"
 import { SessionInspectRenderer, SessionListRenderer } from "./session-renderer"
 import { SettingsSummaryRenderer } from "./settings-summary-renderer"
+import { SizeReportRenderer } from "./size-report-renderer"
 import { SymbolRenderer } from "./symbol-renderer"
 import {
   ClipboardReadRenderer,
@@ -95,6 +105,7 @@ import {
   SystemInfoRenderer,
 } from "./system-renderer"
 import { TableRenderer } from "./table-renderer"
+import { TestGapRenderer } from "./test-gap-renderer"
 import { TextAnalysisRenderer } from "./text-analysis-renderer"
 import { TextOutputRenderer } from "./text-output-renderer"
 import { TokenUsageReportRenderer, TraceSummaryRenderer } from "./trace-renderer"
@@ -111,6 +122,7 @@ import {
 import { VisitLinkRenderer } from "./visit-link-renderer"
 import { WebMetadataRenderer } from "./web-metadata-renderer"
 import { WebSearchResultRenderer } from "./web-search-result-renderer"
+import { WorkflowCardRenderer } from "./workflow-card-renderer"
 import { WorkspaceStatsRenderer } from "./workspace-stats-renderer"
 import { WriteFileRenderer } from "./write-file-renderer"
 
@@ -376,6 +388,105 @@ const CONTENT_RENDERERS: Record<
   background_jobs_summary: BackgroundJobsRenderer,
   settings_summary: SettingsSummaryRenderer,
 
+  // Audit findings
+  tailwind_class_audit: AuditFindingsRenderer,
+  accessibility_audit_static: AuditFindingsRenderer,
+  component_design_audit: AuditFindingsRenderer,
+  responsive_breakpoint_audit: AuditFindingsRenderer,
+  module_boundary_check: AuditFindingsRenderer,
+  client_boundary_audit: AuditFindingsRenderer,
+  auth_flow_audit: AuditFindingsRenderer,
+  permission_boundary_audit: AuditFindingsRenderer,
+  dangerous_command_detect: AuditFindingsRenderer,
+  env_usage_audit: AuditFindingsRenderer,
+  client_secret_leak_check: AuditFindingsRenderer,
+  render_risk_audit: AuditFindingsRenderer,
+  agent_diff_review: AuditFindingsRenderer,
+  agent_self_check: AuditFindingsRenderer,
+  agents_md_sync: AuditFindingsRenderer,
+  docs_missing_report: AuditFindingsRenderer,
+  prompt_lint: AuditFindingsRenderer,
+  llm_response_audit: AuditFindingsRenderer,
+
+  safe_rename_symbol: PatchPreviewRenderer,
+  move_symbol_to_file: PatchPreviewRenderer,
+  extract_function: PatchPreviewRenderer,
+  extract_component: PatchPreviewRenderer,
+  barrel_export_sync: PatchPreviewRenderer,
+  import_rewrite: PatchPreviewRenderer,
+  dead_imports_fix: PatchPreviewRenderer,
+  generate_unit_test_draft: PatchPreviewRenderer,
+  tool_contract_test_generate: PatchPreviewRenderer,
+  readme_generate_or_update: PatchPreviewRenderer,
+  changelog_generate: PatchPreviewRenderer,
+  pr_description_generate: PatchPreviewRenderer,
+  env_example_generate: PatchPreviewRenderer,
+
+  component_map: CodeMapFlowRenderer,
+  hook_map: CodeMapFlowRenderer,
+  api_contract_map: CodeMapFlowRenderer,
+  api_route_map: CodeMapFlowRenderer,
+  state_flow_trace: CodeMapFlowRenderer,
+  event_handler_trace: CodeMapFlowRenderer,
+  type_dependency_trace: CodeMapFlowRenderer,
+  prop_drilling_trace: CodeMapFlowRenderer,
+
+  architecture_summary: ArchitectureRenderer,
+  feature_map: ArchitectureRenderer,
+  ownership_map: ArchitectureRenderer,
+  coupling_report: ArchitectureRenderer,
+  circular_dependency_check: ArchitectureRenderer,
+  complexity_hotspots: ArchitectureRenderer,
+
+  test_gap_analysis: TestGapRenderer,
+
+  agent_plan_create: AgentPlanRenderer,
+  agent_plan_check: AgentPlanRenderer,
+  agent_worklog: AgentPlanRenderer,
+  agent_regression_risk: AgentPlanRenderer,
+
+  screenshot_compare: ScreenshotCompareRenderer,
+  page_visual_audit: ScreenshotCompareRenderer,
+  responsive_screenshot_matrix: ScreenshotCompareRenderer,
+
+  prisma_schema_inspect: SchemaRenderer,
+  drizzle_schema_inspect: SchemaRenderer,
+  sql_schema_map: SchemaRenderer,
+  erd_generate: SchemaRenderer,
+
+  github_pr_summary: GithubRenderer,
+  github_issue_triage: GithubRenderer,
+  github_action_logs_analyze: GithubRenderer,
+
+  bundle_analyze_summary: SizeReportRenderer,
+  large_dependency_report: SizeReportRenderer,
+  asset_size_audit: SizeReportRenderer,
+
+  workflow_inventory: WorkflowCardRenderer,
+  workflow_validate: WorkflowCardRenderer,
+  workflow_compare: WorkflowCardRenderer,
+
+  csv_profile: DataProfileRenderer,
+  json_profile: DataProfileRenderer,
+  log_parse: DataProfileRenderer,
+  log_error_cluster: DataProfileRenderer,
+
+  docs_index: ListFilesRenderer,
+  json_output_repair: JsonResultRenderer,
+  schema_from_examples: JsonResultRenderer,
+  examples_validate_against_schema: JsonResultRenderer,
+  setup_health_check: SystemInfoRenderer,
+  onboarding_summary: TextOutputRenderer,
+  release_notes_generate: TextOutputRenderer,
+  curl_from_api_call: ScriptResultRenderer,
+  postman_collection_generate: JsonResultRenderer,
+  migration_diff_summary: TextOutputRenderer,
+  branch_cleanup_candidates: GitBranchesRenderer,
+  dom_layout_box_map: JsonResultRenderer,
+  css_computed_style_extract: JsonResultRenderer,
+  eval_case_generate: JsonResultRenderer,
+  mock_workspace_create: ListFilesRenderer,
+
   // Cluster A — developer utilities
   jwt_decode: JwtDecodeRenderer,
   regex_match: RegexMatchRenderer,
@@ -594,6 +705,93 @@ const TOOL_ACCENT_MAP: Record<string, string> = {
   background_jobs_summary: "border-tool-data/25",
   settings_summary: "border-tool-json/25",
 
+  // Audit findings
+  tailwind_class_audit: "border-tool-search/25",
+  accessibility_audit_static: "border-tool-search/25",
+  component_design_audit: "border-tool-search/25",
+  responsive_breakpoint_audit: "border-tool-search/25",
+  module_boundary_check: "border-tool-code/25",
+  client_boundary_audit: "border-tool-code/25",
+  auth_flow_audit: "border-tool-search/25",
+  permission_boundary_audit: "border-tool-search/25",
+  dangerous_command_detect: "border-tool-search/25",
+  env_usage_audit: "border-tool-search/25",
+  client_secret_leak_check: "border-tool-search/25",
+  render_risk_audit: "border-tool-code/25",
+  agent_diff_review: "border-tool-code/25",
+  agent_self_check: "border-tool-code/25",
+  agents_md_sync: "border-tool-search/25",
+  docs_missing_report: "border-tool-search/25",
+  prompt_lint: "border-tool-search/25",
+  llm_response_audit: "border-tool-search/25",
+  safe_rename_symbol: "border-tool-code/25",
+  move_symbol_to_file: "border-tool-code/25",
+  extract_function: "border-tool-code/25",
+  extract_component: "border-tool-code/25",
+  barrel_export_sync: "border-tool-code/25",
+  import_rewrite: "border-tool-code/25",
+  dead_imports_fix: "border-tool-code/25",
+  generate_unit_test_draft: "border-tool-code/25",
+  tool_contract_test_generate: "border-tool-code/25",
+  readme_generate_or_update: "border-tool-doc/25",
+  changelog_generate: "border-tool-doc/25",
+  pr_description_generate: "border-tool-code/25",
+  env_example_generate: "border-tool-code/25",
+  component_map: "border-tool-code/25",
+  hook_map: "border-tool-code/25",
+  api_contract_map: "border-tool-code/25",
+  api_route_map: "border-tool-code/25",
+  state_flow_trace: "border-tool-code/25",
+  event_handler_trace: "border-tool-code/25",
+  type_dependency_trace: "border-tool-code/25",
+  prop_drilling_trace: "border-tool-code/25",
+  architecture_summary: "border-tool-code/25",
+  feature_map: "border-tool-code/25",
+  ownership_map: "border-tool-code/25",
+  coupling_report: "border-tool-code/25",
+  circular_dependency_check: "border-tool-code/25",
+  complexity_hotspots: "border-tool-data/25",
+  test_gap_analysis: "border-tool-code/25",
+  agent_plan_create: "border-tool-code/25",
+  agent_plan_check: "border-tool-code/25",
+  agent_worklog: "border-tool-code/25",
+  agent_regression_risk: "border-tool-code/25",
+  screenshot_compare: "border-tool-browser/25",
+  page_visual_audit: "border-tool-browser/25",
+  responsive_screenshot_matrix: "border-tool-browser/25",
+  prisma_schema_inspect: "border-tool-json/25",
+  drizzle_schema_inspect: "border-tool-json/25",
+  sql_schema_map: "border-tool-json/25",
+  erd_generate: "border-tool-json/25",
+  github_pr_summary: "border-tool-research/25",
+  github_issue_triage: "border-tool-research/25",
+  github_action_logs_analyze: "border-tool-research/25",
+  bundle_analyze_summary: "border-tool-data/25",
+  large_dependency_report: "border-tool-data/25",
+  asset_size_audit: "border-tool-data/25",
+  workflow_inventory: "border-tool-json/25",
+  workflow_validate: "border-tool-json/25",
+  workflow_compare: "border-tool-json/25",
+  csv_profile: "border-tool-data/25",
+  json_profile: "border-tool-data/25",
+  log_parse: "border-tool-data/25",
+  log_error_cluster: "border-tool-data/25",
+  docs_index: "border-tool-code/25",
+  json_output_repair: "border-tool-json/25",
+  schema_from_examples: "border-tool-json/25",
+  examples_validate_against_schema: "border-tool-json/25",
+  setup_health_check: "border-tool-data/25",
+  onboarding_summary: "border-tool-doc/25",
+  release_notes_generate: "border-tool-doc/25",
+  curl_from_api_call: "border-tool-code/25",
+  postman_collection_generate: "border-tool-json/25",
+  migration_diff_summary: "border-tool-doc/25",
+  branch_cleanup_candidates: "border-tool-code/25",
+  dom_layout_box_map: "border-tool-json/25",
+  css_computed_style_extract: "border-tool-json/25",
+  eval_case_generate: "border-tool-json/25",
+  mock_workspace_create: "border-tool-code/25",
+
   // Cluster A — developer utilities
   jwt_decode: "border-tool-json/25",
   regex_match: "border-tool-search/25",
@@ -779,6 +977,92 @@ export function ToolResultRenderer({
             generate_latex_pdf: "generate_latex_pdf",
             latex_pdf: "generate_latex_pdf",
             pdf_generate: "generate_latex_pdf",
+
+            tailwind_class_audit: "tailwind_class_audit",
+            accessibility_audit_static: "accessibility_audit_static",
+            component_design_audit: "component_design_audit",
+            responsive_breakpoint_audit: "responsive_breakpoint_audit",
+            module_boundary_check: "module_boundary_check",
+            client_boundary_audit: "client_boundary_audit",
+            auth_flow_audit: "auth_flow_audit",
+            permission_boundary_audit: "permission_boundary_audit",
+            dangerous_command_detect: "dangerous_command_detect",
+            env_usage_audit: "env_usage_audit",
+            client_secret_leak_check: "client_secret_leak_check",
+            render_risk_audit: "render_risk_audit",
+            agent_diff_review: "agent_diff_review",
+            agent_self_check: "agent_self_check",
+            agents_md_sync: "agents_md_sync",
+            docs_missing_report: "docs_missing_report",
+            prompt_lint: "prompt_lint",
+            llm_response_audit: "llm_response_audit",
+            safe_rename_symbol: "safe_rename_symbol",
+            move_symbol_to_file: "move_symbol_to_file",
+            extract_function: "extract_function",
+            extract_component: "extract_component",
+            barrel_export_sync: "barrel_export_sync",
+            import_rewrite: "import_rewrite",
+            dead_imports_fix: "dead_imports_fix",
+            generate_unit_test_draft: "generate_unit_test_draft",
+            tool_contract_test_generate: "tool_contract_test_generate",
+            readme_generate_or_update: "readme_generate_or_update",
+            changelog_generate: "changelog_generate",
+            pr_description_generate: "pr_description_generate",
+            env_example_generate: "env_example_generate",
+            component_map: "component_map",
+            hook_map: "hook_map",
+            api_contract_map: "api_contract_map",
+            api_route_map: "api_route_map",
+            state_flow_trace: "state_flow_trace",
+            event_handler_trace: "event_handler_trace",
+            type_dependency_trace: "type_dependency_trace",
+            prop_drilling_trace: "prop_drilling_trace",
+            architecture_summary: "architecture_summary",
+            feature_map: "feature_map",
+            ownership_map: "ownership_map",
+            coupling_report: "coupling_report",
+            circular_dependency_check: "circular_dependency_check",
+            complexity_hotspots: "complexity_hotspots",
+            test_gap_analysis: "test_gap_analysis",
+            agent_plan_create: "agent_plan_create",
+            agent_plan_check: "agent_plan_check",
+            agent_worklog: "agent_worklog",
+            agent_regression_risk: "agent_regression_risk",
+            screenshot_compare: "screenshot_compare",
+            page_visual_audit: "page_visual_audit",
+            responsive_screenshot_matrix: "responsive_screenshot_matrix",
+            prisma_schema_inspect: "prisma_schema_inspect",
+            drizzle_schema_inspect: "drizzle_schema_inspect",
+            sql_schema_map: "sql_schema_map",
+            erd_generate: "erd_generate",
+            github_pr_summary: "github_pr_summary",
+            github_issue_triage: "github_issue_triage",
+            github_action_logs_analyze: "github_action_logs_analyze",
+            bundle_analyze_summary: "bundle_analyze_summary",
+            large_dependency_report: "large_dependency_report",
+            asset_size_audit: "asset_size_audit",
+            workflow_inventory: "workflow_inventory",
+            workflow_validate: "workflow_validate",
+            workflow_compare: "workflow_compare",
+            csv_profile: "csv_profile",
+            json_profile: "json_profile",
+            log_parse: "log_parse",
+            log_error_cluster: "log_error_cluster",
+            docs_index: "docs_index",
+            json_output_repair: "json_output_repair",
+            schema_from_examples: "schema_from_examples",
+            examples_validate_against_schema: "examples_validate_against_schema",
+            setup_health_check: "setup_health_check",
+            onboarding_summary: "onboarding_summary",
+            release_notes_generate: "release_notes_generate",
+            curl_from_api_call: "curl_from_api_call",
+            postman_collection_generate: "postman_collection_generate",
+            migration_diff_summary: "migration_diff_summary",
+            branch_cleanup_candidates: "branch_cleanup_candidates",
+            dom_layout_box_map: "dom_layout_box_map",
+            css_computed_style_extract: "css_computed_style_extract",
+            eval_case_generate: "eval_case_generate",
+            mock_workspace_create: "mock_workspace_create",
           }
 
           const mappedKey = toolNameMap[part.toolName]

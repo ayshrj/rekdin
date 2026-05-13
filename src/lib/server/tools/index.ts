@@ -1,17 +1,33 @@
+export * from "./agent/agent-tools"
+export * from "./api/api-contract-tools"
+export * from "./artifacts/artifact-extended-tools"
 export * from "./artifacts/artifact-tools"
 export * from "./browser/browser-core"
 export * from "./browser/browser-tools"
+export * from "./browser/browser-visual-tools"
+export * from "./code/architecture-tools"
 export * from "./code/code-analysis-tools"
 export * from "./code/code-execution-tools"
+export * from "./code/code-intelligence-tools"
 export * from "./code/code-map-tools"
+export * from "./code/refactor-tools"
+export * from "./data/data-tools"
+export * from "./database/database-tools"
+export * from "./dev/dev-extended-tools"
 export * from "./dev/dev-server-tools"
 export * from "./dev/package-tools"
+export * from "./docs/docs-tools"
 export * from "./documents/data-query-tools"
 export * from "./documents/document-tools"
 export * from "./git/git-tools"
+export * from "./github/github-tools"
 export * from "./images/image-tools"
+export * from "./llm/llm-tools"
+export * from "./next/next-tools"
 export * from "./pdf/latex-tools"
 export * from "./pdf/pdf-tools"
+export * from "./performance/performance-tools"
+export * from "./security/security-tools"
 export * from "./sessions/session-tools"
 export * from "./sessions/settings-tools"
 export * from "./sessions/trace-tools"
@@ -21,6 +37,8 @@ export * from "./shared/formatting"
 export * from "./shared/json"
 export * from "./shared/loaders"
 export * from "./shared/patching"
+export * from "./testing/testing-tools"
+export * from "./ui/ui-audit-tools"
 export * from "./utilities/archive-tools"
 export * from "./utilities/crypto-tools"
 export * from "./utilities/encoding-tools"
@@ -31,10 +49,33 @@ export * from "./utilities/validation-tools"
 export * from "./web/metadata-tools"
 export * from "./web/network-tools"
 export * from "./web/web-tools"
+export * from "./workflows/workflow-tools"
 export * from "./workspace/workspace-fs"
 export * from "./workspace/workspace-scans"
 export * from "./workspace/workspace-tools"
 
+import {
+  agentDiffReviewTool,
+  agentPlanCheckTool,
+  agentPlanCreateTool,
+  agentRegressionRiskTool,
+  agentSelfCheckTool,
+  agentWorklogTool,
+} from "./agent/agent-tools"
+import {
+  apiContractDiffTool,
+  apiContractMapTool,
+  apiErrorTaxonomyTool,
+  apiPayloadInferTool,
+  apiRouteMapTool,
+  curlFromApiCallTool,
+  postmanCollectionGenerateTool,
+} from "./api/api-contract-tools"
+import {
+  artifactBundleTool,
+  artifactConvertTool,
+  artifactPreviewTool,
+} from "./artifacts/artifact-extended-tools"
 import { artifactDeleteTool, artifactListTool, artifactReadTool } from "./artifacts/artifact-tools"
 import {
   browserAccessibilitySnapshotTool,
@@ -75,6 +116,21 @@ import {
   browserWaitTool,
 } from "./browser/browser-tools"
 import {
+  cssComputedStyleExtractTool,
+  domLayoutBoxMapTool,
+  pageVisualAuditTool,
+  responsiveScreenshotMatrixTool,
+  screenshotCompareTool,
+} from "./browser/browser-visual-tools"
+import {
+  architectureSummaryTool,
+  circularDependencyCheckTool,
+  complexityHotspotsTool,
+  couplingReportTool,
+  featureMapTool,
+  ownershipMapTool,
+} from "./code/architecture-tools"
+import {
   deadCodeCandidatesTool,
   dependencyGraphTool,
   duplicateCodeCandidatesTool,
@@ -91,6 +147,14 @@ import {
   shellExecuteTool,
 } from "./code/code-execution-tools"
 import {
+  componentMapTool,
+  eventHandlerTraceTool,
+  hookMapTool,
+  propDrillingTraceTool,
+  stateFlowTraceTool,
+  typeDependencyTraceTool,
+} from "./code/code-intelligence-tools"
+import {
   codeMapTool,
   configInventoryTool,
   envInventoryTool,
@@ -98,6 +162,35 @@ import {
   routeMapTool,
   testMapTool,
 } from "./code/code-map-tools"
+import {
+  barrelExportSyncTool,
+  deadImportsFixTool,
+  extractComponentTool,
+  extractFunctionTool,
+  importRewriteTool,
+  moduleBoundaryCheckTool,
+  moveSymbolToFileTool,
+  safeRenameSymbolTool,
+} from "./code/refactor-tools"
+import {
+  csvProfileTool,
+  jsonProfileTool,
+  logErrorClusterTool,
+  logParseTool,
+} from "./data/data-tools"
+import {
+  drizzleSchemaInspectTool,
+  erdGenerateTool,
+  migrationDiffSummaryTool,
+  prismaSchemaInspectTool,
+  sqlSchemaMapTool,
+} from "./database/database-tools"
+import {
+  envExampleGenerateTool,
+  onboardingSummaryTool,
+  setupHealthCheckTool,
+  todoToIssuesTool,
+} from "./dev/dev-extended-tools"
 import {
   clipboardReadTool,
   clipboardWriteTool,
@@ -119,6 +212,14 @@ import {
   testProjectTool,
   typecheckProjectTool,
 } from "./dev/package-tools"
+import {
+  agentsMdSyncTool,
+  changelogGenerateTool,
+  docsIndexTool,
+  docsMissingReportTool,
+  readmeGenerateOrUpdateTool,
+  releaseNotesGenerateTool,
+} from "./docs/docs-tools"
 import {
   csvPreviewTool,
   csvQueryTool,
@@ -156,6 +257,13 @@ import {
   gitTagsTool,
 } from "./git/git-tools"
 import {
+  branchCleanupCandidatesTool,
+  githubActionLogsAnalyzeTool,
+  githubIssueTriageTool,
+  githubPrSummaryTool,
+  prDescriptionGenerateTool,
+} from "./github/github-tools"
+import {
   assetManifestTool,
   imageConvertTool,
   imageCropTool,
@@ -166,9 +274,39 @@ import {
   imageResizeTool,
   svgOptimizeTool,
 } from "./images/image-tools"
+import {
+  evalCaseGenerateTool,
+  examplesValidateAgainstSchemaTool,
+  jsonOutputRepairTool,
+  llmResponseAuditTool,
+  promptLintTool,
+  schemaFromExamplesTool,
+} from "./llm/llm-tools"
+import {
+  nextApiRuntimeAuditTool,
+  nextImageAuditTool,
+  nextMetadataAuditTool,
+  nextRouteSegmentMapTool,
+  serverClientBoundaryMapTool,
+} from "./next/next-tools"
 import { createGenerateLatexPdfTool } from "./pdf/latex-tools"
 import { createMarkdownToPdfTool } from "./pdf/pdf-tools"
 import { pdfExtractTextTool } from "./pdf/pdf-tools"
+import {
+  assetSizeAuditTool,
+  bundleAnalyzeSummaryTool,
+  clientBoundaryAuditTool,
+  largeDependencyReportTool,
+  renderRiskAuditTool,
+} from "./performance/performance-tools"
+import {
+  authFlowAuditTool,
+  clientSecretLeakCheckTool,
+  dangerousCommandDetectTool,
+  dependencyConfusionCheckTool,
+  envUsageAuditTool,
+  permissionBoundaryAuditTool,
+} from "./security/security-tools"
 import {
   replaySearchTool,
   replaySummaryTool,
@@ -181,6 +319,23 @@ import {
   tokenUsageReportTool,
   traceSummaryTool,
 } from "./sessions/trace-tools"
+import {
+  generateUnitTestDraftTool,
+  mockWorkspaceCreateTool,
+  snapshotDiffExplainTool,
+  testFailureExplainTool,
+  testGapAnalysisTool,
+  toolContractTestGenerateTool,
+} from "./testing/testing-tools"
+import {
+  accessibilityAuditStaticTool,
+  componentDesignAuditTool,
+  iconUsageMapTool,
+  responsiveBreakpointAuditTool,
+  shadcnUsageAuditTool,
+  storybookStoryGenerateTool,
+  tailwindClassAuditTool,
+} from "./ui/ui-audit-tools"
 import { archiveCreateTool, archiveExtractTool } from "./utilities/archive-tools"
 import { hashTool } from "./utilities/crypto-tools"
 import { jwtDecodeTool, uuidGenerateTool } from "./utilities/crypto-tools"
@@ -232,6 +387,12 @@ import {
   whoisLookupTool,
 } from "./web/network-tools"
 import { pageDiffSnapshotTool, searchBatchTool, visitUrlTool, webSearchTool } from "./web/web-tools"
+import {
+  workflowCompareTool,
+  workflowInventoryTool,
+  workflowRunDryTool,
+  workflowValidateTool,
+} from "./workflows/workflow-tools"
 import {
   dependencyAuditTool,
   dockerfileScanTool,
@@ -288,6 +449,148 @@ export function createToolset(context?: { headers?: HeadersInit; allowedToolName
     tokenUsageReportTool,
     backgroundJobsSummaryTool,
     settingsSummaryTool,
+
+    // Agent meta-tools
+    agentPlanCreateTool,
+    agentPlanCheckTool,
+    agentWorklogTool,
+    agentSelfCheckTool,
+    agentDiffReviewTool,
+    agentRegressionRiskTool,
+
+    // API contract tools
+    apiContractMapTool,
+    apiContractDiffTool,
+    apiRouteMapTool,
+    apiPayloadInferTool,
+    postmanCollectionGenerateTool,
+    curlFromApiCallTool,
+    apiErrorTaxonomyTool,
+
+    // Architecture tools
+    architectureSummaryTool,
+    featureMapTool,
+    ownershipMapTool,
+    complexityHotspotsTool,
+    couplingReportTool,
+    circularDependencyCheckTool,
+
+    // Browser visual tools
+    screenshotCompareTool,
+    pageVisualAuditTool,
+    responsiveScreenshotMatrixTool,
+    domLayoutBoxMapTool,
+    cssComputedStyleExtractTool,
+
+    // Code intelligence tools
+    componentMapTool,
+    hookMapTool,
+    stateFlowTraceTool,
+    typeDependencyTraceTool,
+    propDrillingTraceTool,
+    eventHandlerTraceTool,
+
+    // Database tools
+    prismaSchemaInspectTool,
+    drizzleSchemaInspectTool,
+    sqlSchemaMapTool,
+    migrationDiffSummaryTool,
+    erdGenerateTool,
+
+    // Docs tools
+    docsIndexTool,
+    docsMissingReportTool,
+    readmeGenerateOrUpdateTool,
+    agentsMdSyncTool,
+    changelogGenerateTool,
+    releaseNotesGenerateTool,
+
+    // GitHub tools
+    githubPrSummaryTool,
+    githubIssueTriageTool,
+    githubActionLogsAnalyzeTool,
+    prDescriptionGenerateTool,
+    branchCleanupCandidatesTool,
+
+    // LLM tools
+    promptLintTool,
+    jsonOutputRepairTool,
+    schemaFromExamplesTool,
+    examplesValidateAgainstSchemaTool,
+    evalCaseGenerateTool,
+    llmResponseAuditTool,
+
+    // Workflow tools
+    workflowInventoryTool,
+    workflowValidateTool,
+    workflowRunDryTool,
+    workflowCompareTool,
+
+    // Performance tools
+    bundleAnalyzeSummaryTool,
+    largeDependencyReportTool,
+    clientBoundaryAuditTool,
+    renderRiskAuditTool,
+    assetSizeAuditTool,
+
+    // Next.js tools
+    nextRouteSegmentMapTool,
+    serverClientBoundaryMapTool,
+    nextMetadataAuditTool,
+    nextImageAuditTool,
+    nextApiRuntimeAuditTool,
+
+    // Refactor tools
+    safeRenameSymbolTool,
+    moveSymbolToFileTool,
+    extractFunctionTool,
+    extractComponentTool,
+    barrelExportSyncTool,
+    importRewriteTool,
+    deadImportsFixTool,
+    moduleBoundaryCheckTool,
+
+    // Security tools
+    authFlowAuditTool,
+    permissionBoundaryAuditTool,
+    dangerousCommandDetectTool,
+    dependencyConfusionCheckTool,
+    envUsageAuditTool,
+    clientSecretLeakCheckTool,
+
+    // Testing tools
+    testGapAnalysisTool,
+    generateUnitTestDraftTool,
+    testFailureExplainTool,
+    snapshotDiffExplainTool,
+    toolContractTestGenerateTool,
+    mockWorkspaceCreateTool,
+
+    // UI audit tools
+    tailwindClassAuditTool,
+    componentDesignAuditTool,
+    responsiveBreakpointAuditTool,
+    accessibilityAuditStaticTool,
+    storybookStoryGenerateTool,
+    shadcnUsageAuditTool,
+    iconUsageMapTool,
+
+    // Data tools
+    logParseTool,
+    logErrorClusterTool,
+    csvProfileTool,
+    jsonProfileTool,
+
+    // Artifact extended tools
+    artifactPreviewTool,
+    artifactConvertTool,
+    artifactBundleTool,
+
+    // Dev extended tools
+    todoToIssuesTool,
+    envExampleGenerateTool,
+    setupHealthCheckTool,
+    onboardingSummaryTool,
 
     // File system + search
     codeMapTool,

@@ -2480,6 +2480,237 @@ const sections: MockSection[] = [
       },
     ],
   },
+  {
+    title: "Domain Analysis Tools",
+    description: "Renderer families for domain analysis, audit, and intelligence tools.",
+    parts: [
+      {
+        type: "agents_md_sync",
+        toolName: "agents_md_sync",
+        toolResult: {
+          type: "agents_md_sync",
+          findings: [
+            {
+              severity: "error",
+              file: "src/lib/server/tools/AGENTS.md",
+              line: 42,
+              message: "Tool documented but not exported: old_browser_tool",
+              hint: "Remove stale documentation or re-export the tool.",
+            },
+            {
+              severity: "warning",
+              file: "src/lib/server/tools/index.ts",
+              message: "Tool exported but missing renderer mapping: component_map",
+            },
+          ],
+        },
+      },
+      {
+        type: "safe_rename_symbol",
+        toolName: "safe_rename_symbol",
+        toolResult: {
+          type: "safe_rename_symbol",
+          dryRun: true,
+          summary: "Rename WorkspaceSelector to WorkspacePicker",
+          patch:
+            "diff --git a/src/components/workspace-selector.tsx b/src/components/workspace-selector.tsx\n--- a/src/components/workspace-selector.tsx\n+++ b/src/components/workspace-selector.tsx\n@@ -1,4 +1,4 @@\n-export function WorkspaceSelector() {\n+export function WorkspacePicker() {\n   return <div />\n }\n",
+        },
+      },
+      {
+        type: "component_map",
+        toolName: "component_map",
+        toolResult: {
+          type: "component_map",
+          components: [
+            {
+              name: "ChatPanel",
+              file: "src/components/chat/chat-panel.tsx",
+              children: [
+                {
+                  name: "ChatInput",
+                  file: "src/components/chat/chat-input.tsx",
+                  props: ["value", "onSubmit"],
+                  usedBy: ["ChatPanel"],
+                },
+                {
+                  name: "ToolResultRenderer",
+                  file: "src/components/tools/renderers/tool-result-renderer.tsx",
+                  usedBy: ["ChatMessage"],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        type: "architecture_summary",
+        toolName: "architecture_summary",
+        toolResult: {
+          type: "architecture_summary",
+          domains: [
+            {
+              name: "chat",
+              fileCount: 18,
+              entry: "src/components/chat/chat-panel.tsx",
+              files: ["chat-panel.tsx", "chat-input.tsx"],
+            },
+            {
+              name: "tools",
+              fileCount: 52,
+              entry: "src/lib/server/tools/index.ts",
+              files: ["index.ts", "tool-policy.ts"],
+            },
+          ],
+          hotspots: [
+            {
+              path: "src/contexts/chat-context.tsx",
+              score: 88,
+              reasons: ["large file", "many state updates"],
+            },
+          ],
+        },
+      },
+      {
+        type: "test_gap_analysis",
+        toolName: "test_gap_analysis",
+        toolResult: {
+          type: "test_gap_analysis",
+          files: [
+            {
+              source: "src/lib/server/tools/code/code-ui-tools.ts",
+              hasTest: false,
+              suggestedTestFile: "src/lib/server/tools/code/code-ui-tools.test.ts",
+            },
+            {
+              source: "src/lib/server/runtime/tool-policy.ts",
+              hasTest: true,
+              testFile: "src/lib/server/runtime/tool-policy.test.ts",
+            },
+          ],
+        },
+      },
+      {
+        type: "agent_plan_create",
+        toolName: "agent_plan_create",
+        toolResult: {
+          type: "agent_plan_create",
+          steps: [
+            { status: "done", step: "Inspect renderer primitives" },
+            { status: "pending", step: "Wire new renderer families" },
+            { status: "blocked", step: "Run screenshots", detail: "No dev server yet" },
+          ],
+          risks: [
+            {
+              file: "src/components/tools/renderers/tool-result-renderer.tsx",
+              severity: "medium",
+              reason: "Central registry affects every tool result.",
+            },
+          ],
+        },
+      },
+      {
+        type: "responsive_screenshot_matrix",
+        toolName: "responsive_screenshot_matrix",
+        toolResult: {
+          type: "responsive_screenshot_matrix",
+          url: "http://localhost:3000/",
+          screenshots: [
+            { label: "mobile 375px", screenshot: screenshotDataUrl },
+            { label: "desktop 1440px", screenshot: screenshotDataUrl },
+          ],
+        },
+      },
+      {
+        type: "prisma_schema_inspect",
+        toolName: "prisma_schema_inspect",
+        toolResult: {
+          type: "prisma_schema_inspect",
+          models: [
+            {
+              name: "Session",
+              fields: [
+                { name: "id", type: "String", decorators: "@id" },
+                { name: "messages", type: "Json", decorators: "" },
+              ],
+            },
+          ],
+          mermaid: "erDiagram\n  Session ||--o{ Message : contains",
+        },
+      },
+      {
+        type: "github_pr_summary",
+        toolName: "github_pr_summary",
+        toolResult: {
+          type: "github_pr_summary",
+          title: "PR #142: add tool expansion renderers",
+          summary: "Adds renderer families and registry mappings for roadmap tools.",
+          risk: "medium",
+          files: [
+            {
+              path: "src/components/tools/renderers/tool-result-renderer.tsx",
+              additions: 120,
+              deletions: 2,
+            },
+          ],
+          commits: [{ sha: "f348fc4", message: "feat: add renderer families", author: "Ayush" }],
+        },
+      },
+      {
+        type: "bundle_analyze_summary",
+        toolName: "bundle_analyze_summary",
+        toolResult: {
+          type: "bundle_analyze_summary",
+          totalBytes: 842000,
+          packages: [
+            { name: "puppeteer-core", bytes: 312000, importedBy: "browser-core.ts" },
+            {
+              name: "react-syntax-highlighter",
+              bytes: 98000,
+              importedBy: "simple-code-editor.tsx",
+            },
+          ],
+        },
+      },
+      {
+        type: "workflow_inventory",
+        toolName: "workflow_inventory",
+        toolResult: {
+          type: "workflow_inventory",
+          workflows: [
+            { id: "deep_research", mode: "research", policy: "balanced", supportsBackground: true },
+            {
+              id: "workspace_audit",
+              mode: "workspace",
+              policy: "read_only",
+              supportsBackground: false,
+              source: "custom",
+            },
+          ],
+        },
+      },
+      {
+        type: "csv_profile",
+        toolName: "csv_profile",
+        toolResult: {
+          type: "csv_profile",
+          rows: 2413,
+          warnings: 1,
+          columns: [
+            {
+              name: "id",
+              type: "integer",
+              nulls: 0,
+              unique: 2413,
+              min: "1",
+              max: "2413",
+              sample: ["1", "2"],
+            },
+            { name: "status", type: "string", nulls: 12, unique: 4, sample: ["active", "pending"] },
+          ],
+        },
+      },
+    ],
+  },
 ]
 
 export default function RendererMockPage() {

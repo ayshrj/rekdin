@@ -217,6 +217,140 @@ const TOOL_GROUPS: Record<string, ToolGroup[]> = {
   json_to_csv: ["transforms"],
   xml_to_json: ["transforms", "workspace_read"],
   xpath_query: ["transforms", "workspace_read"],
+
+  // Cluster I — code intelligence (read-only analysis)
+  component_map: ["workspace_read", "repo"],
+  hook_map: ["workspace_read", "repo"],
+  state_flow_trace: ["workspace_read", "repo"],
+  type_dependency_trace: ["workspace_read", "repo"],
+  prop_drilling_trace: ["workspace_read", "repo"],
+  event_handler_trace: ["workspace_read", "repo"],
+
+  // Cluster J — refactoring (dry-run patch previews)
+  safe_rename_symbol: ["workspace_read", "repo"],
+  move_symbol_to_file: ["workspace_read", "repo"],
+  extract_function: ["workspace_read", "repo"],
+  extract_component: ["workspace_read", "repo"],
+  barrel_export_sync: ["workspace_read", "repo"],
+  import_rewrite: ["workspace_read", "repo"],
+  dead_imports_fix: ["workspace_read", "repo"],
+  module_boundary_check: ["workspace_read", "repo"],
+
+  // Cluster K — architecture analysis
+  architecture_summary: ["workspace_read", "repo"],
+  feature_map: ["workspace_read", "repo"],
+  ownership_map: ["workspace_read", "repo"],
+  complexity_hotspots: ["workspace_read", "repo"],
+  coupling_report: ["workspace_read", "repo"],
+  circular_dependency_check: ["workspace_read", "repo"],
+
+  // Cluster L — testing
+  test_gap_analysis: ["workspace_read", "repo"],
+  generate_unit_test_draft: ["workspace_read", "repo"],
+  test_failure_explain: ["workspace_read", "repo"],
+  snapshot_diff_explain: ["workspace_read", "repo"],
+  tool_contract_test_generate: ["workspace_read", "repo"],
+  mock_workspace_create: ["workspace_read", "repo"],
+
+  // Cluster M — agent planning
+  agent_plan_create: ["workspace_read", "repo"],
+  agent_plan_check: ["workspace_read", "repo"],
+  agent_worklog: ["workspace_read", "repo"],
+  agent_self_check: ["workspace_read", "repo"],
+  agent_diff_review: ["workspace_read", "repo"],
+  agent_regression_risk: ["workspace_read", "repo"],
+
+  // Cluster N — UI audit
+  tailwind_class_audit: ["workspace_read", "repo"],
+  component_design_audit: ["workspace_read", "repo"],
+  responsive_breakpoint_audit: ["workspace_read", "repo"],
+  accessibility_audit_static: ["workspace_read", "repo"],
+  storybook_story_generate: ["workspace_read", "repo"],
+  shadcn_usage_audit: ["workspace_read", "repo"],
+  icon_usage_map: ["workspace_read", "repo"],
+
+  // Cluster O — API contracts
+  api_contract_map: ["workspace_read", "repo"],
+  api_route_map: ["workspace_read", "repo"],
+  api_payload_infer: ["workspace_read", "repo"],
+  api_contract_diff: ["workspace_read", "repo"],
+  api_error_taxonomy: ["workspace_read", "repo"],
+
+  // Cluster P — database
+  prisma_schema_inspect: ["workspace_read", "repo"],
+  drizzle_schema_inspect: ["workspace_read", "repo"],
+  sql_schema_map: ["workspace_read", "repo"],
+  migration_diff_summary: ["workspace_read", "repo"],
+  erd_generate: ["workspace_read", "repo"],
+
+  // Cluster Q — docs
+  docs_index: ["workspace_read", "repo"],
+  docs_missing_report: ["workspace_read", "repo"],
+  readme_generate_or_update: ["workspace_read", "repo"],
+  agents_md_sync: ["workspace_read", "repo"],
+  changelog_generate: ["workspace_read", "repo"],
+  release_notes_generate: ["workspace_read", "repo"],
+
+  // Cluster R — security audits
+  auth_flow_audit: ["workspace_read", "repo"],
+  permission_boundary_audit: ["workspace_read", "repo"],
+  dangerous_command_detect: ["workspace_read", "repo"],
+  dependency_confusion_check: ["workspace_read", "repo"],
+  env_usage_audit: ["workspace_read", "repo"],
+  client_secret_leak_check: ["workspace_read", "repo"],
+
+  // Cluster S — performance and Next.js audits
+  bundle_analyze_summary: ["workspace_read", "repo"],
+  large_dependency_report: ["workspace_read", "repo"],
+  client_boundary_audit: ["workspace_read", "repo"],
+  render_risk_audit: ["workspace_read", "repo"],
+  asset_size_audit: ["workspace_read", "repo"],
+  next_route_segment_map: ["workspace_read", "repo"],
+  server_client_boundary_map: ["workspace_read", "repo"],
+  next_metadata_audit: ["workspace_read", "repo"],
+  next_image_audit: ["workspace_read", "repo"],
+  next_api_runtime_audit: ["workspace_read", "repo"],
+
+  // Cluster T — GitHub (network + read)
+  github_pr_summary: ["network", "workspace_read"],
+  github_issue_triage: ["network", "workspace_read"],
+  github_action_logs_analyze: ["network", "workspace_read"],
+  pr_description_generate: ["workspace_read", "repo"],
+  branch_cleanup_candidates: ["workspace_read", "repo"],
+
+  // Cluster U — artifacts and dev helpers
+  artifact_preview: ["workspace_read", "repo"],
+  artifact_convert: ["workspace_read", "repo"],
+  artifact_bundle: ["workspace_read", "repo"],
+  todo_to_issues: ["workspace_read", "repo"],
+  env_example_generate: ["workspace_read", "repo"],
+  setup_health_check: ["workspace_read", "repo"],
+  onboarding_summary: ["workspace_read", "repo"],
+
+  // Cluster V — browser visual analysis
+  screenshot_compare: ["browser_read"],
+  page_visual_audit: ["browser_read"],
+  responsive_screenshot_matrix: ["browser_read"],
+  dom_layout_box_map: ["browser_read"],
+  css_computed_style_extract: ["browser_read"],
+
+  // Cluster W — LLM and workflow helpers
+  postman_collection_generate: ["transforms", "workspace_read"],
+  curl_from_api_call: ["transforms", "workspace_read"],
+  prompt_lint: ["transforms", "workspace_read"],
+  json_output_repair: ["transforms", "workspace_read"],
+  schema_from_examples: ["transforms", "workspace_read"],
+  examples_validate_against_schema: ["transforms", "workspace_read"],
+  eval_case_generate: ["transforms", "workspace_read"],
+  llm_response_audit: ["transforms", "workspace_read"],
+  workflow_inventory: ["transforms", "workspace_read"],
+  workflow_validate: ["transforms", "workspace_read"],
+  workflow_run_dry: ["transforms", "workspace_read"],
+  workflow_compare: ["transforms", "workspace_read"],
+  log_parse: ["transforms", "workspace_read"],
+  log_error_cluster: ["transforms", "workspace_read"],
+  csv_profile: ["transforms", "workspace_read"],
+  json_profile: ["transforms", "workspace_read"],
 }
 
 const GROUPS_BY_MODE: Record<AgentMode, ToolGroup[]> = {

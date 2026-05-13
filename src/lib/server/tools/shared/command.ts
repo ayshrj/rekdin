@@ -2,6 +2,7 @@ import { spawn } from "child_process"
 import os from "os"
 
 import { ensureWorkspaceDirs, getWorkspaceRoot, resolveWorkspacePath } from "../../workspace"
+import { truncateString } from "./formatting"
 
 /**
  * Runs a shell command inside the configured Rekdin workspace boundary.
@@ -74,4 +75,13 @@ export async function runCommandUnsafe(command: string, cwd?: string, timeoutMs 
 
 export function safeShellArg(value: string) {
   return `'${value.replace(/'/g, "'\"'\"'")}'`
+}
+
+export async function gitOutput(command: string, timeoutMs = 30_000) {
+  const result = await runCommandUnsafe(command, getWorkspaceRoot(), timeoutMs)
+  return {
+    exitCode: result.exitCode,
+    stdout: truncateString(result.stdout, 20_000),
+    stderr: truncateString(result.stderr, 4000),
+  }
 }
