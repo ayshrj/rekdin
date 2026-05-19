@@ -50,6 +50,11 @@ export function TestGapRenderer({ part }: { part: ToolResultContentPart }) {
           <ToolStatusBadge variant={missing.length ? "warning" : "success"}>
             {missing.length} missing
           </ToolStatusBadge>
+          {rows.length > 0 && (
+            <ToolStatusBadge variant={covered.length === rows.length ? "success" : "neutral"}>
+              {Math.round((covered.length / rows.length) * 100)}% covered
+            </ToolStatusBadge>
+          )}
         </>
       }
       footer={<RawPayloadDisclosure payload={result} />}
@@ -68,11 +73,11 @@ export function TestGapRenderer({ part }: { part: ToolResultContentPart }) {
       {visible.length === 0 ? (
         <EmptyState>No files in this view</EmptyState>
       ) : (
-        <div className="max-h-[44vh] divide-y overflow-auto">
-          {visible.map((row) => (
-            <div key={stableKey(row.source, row.testFile)} className="px-3 py-2">
+        <div className="rk-scrollbar max-h-[44vh] divide-y overflow-auto">
+          {visible.map((row, i) => (
+            <div key={stableKey(row.source, row.testFile) || i} className="px-3 py-2">
               <div className="flex min-w-0 items-center gap-2">
-                <ToolStatusBadge variant={row.covered ? "success" : "error"}>
+                <ToolStatusBadge variant={row.covered ? "success" : "warning"}>
                   {row.covered ? "TESTED" : "NO TEST"}
                 </ToolStatusBadge>
                 <span className="rk-path-chip min-w-0 flex-1 truncate">
