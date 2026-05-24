@@ -415,6 +415,28 @@ export function WorkspacePanel({ onChangeWorkspace }: { onChangeWorkspace?: () =
     }
   }, [toolResults])
 
+  React.useEffect(() => {
+    const SUB_TAB_MAP: Record<string, "timeline" | "artifacts" | "replay"> = {
+      timeline: "timeline",
+      workspace: "timeline",
+      background_jobs: "timeline",
+      artifacts: "artifacts",
+      replay: "replay",
+      traces: "replay",
+    }
+    const handler = (e: Event) => {
+      const { action, payload } = (
+        e as CustomEvent<{ action: string; payload?: Record<string, unknown> }>
+      ).detail
+      if (action === "navigate" && payload?.target) {
+        const tab = SUB_TAB_MAP[payload.target as string]
+        if (tab) setActiveTab(tab)
+      }
+    }
+    window.addEventListener("rekdin:ui-action", handler)
+    return () => window.removeEventListener("rekdin:ui-action", handler)
+  }, [])
+
   const scrollToBottom = React.useCallback((behavior: ScrollBehavior = "smooth") => {
     const el = scrollContainerRef.current
     if (!el) return

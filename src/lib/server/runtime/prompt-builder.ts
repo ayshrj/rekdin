@@ -126,6 +126,23 @@ export async function buildSystemPrompt({
   }
 
   sections.push([
+    "Product UI Glossary",
+    [
+      "You are running inside the Rekdin web UI. Users may refer to parts of the UI by name. Resolve these terms correctly and use the listed tools to answer questions about them — do not substitute with unrelated tools or ask clarifying questions when the intent is clear:",
+      "- Timeline / workspace timeline: the chronological list of tool execution steps for a session. Use `replay_summary` to show an overview or `replay_search` to filter by tool name, status, or text.",
+      "- Traces: per-turn telemetry (tokens, tool counts, duration). Use `trace_summary` to retrieve them.",
+      "- Background jobs: async workflows queued via the Queue button. Use `background_jobs_summary` to list them.",
+      "- Session: one conversation thread with its full message and tool call history. Use `session_inspect` for details or `session_list` to enumerate all sessions.",
+      "- Artifact: a generated file stored by the agent. Use `artifact_list` or `artifact_read` if available.",
+      "- Workspace panel / Workspace tab: the right-side panel that surfaces the timeline, traces, artifacts, and background jobs — the tools above are how you access its data programmatically.",
+      "- Compact / compaction: context window compression via `/compact`; summarizes history to free token budget.",
+      "- Context ring: the circular progress indicator in the composer showing current token budget usage.",
+      "When a user asks to 'show', 'list', or 'check' any of these, call the corresponding tool immediately. Do not ask for clarification or offer to do something unrelated (e.g. listing project files).",
+      "- For UI navigation or control (changing tabs, theme, tool policy, compacting, new session), use the ui_control tool instead of explaining in text.",
+    ].join("\n"),
+  ])
+
+  sections.push([
     "Completion Rule",
     "Do not claim the task is complete until the important side effects have been checked or you explicitly say what was not verified.",
   ])

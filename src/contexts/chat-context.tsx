@@ -1557,6 +1557,21 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                   logger.debug("Tool result updated with Cloudinary URL", normalizedEntry)
                 })()
                 logger.debug("Tool result received", entry)
+                if (
+                  rawToolCall.name === "ui_control" &&
+                  rawToolCall.result &&
+                  typeof rawToolCall.result === "object" &&
+                  (rawToolCall.result as Record<string, unknown>).type === "ui_action"
+                ) {
+                  const { action, payload } = rawToolCall.result as {
+                    type: string
+                    action: string
+                    payload?: Record<string, unknown>
+                  }
+                  window.dispatchEvent(
+                    new CustomEvent("rekdin:ui-action", { detail: { action, payload } })
+                  )
+                }
               }
               break
             case "warning":

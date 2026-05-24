@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/sheet"
 import { WorkspacePanel } from "@/components/workspace-panel"
 import { useChat } from "@/contexts/chat-context"
-import { Clock, GalleryVerticalEnd, GitHub, Rekdin, Sparkles } from "@/lib/icons"
+import { Clock, GalleryVerticalEnd, GitHub, Plus, Rekdin, Sparkles } from "@/lib/icons"
 import { getProviderLabel } from "@/lib/llm-providers"
 import { cn } from "@/lib/utils"
 
@@ -178,27 +178,54 @@ function DesktopRail({
   providerLabel,
   sessionsOpen,
   onToggleSessions,
+  onCreateSession,
   onRestartTour,
+  isCreating,
 }: {
   connected: boolean
   providerLabel: string
   sessionsOpen: boolean
   onToggleSessions: () => void
+  onCreateSession: () => void
   onRestartTour: () => void
+  isCreating?: boolean
 }) {
   return (
     <aside
       className="bg-surface-1 border-border hidden h-dvh shrink-0 overflow-hidden border-r transition-[width] duration-200 ease-out sm:flex"
       style={{ width: sessionsOpen ? 300 : 56 }}
     >
+      {/* Icon column — always 56 px wide */}
       <div className="border-border bg-surface-1 flex w-14 shrink-0 flex-col border-r">
+        {/* Logo */}
         <div className="flex h-14 items-center justify-center">
           <div className="bg-surface-3 flex size-8 items-center justify-center rounded-lg">
             <Rekdin className="text-primary h-4 w-4" />
           </div>
         </div>
 
-        <div className="flex flex-col items-center gap-2 px-2 pt-2">
+        <div className="flex flex-col items-center gap-2 px-2 pt-1">
+          {/* ── New session — always reachable, even when sidebar is collapsed ── */}
+          <button
+            type="button"
+            onClick={onCreateSession}
+            disabled={isCreating}
+            aria-label="New session"
+            title="New session (⌘N)"
+            className={cn(
+              "rk-icon-button border-primary/20 bg-primary/10 text-primary border",
+              "hover:border-primary/35 hover:bg-primary/20",
+              "disabled:pointer-events-none disabled:opacity-40",
+              "transition-all duration-150"
+            )}
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+
+          {/* Thin separator so the new-session btn reads as distinct from nav */}
+          <div className="border-border w-6 border-t" />
+
+          {/* Session history toggle */}
           <button
             id="tour-sidebar-btn"
             type="button"
@@ -208,6 +235,8 @@ function DesktopRail({
           >
             <Clock className="h-4 w-4" />
           </button>
+
+          {/* Settings */}
           <div id="tour-settings">
             <OpenRouterSettings
               triggerVariant="ghost"
@@ -216,7 +245,9 @@ function DesktopRail({
               onRestartTour={onRestartTour}
             />
           </div>
+
           <ThemeToggle />
+
           <a
             href="https://github.com/ayshrj"
             target="_blank"
@@ -229,6 +260,7 @@ function DesktopRail({
         </div>
       </div>
 
+      {/* Expandable sessions panel */}
       {sessionsOpen ? (
         <div className="bg-surface-2 flex min-w-0 flex-1 flex-col">
           <div className="bg-surface-3 border-border flex h-14 shrink-0 items-center border-b px-3">
@@ -249,7 +281,7 @@ function DesktopRail({
 }
 
 function HomePageContent() {
-  const { connected, llmProvider } = useChat()
+  const { connected, llmProvider, createSession, isLoading } = useChat()
   const isPhone = useIsPhone()
   const viewportReady = isPhone !== null
   const isPhoneLayout = isPhone === true
@@ -274,6 +306,27 @@ function HomePageContent() {
   const { restartTour } = useTour()
 
   const providerLabel = getProviderLabel(llmProvider)
+
+  // ── Instant new session from the rail (no sidebar open required) ──────────
+  const handleRailNewSession = React.useCallback(async () => {
+    await createSession()
+    // Optionally open the sidebar so the user sees the new entry animate in.
+    // Remove the line below if you prefer the sidebar to stay as-is.
+    setSidebarOpen(true)
+  }, [createSession])
+
+  // ⌘N / Ctrl+N shortcut — works regardless of sidebar state
+  React.useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "n" && !isPhoneLayout) {
+        e.preventDefault()
+        void handleRailNewSession()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [handleRailNewSession, isPhoneLayout])
+
   const openWorkspaceSelector = React.useCallback(() => {
     if (isPhoneLayout) {
       setMobilePanel("chat")
@@ -282,7 +335,6 @@ function HomePageContent() {
       }, 0)
       return
     }
-
     window.dispatchEvent(new CustomEvent("rekdin:open-workspace"))
   }, [isPhoneLayout])
 
@@ -299,6 +351,8 @@ function HomePageContent() {
             providerLabel={providerLabel}
             sessionsOpen={sidebarOpen}
             onToggleSessions={() => setSidebarOpen((open) => !open)}
+            onCreateSession={handleRailNewSession}
+            isCreating={isLoading}
             onRestartTour={restartTour}
           />
           <main className="min-w-0 flex-1 overflow-hidden">

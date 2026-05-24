@@ -14,6 +14,19 @@ export function ThemeToggle() {
     setMounted(true)
   }, [])
 
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const { action, payload } = (
+        e as CustomEvent<{ action: string; payload?: Record<string, unknown> }>
+      ).detail
+      if (action === "set_theme" && typeof payload?.theme === "string") {
+        setTheme(payload.theme)
+      }
+    }
+    window.addEventListener("rekdin:ui-action", handler)
+    return () => window.removeEventListener("rekdin:ui-action", handler)
+  }, [setTheme])
+
   const toggleTheme = React.useCallback(() => {
     setTheme(resolvedTheme === "dark" ? "light" : "dark")
   }, [resolvedTheme, setTheme])

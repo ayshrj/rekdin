@@ -336,6 +336,7 @@ import {
   storybookStoryGenerateTool,
   tailwindClassAuditTool,
 } from "./ui/ui-audit-tools"
+import { uiControlTool } from "./ui/ui-control-tool"
 import { archiveCreateTool, archiveExtractTool } from "./utilities/archive-tools"
 import { hashTool } from "./utilities/crypto-tools"
 import { jwtDecodeTool, uuidGenerateTool } from "./utilities/crypto-tools"
@@ -566,7 +567,8 @@ export function createToolset(context?: { headers?: HeadersInit; allowedToolName
     toolContractTestGenerateTool,
     mockWorkspaceCreateTool,
 
-    // UI audit tools
+    // UI control + audit tools
+    uiControlTool,
     tailwindClassAuditTool,
     componentDesignAuditTool,
     responsiveBreakpointAuditTool,

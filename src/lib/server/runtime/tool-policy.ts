@@ -260,7 +260,8 @@ const TOOL_GROUPS: Record<string, ToolGroup[]> = {
   agent_diff_review: ["workspace_read", "repo"],
   agent_regression_risk: ["workspace_read", "repo"],
 
-  // Cluster N — UI audit
+  // Cluster N — UI audit + control
+  ui_control: ["transforms"],
   tailwind_class_audit: ["workspace_read", "repo"],
   component_design_audit: ["workspace_read", "repo"],
   responsive_breakpoint_audit: ["workspace_read", "repo"],

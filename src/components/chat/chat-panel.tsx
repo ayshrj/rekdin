@@ -932,6 +932,31 @@ export function ChatPanel() {
     [applyCompaction, currentSessionId]
   )
 
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const { action, payload } = (
+        e as CustomEvent<{ action: string; payload?: Record<string, unknown> }>
+      ).detail
+      if (action === "navigate") {
+        setShowWorkspaceSelector(payload?.target !== "chat")
+      } else if (action === "set_tool_policy" && isToolPolicyProfile(payload?.policy)) {
+        setToolPolicy(payload.policy as ToolPolicyProfile)
+      } else if (action === "compact") {
+        void triggerCompact()
+      } else if (action === "new_session") {
+        void createSession()
+      } else if (action === "open_settings") {
+        window.dispatchEvent(
+          new CustomEvent("rekdin:open-settings", {
+            detail: { tab: payload?.tab ?? "model" },
+          })
+        )
+      }
+    }
+    window.addEventListener("rekdin:ui-action", handler)
+    return () => window.removeEventListener("rekdin:ui-action", handler)
+  }, [createSession, triggerCompact])
+
   const retryLastUserMessage = React.useCallback(async () => {
     const lastUser = [...messages].reverse().find((message) => message.role === "user")
     if (!lastUser) {
