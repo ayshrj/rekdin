@@ -3,6 +3,7 @@ import path from "path"
 
 import { AgentMode, ToolPolicyProfile } from "@/types/runtime"
 
+import { readMemory } from "../memory-store"
 import { BLOCKED_WORKSPACE_DIRECTORIES, ensureWorkspaceDirs, getWorkspaceRoot } from "../workspace"
 
 type PromptInput = {
@@ -72,7 +73,10 @@ export async function buildSystemPrompt({
   const workspaceRoot = inputWorkspaceRoot?.trim()
     ? path.resolve(inputWorkspaceRoot)
     : getWorkspaceRoot()
-  const workspaceInstructions = await loadWorkspaceInstructions(workspaceRoot)
+  const [workspaceInstructions, agentMemory] = await Promise.all([
+    loadWorkspaceInstructions(workspaceRoot),
+    readMemory(),
+  ])
   const sections = [
     [
       "Identity",
@@ -111,6 +115,13 @@ export async function buildSystemPrompt({
 
   if (workspaceInstructions) {
     sections.push(["Workspace Memory", workspaceInstructions])
+  }
+
+  if (agentMemory?.trim()) {
+    sections.push([
+      "Remembered Facts",
+      `The user has saved the following facts about this workspace. Apply them as context:\n\n${agentMemory.trim()}`,
+    ])
   }
 
   if (responseSchema) {

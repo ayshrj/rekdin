@@ -11,7 +11,6 @@ import { storeArtifact } from "../../artifact-store"
 import { truncateString } from "../shared/formatting"
 import {
   centerOfSelector,
-  getBrowser,
   goto,
   screenshotArtifact,
   screenshotDataUrl,

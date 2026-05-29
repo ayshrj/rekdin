@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { boundedLimit, previewString } from "../shared/formatting"
+import { boundedLimit } from "../shared/formatting"
 import { inferJsonSchema, safeJsonParse } from "../shared/json"
 import { finding, toolDefinition } from "../shared/tool-base"
 

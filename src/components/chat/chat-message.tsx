@@ -9,6 +9,7 @@ import {
   ArrowRight,
   Check,
   ClipboardDocumentList as Copy,
+  FileSearch,
   PencilSquare,
   Plus,
   RekdinIcon,
@@ -26,6 +27,17 @@ interface ChatMessageProps {
   onEdit?: (messageId: string) => void
   onToggleStar?: (messageId: string) => void
   onFork?: (messageId: string) => void
+}
+
+const FILE_PATH_RE =
+  /\b((?:src|lib|app|components?|pages?|hooks?|utils?|types?|contexts?|api|tests?|__tests?__|styles?|public|docs?|scripts?|config|server|client|shared)\/[\w./\-@]+\.\w{1,6})\b/g
+
+function extractFileMentions(content: string): string[] {
+  const matches = new Set<string>()
+  for (const match of content.matchAll(FILE_PATH_RE)) {
+    if (match[1]) matches.add(match[1])
+  }
+  return Array.from(matches).slice(0, 8)
 }
 
 function looksLikeJsonDraft(content: string) {
@@ -112,6 +124,7 @@ export function ChatMessage({
   onFork,
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false)
+  const [toolCallsExpanded, setToolCallsExpanded] = useState(false)
   const isUser = message.role === "user"
   const workflowId = message.metadata?.workflowId
   const workflow = getWorkflowPreset(workflowId)
@@ -502,22 +515,63 @@ export function ChatMessage({
             </div>
           )}
 
-          {/* Tool call chips */}
+          {/* Tool call chips — collapsible thread */}
           {message.toolCalls && message.toolCalls.length > 0 && (
-            <div className="rk-tool-chips">
-              {message.toolCalls.slice(0, 4).map((call) => (
-                <span key={call.id ?? call.name} className="rk-tool-chip">
-                  <ToolDot name={call.name} />
-                  {toolLabels[call.name] ?? call.name}
-                </span>
-              ))}
-              {message.toolCalls.length > 4 && (
-                <span className="rk-tool-chip rk-tool-chip--overflow">
-                  +{message.toolCalls.length - 4} more
-                </span>
-              )}
+            <div>
+              <div className="rk-tool-chips">
+                {(toolCallsExpanded ? message.toolCalls : message.toolCalls.slice(0, 3)).map(
+                  (call) => (
+                    <span
+                      key={call.id ?? call.name}
+                      className="rk-tool-chip"
+                      onClick={() =>
+                        window.dispatchEvent(
+                          new CustomEvent("rekdin:ui-action", {
+                            detail: { action: "navigate", payload: { target: "timeline" } },
+                          })
+                        )
+                      }
+                      style={{ cursor: "pointer" }}
+                      title="View in Timeline"
+                    >
+                      <ToolDot name={call.name} />
+                      {toolLabels[call.name] ?? call.name}
+                    </span>
+                  )
+                )}
+                {message.toolCalls.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setToolCallsExpanded((e) => !e)}
+                    className="rk-tool-chip rk-tool-chip--overflow cursor-pointer select-none"
+                  >
+                    {toolCallsExpanded ? "▲ collapse" : `+${message.toolCalls.length - 3} more`}
+                  </button>
+                )}
+              </div>
             </div>
           )}
+
+          {/* File mention previews */}
+          {!isUser &&
+            (() => {
+              const mentions = extractFileMentions(message.content || "")
+              if (mentions.length === 0) return null
+              return (
+                <div className="flex flex-wrap gap-1">
+                  {mentions.map((path) => (
+                    <span
+                      key={path}
+                      className="rk-meta-chip flex items-center gap-1 font-mono text-[10px]"
+                      title={path}
+                    >
+                      <FileSearch className="h-2.5 w-2.5 shrink-0 opacity-60" />
+                      {path.length > 40 ? `…${path.slice(-38)}` : path}
+                    </span>
+                  ))}
+                </div>
+              )
+            })()}
         </div>
       </div>
     </div>

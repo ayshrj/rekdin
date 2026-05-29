@@ -4,9 +4,42 @@ import * as React from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import { SLASH_COMMANDS, SlashCommandDefinition } from "@/lib/commands"
-import { Loader, PaperAirplane as Send, PaperClip, XMark } from "@/lib/icons"
+import {
+  BookOpen,
+  Loader,
+  MicrophoneIcon,
+  PaperAirplane as Send,
+  PaperClip,
+  XMark,
+} from "@/lib/icons"
+
+// Web Speech API — not in lib.dom.d.ts; typed minimally here
+interface SpeechRec extends EventTarget {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  start(): void
+  stop(): void
+  onresult:
+    | ((e: { results: { [i: number]: { [i: number]: { transcript: string } } } }) => void)
+    | null
+  onend: (() => void) | null
+  onerror: (() => void) | null
+}
+type SpeechRecCtor = new () => SpeechRec
+type WinWithSR = typeof window & {
+  SpeechRecognition?: SpeechRecCtor
+  webkitSpeechRecognition?: SpeechRecCtor
+}
+
+function getSR(): SpeechRecCtor | undefined {
+  if (typeof window === "undefined") return undefined
+  const w = window as WinWithSR
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition
+}
 
 interface ChatInputProps {
   value: string
@@ -32,9 +65,70 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
 ) {
   const [attachments, setAttachments] = React.useState<File[]>([])
   const [activeCommandIndex, setActiveCommandIndex] = React.useState(0)
+  const [isListening, setIsListening] = React.useState(false)
+  const [promptLibOpen, setPromptLibOpen] = React.useState(false)
+  const [savedPrompts, setSavedPrompts] = React.useState<Array<{ id: string; text: string }>>([])
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem("rekdin-prompt-library")
+      if (raw) setSavedPrompts(JSON.parse(raw) as Array<{ id: string; text: string }>)
+    } catch {
+      /* ignore */
+    }
+  }, [promptLibOpen])
+
+  const savePrompt = React.useCallback(() => {
+    if (!value.trim()) return
+    const next = [{ id: Date.now().toString(), text: value.trim() }, ...savedPrompts].slice(0, 20)
+    setSavedPrompts(next)
+    try {
+      localStorage.setItem("rekdin-prompt-library", JSON.stringify(next))
+    } catch {
+      /* ignore */
+    }
+  }, [value, savedPrompts])
+
+  const deletePrompt = React.useCallback(
+    (id: string) => {
+      const next = savedPrompts.filter((p) => p.id !== id)
+      setSavedPrompts(next)
+      try {
+        localStorage.setItem("rekdin-prompt-library", JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+    },
+    [savedPrompts]
+  )
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null)
   const commandItemRefs = React.useRef<Array<HTMLButtonElement | null>>([])
+  const recognitionRef = React.useRef<SpeechRec | null>(null)
+  const supportsVoice = typeof window !== "undefined" && !!getSR()
+
+  const toggleVoice = React.useCallback(() => {
+    if (isListening) {
+      recognitionRef.current?.stop()
+      setIsListening(false)
+      return
+    }
+    const SR = getSR()
+    if (!SR) return
+    const rec = new SR()
+    rec.continuous = false
+    rec.interimResults = false
+    rec.lang = "en-US"
+    rec.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript ?? ""
+      if (transcript) onValueChange((value ? value + " " : "") + transcript)
+    }
+    rec.onend = () => setIsListening(false)
+    rec.onerror = () => setIsListening(false)
+    recognitionRef.current = rec
+    rec.start()
+    setIsListening(true)
+  }, [isListening, onValueChange, value])
 
   // ── Slash command matching ────────────────────────────────────────────────
   const slashQuery = React.useMemo(() => {
@@ -208,6 +302,92 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
             <PaperClip className="h-3.5 w-3.5" />
             <span className="sr-only">Attach files</span>
           </Button>
+
+          {/* Prompt library */}
+          <Popover open={promptLibOpen} onOpenChange={setPromptLibOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className={
+                  promptLibOpen
+                    ? "text-primary bg-primary/10 h-8 w-8 shrink-0 rounded-md"
+                    : "text-muted-foreground hover:bg-surface-5 hover:text-foreground h-8 w-8 shrink-0 rounded-md"
+                }
+                disabled={disabled || isLoading}
+                aria-label="Prompt library"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" side="top" className="w-80 p-0">
+              <div className="border-border flex items-center justify-between border-b px-3 py-2">
+                <span className="text-foreground text-xs font-semibold">Prompt library</span>
+                <button
+                  type="button"
+                  onClick={savePrompt}
+                  disabled={!value.trim()}
+                  className="text-primary disabled:text-muted-foreground text-[11px] font-medium hover:underline disabled:cursor-not-allowed"
+                >
+                  + Save current
+                </button>
+              </div>
+              {savedPrompts.length === 0 ? (
+                <p className="text-muted-foreground px-3 py-4 text-center text-xs">
+                  No saved prompts yet. Type something and click &quot;+ Save current&quot;.
+                </p>
+              ) : (
+                <div className="rk-scrollbar max-h-60 overflow-y-auto">
+                  {savedPrompts.map((p) => (
+                    <div
+                      key={p.id}
+                      className="border-border hover:bg-surface-3 group flex items-start gap-2 border-b px-3 py-2 last:border-0"
+                    >
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => {
+                          onValueChange(p.text)
+                          setPromptLibOpen(false)
+                          setTimeout(() => textareaRef.current?.focus(), 0)
+                        }}
+                      >
+                        <span className="text-foreground line-clamp-2 text-xs">{p.text}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deletePrompt(p.id)}
+                        className="text-muted-foreground hover:text-destructive mt-0.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                        aria-label="Delete prompt"
+                      >
+                        <XMark className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+
+          {/* Voice input */}
+          {supportsVoice && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className={
+                isListening
+                  ? "text-destructive hover:bg-destructive/10 h-8 w-8 shrink-0 rounded-md"
+                  : "text-muted-foreground hover:bg-surface-5 hover:text-foreground h-8 w-8 shrink-0 rounded-md"
+              }
+              onClick={toggleVoice}
+              disabled={disabled || isLoading}
+              aria-label={isListening ? "Stop recording" : "Start voice input"}
+            >
+              <MicrophoneIcon className={`h-3.5 w-3.5 ${isListening ? "animate-pulse" : ""}`} />
+            </Button>
+          )}
 
           {/* Textarea */}
           <Textarea

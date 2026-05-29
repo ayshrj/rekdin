@@ -14,7 +14,9 @@ import {
   ArrowPath,
   Bolt,
   ClipboardDocumentList,
+  Clock,
   Cog8Tooth,
+  CommandLine,
   ContextUsageRingIcon,
   CursorArrowRays,
   Eye,
@@ -534,6 +536,7 @@ export function ChatPanel() {
     forkSessionFromMessage,
     appendStatusMessage,
     updateLlmSettings,
+    joinSession,
   } = useChat()
 
   // ── Refs ────────────────────────────────────────────────────────────────────
@@ -957,6 +960,12 @@ export function ChatPanel() {
     return () => window.removeEventListener("rekdin:ui-action", handler)
   }, [createSession, triggerCompact])
 
+  // Extended ui-action handler for actions that need handleSend / sendMessage context.
+  // Separated so it can reference callbacks defined later in the component.
+  const extendedUiActionRef = React.useRef<
+    ((action: string, payload: Record<string, unknown> | undefined) => void) | null
+  >(null)
+
   const retryLastUserMessage = React.useCallback(async () => {
     const lastUser = [...messages].reverse().find((message) => message.role === "user")
     if (!lastUser) {
@@ -1098,6 +1107,29 @@ export function ChatPanel() {
           switchModel(args)
           return
         }
+        if (command.id === "remember") {
+          if (!args.trim()) {
+            toast.error("Usage: /remember <fact>")
+            return
+          }
+          const res = await fetch("/api/memory", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fact: args.trim() }),
+          })
+          if (res.ok)
+            toast.success(
+              `Remembered: "${args.trim().slice(0, 60)}${args.trim().length > 60 ? "…" : ""}"`
+            )
+          else toast.error("Failed to save memory.")
+          return
+        }
+        if (command.id === "forget") {
+          const res = await fetch("/api/memory", { method: "DELETE" })
+          if (res.ok) toast.success("Agent memory cleared.")
+          else toast.error("Failed to clear memory.")
+          return
+        }
       }
 
       const wf = selectedWorkflowId
@@ -1125,6 +1157,47 @@ export function ChatPanel() {
       workflowPresets,
     ]
   )
+
+  // Keep ref current so the stable event listener below always calls latest callbacks.
+  React.useLayoutEffect(() => {
+    extendedUiActionRef.current = (action, payload) => {
+      if (action === "run_workflow") {
+        const wfId = payload?.workflowId as string | undefined
+        const wf = workflowPresets.find((w) => w.id === wfId)
+        if (wf) {
+          void sendMessage(wf.prompt, [], {
+            agentType: wf.mode,
+            toolPolicy: wf.toolPolicy ?? toolPolicy,
+            workflowId: wf.id,
+            responseSchema: wf.responseSchema ?? null,
+          })
+        }
+      } else if (action === "export") {
+        if (currentSessionId) {
+          window.open(`/api/sessions/${currentSessionId}/export`, "_blank", "noopener,noreferrer")
+        }
+      } else if (action === "status") {
+        void appendStatus()
+      } else if (action === "retry") {
+        void retryLastUserMessage()
+      } else if (action === "help") {
+        setShowCommandHelp(true)
+      } else if (action === "research" || action === "audit" || action === "diff") {
+        void handleSend(`/${action}`, [])
+      }
+    }
+  })
+
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const { action, payload } = (
+        e as CustomEvent<{ action: string; payload?: Record<string, unknown> }>
+      ).detail
+      extendedUiActionRef.current?.(action, payload)
+    }
+    window.addEventListener("rekdin:ui-action", handler)
+    return () => window.removeEventListener("rekdin:ui-action", handler)
+  }, [])
 
   // ── Error state ──────────────────────────────────────────────────────────────
   const lastMsg = messages[messages.length - 1]
@@ -1308,9 +1381,9 @@ export function ChatPanel() {
               <div ref={innerContentRef} className="flex w-full flex-col">
                 {/* ── Empty state ──────────────────────────────────────────────── */}
                 {messages.length === 0 ? (
-                  <div className="mx-auto flex min-h-full w-full max-w-xl flex-col justify-center py-10">
+                  <div className="mx-auto flex min-h-full w-full max-w-xl flex-col justify-center py-8">
                     {/* Logo + intro */}
-                    <div className="mb-8 text-center">
+                    <div className="mb-7 text-center">
                       <div className="border-border bg-surface-3 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border">
                         <RekdinIcon className="text-primary h-6 w-6" />
                       </div>
@@ -1319,6 +1392,53 @@ export function ChatPanel() {
                         Research, automate, and inspect every tool execution — workspace trail
                         always visible.
                       </p>
+                    </div>
+
+                    {/* Recent sessions */}
+                    {sessions.length > 0 && (
+                      <div className="mb-6">
+                        <p className="rk-section-label mb-2.5">Recent sessions</p>
+                        <div className="space-y-1.5">
+                          {sessions.slice(0, 3).map((s) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => void joinSession(s.id)}
+                              className="border-border bg-surface-3 hover:bg-surface-4 flex w-full items-center gap-2.5 rounded-md border px-3 py-2 text-left transition-colors"
+                            >
+                              <Clock className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                              <span className="text-foreground min-w-0 flex-1 truncate text-xs font-medium">
+                                {s.title || "Untitled"}
+                              </span>
+                              <span className="text-muted-foreground shrink-0 text-[10px]">
+                                {new Date(s.createdAt).toLocaleDateString(undefined, {
+                                  month: "short",
+                                  day: "numeric",
+                                })}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quick commands */}
+                    <div className="mb-6">
+                      <p className="rk-section-label mb-2.5">Quick commands</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {["/research", "/audit", "/diff", "/status", "/workspace"].map((cmd) => (
+                          <button
+                            key={cmd}
+                            type="button"
+                            disabled={isLoading || isThinking}
+                            onClick={() => setInputValue(cmd + " ")}
+                            className="border-border bg-surface-3 hover:bg-surface-4 text-muted-foreground hover:text-foreground flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors"
+                          >
+                            <CommandLine className="h-3 w-3 shrink-0" />
+                            <span className="font-mono text-[11px]">{cmd}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     {/* Capabilities grid */}
@@ -1562,6 +1682,45 @@ export function ChatPanel() {
           </div>
         )}
       </div>
+
+      {/* ── Status bar ──────────────────────────────────────────────────────── */}
+      <footer className="border-border bg-surface-1 border-t px-3 py-1">
+        <div className="text-muted-foreground flex min-w-0 items-center gap-2.5 font-mono text-[10px]">
+          <span className="flex shrink-0 items-center gap-1">
+            <span
+              className={cn(
+                "inline-block h-1.5 w-1.5 rounded-full",
+                isLoading || isThinking ? "bg-primary animate-pulse" : "bg-status-success"
+              )}
+            />
+            {llmProvider}
+          </span>
+          {activeModel && (
+            <>
+              <span className="text-border">·</span>
+              <span className="max-w-[120px] truncate">{activeModel}</span>
+            </>
+          )}
+          {workspaceRoot && (
+            <>
+              <span className="text-border">·</span>
+              <span className="max-w-[100px] truncate" title={workspaceRoot}>
+                {workspaceRoot.split("/").pop() || workspaceRoot}
+              </span>
+            </>
+          )}
+          <span className="text-border">·</span>
+          <span>{toolPolicy}</span>
+          {messages.length > 0 && (
+            <>
+              <span className="text-border">·</span>
+              <span>{Math.round(contextPct * 100)}% ctx</span>
+              <span className="text-border">·</span>
+              <span>{messages.length} msgs</span>
+            </>
+          )}
+        </div>
+      </footer>
 
       {/* ── Slash command help dialog ────────────────────────────────────────── */}
       <Dialog open={showCommandHelp} onOpenChange={setShowCommandHelp}>

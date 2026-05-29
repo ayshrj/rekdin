@@ -3,6 +3,9 @@
 import * as React from "react"
 
 import { ChatPanel } from "@/components/chat/chat-panel"
+import { CommandPalette } from "@/components/command-palette"
+import { CrossSessionSearch } from "@/components/cross-session-search"
+import { KeyboardShortcutOverlay } from "@/components/keyboard-shortcut-overlay"
 import { OpenRouterSettings } from "@/components/openrouter-settings"
 import { SessionSidebar } from "@/components/session-sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -17,7 +20,7 @@ import {
 } from "@/components/ui/sheet"
 import { WorkspacePanel } from "@/components/workspace-panel"
 import { useChat } from "@/contexts/chat-context"
-import { Clock, GalleryVerticalEnd, GitHub, Plus, Rekdin, Sparkles } from "@/lib/icons"
+import { Clock, GalleryVerticalEnd, GitHub, Plus, Rekdin, Search, Sparkles } from "@/lib/icons"
 import { getProviderLabel } from "@/lib/llm-providers"
 import { cn } from "@/lib/utils"
 
@@ -180,6 +183,7 @@ function DesktopRail({
   onToggleSessions,
   onCreateSession,
   onRestartTour,
+  onOpenPalette,
   isCreating,
 }: {
   connected: boolean
@@ -188,6 +192,7 @@ function DesktopRail({
   onToggleSessions: () => void
   onCreateSession: () => void
   onRestartTour: () => void
+  onOpenPalette: () => void
   isCreating?: boolean
 }) {
   return (
@@ -224,6 +229,17 @@ function DesktopRail({
 
           {/* Thin separator so the new-session btn reads as distinct from nav */}
           <div className="border-border w-6 border-t" />
+
+          {/* Command palette */}
+          <button
+            type="button"
+            onClick={onOpenPalette}
+            aria-label="Command palette"
+            title="Command palette (⌘K)"
+            className="rk-icon-button"
+          >
+            <Search className="h-4 w-4" />
+          </button>
 
           {/* Session history toggle */}
           <button
@@ -354,6 +370,7 @@ function HomePageContent() {
             onCreateSession={handleRailNewSession}
             isCreating={isLoading}
             onRestartTour={restartTour}
+            onOpenPalette={() => window.dispatchEvent(new CustomEvent("rekdin:open-palette"))}
           />
           <main className="min-w-0 flex-1 overflow-hidden">
             <ResizablePanelGroup
@@ -454,6 +471,10 @@ function HomePageContent() {
         onSkip={markTourSeen}
         description="Six quick stops covering sessions, workflows, slash commands, tool policy, the workspace panel, and settings."
       />
+
+      <CommandPalette />
+      <KeyboardShortcutOverlay />
+      <CrossSessionSearch />
     </div>
   )
 }

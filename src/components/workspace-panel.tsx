@@ -15,11 +15,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ToolResultEntry, useChat, useToolResults } from "@/contexts/chat-context"
 import {
   ArrowDownTray,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronRight as ChevronRightSmall,
   ClipboardDocumentList,
   Clock,
   File,
+  FolderTree,
   GalleryVerticalEnd,
   Globe,
   PlayCircle,
@@ -63,13 +66,27 @@ function isResultEmpty(entry: ToolResultEntry): boolean {
   return false
 }
 
-function ToolLoadingSkeleton({ toolName }: { toolName: string }) {
+function ToolLoadingSkeleton({ toolName, startTime }: { toolName: string; startTime?: string }) {
+  const [elapsed, setElapsed] = React.useState(0)
+
+  React.useEffect(() => {
+    const base = startTime ? Date.now() - new Date(startTime).getTime() : 0
+    setElapsed(Math.floor(base / 1000))
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000)
+    return () => clearInterval(id)
+  }, [startTime])
+
   return (
     <div className="rk-tool-card w-full space-y-4">
-      <div className="flex items-center gap-2">
-        <span className="bg-primary h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
-        <span className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
-          {toolLabels[toolName] ?? toolName} — working…
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="bg-primary h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
+          <span className="text-primary truncate font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
+            {toolLabels[toolName] ?? toolName}
+          </span>
+        </div>
+        <span className="text-muted-foreground shrink-0 font-mono text-[10px] tabular-nums">
+          {elapsed}s
         </span>
       </div>
       <div className="space-y-2.5">
@@ -79,6 +96,278 @@ function ToolLoadingSkeleton({ toolName }: { toolName: string }) {
         <div className="bg-surface-4 h-2 w-2/3 animate-pulse rounded-sm" />
         <div className="bg-surface-4 h-3 w-3/4 animate-pulse rounded-sm" />
       </div>
+    </div>
+  )
+}
+
+function TimelineHeatmap({
+  toolResults,
+  selectedIndex,
+  onSelect,
+}: {
+  toolResults: ToolResultEntry[]
+  selectedIndex: number
+  onSelect: (index: number) => void
+}) {
+  const BUCKETS = 32
+  const times = toolResults.map((r) => new Date(r.timestamp).getTime()).filter(Boolean)
+  if (times.length < 2) return null
+  const min = Math.min(...times)
+  const max = Math.max(...times)
+  const range = max - min || 1
+
+  const buckets = Array.from({ length: BUCKETS }, (_, i) => {
+    const bucketMin = min + (i / BUCKETS) * range
+    const bucketMax = min + ((i + 1) / BUCKETS) * range
+    const indices = toolResults
+      .map((r, idx) => ({ t: new Date(r.timestamp).getTime(), idx }))
+      .filter(({ t }) => t >= bucketMin && (t < bucketMax || i === BUCKETS - 1))
+    return { count: indices.length, indices: indices.map((x) => x.idx) }
+  })
+
+  const maxCount = Math.max(...buckets.map((b) => b.count), 1)
+
+  return (
+    <div className="border-border flex shrink-0 gap-px border-b px-2 py-1.5">
+      {buckets.map((bucket, i) => {
+        const intensity = bucket.count / maxCount
+        const isActive = bucket.indices.includes(selectedIndex)
+        return (
+          <button
+            key={i}
+            type="button"
+            title={
+              bucket.count > 0 ? `${bucket.count} step${bucket.count > 1 ? "s" : ""}` : undefined
+            }
+            onClick={() => bucket.indices.length > 0 && onSelect(bucket.indices[0]!)}
+            className="h-4 flex-1 rounded-[2px] transition-colors"
+            style={{
+              background: isActive
+                ? "var(--primary)"
+                : bucket.count === 0
+                  ? "var(--surface-4)"
+                  : `color-mix(in oklch, var(--primary) ${Math.round(intensity * 80 + 15)}%, var(--surface-4))`,
+              opacity: bucket.count === 0 ? 0.35 : 1,
+            }}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+function artifactFileType(url: string): "image" | "pdf" | "video" | "code" | "file" {
+  const ext = url.split("?")[0]?.split(".").pop()?.toLowerCase() ?? ""
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "avif"].includes(ext)) return "image"
+  if (ext === "pdf") return "pdf"
+  if (["mp4", "webm", "mov"].includes(ext)) return "video"
+  if (["js", "ts", "tsx", "jsx", "py", "sh", "json", "md", "html", "css"].includes(ext))
+    return "code"
+  return "file"
+}
+
+function ArtifactIcon({ url, label }: { url: string; label: string }) {
+  const type = artifactFileType(url)
+  const base =
+    "border-border bg-surface-4 flex h-full w-full items-center justify-center rounded font-mono text-[10px] font-semibold uppercase"
+  if (type === "image") {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={url} alt={label} className="h-full w-full rounded object-cover" loading="lazy" />
+    )
+  }
+  const colors: Record<string, string> = {
+    pdf: "text-red-400",
+    video: "text-purple-400",
+    code: "text-blue-400",
+    file: "text-muted-foreground",
+  }
+  return (
+    <div className={`${base} ${colors[type] ?? ""}`}>
+      {type === "pdf" ? "PDF" : type === "video" ? "VID" : type === "code" ? "CODE" : "FILE"}
+    </div>
+  )
+}
+
+interface FileTreeNode {
+  name: string
+  path: string
+  hidden: boolean
+  size?: number
+  ext?: string
+  protected?: boolean
+  children?: FileTreeNode[]
+  isFile?: boolean
+  loaded?: boolean
+}
+
+function FileTreeNode({
+  node,
+  depth,
+  onPreview,
+}: {
+  node: FileTreeNode
+  depth: number
+  onPreview: (path: string) => void
+}) {
+  const [expanded, setExpanded] = React.useState(depth === 0)
+  const [children, setChildren] = React.useState<FileTreeNode[]>([])
+  const [loading, setLoading] = React.useState(false)
+
+  const toggle = async () => {
+    if (node.isFile) {
+      onPreview(node.path)
+      return
+    }
+    if (!expanded && children.length === 0 && !node.protected) {
+      setLoading(true)
+      try {
+        const res = await fetch(
+          `/api/workspace/browse?path=${encodeURIComponent(node.path)}&files=true`
+        )
+        const data = (await res.json()) as {
+          directories?: FileTreeNode[]
+          files?: Array<{ name: string; path: string; hidden: boolean; size: number; ext: string }>
+        }
+        const dirs: FileTreeNode[] = (data.directories ?? []).map((d) => ({ ...d, isFile: false }))
+        const files: FileTreeNode[] = (data.files ?? []).map((f) => ({ ...f, isFile: true }))
+        setChildren([...dirs, ...files])
+      } catch {
+        /* ignore */
+      }
+      setLoading(false)
+    }
+    setExpanded((e) => !e)
+  }
+
+  const indent = depth * 12
+  const isDir = !node.isFile
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        className={cn(
+          "hover:bg-surface-3 flex w-full items-center gap-1.5 rounded px-2 py-0.5 text-left transition-colors",
+          node.hidden && "opacity-50"
+        )}
+        style={{ paddingLeft: `${8 + indent}px` }}
+      >
+        {isDir ? (
+          <span className="text-muted-foreground shrink-0">
+            {loading ? (
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+            ) : expanded ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRightSmall className="h-3 w-3" />
+            )}
+          </span>
+        ) : (
+          <span className="ml-3 shrink-0" />
+        )}
+        <FolderTree
+          open={isDir && expanded}
+          className={cn(
+            "h-3.5 w-3.5 shrink-0",
+            isDir ? "text-primary/70" : "text-muted-foreground"
+          )}
+        />
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate font-mono text-[11px]",
+            isDir ? "text-foreground font-medium" : "text-muted-foreground"
+          )}
+        >
+          {node.name}
+        </span>
+        {node.isFile && node.size !== undefined && node.size > 0 && (
+          <span className="text-muted-foreground shrink-0 font-mono text-[9px]">
+            {node.size > 1024 ? `${(node.size / 1024).toFixed(0)}k` : `${node.size}b`}
+          </span>
+        )}
+        {node.protected && (
+          <span className="text-muted-foreground/60 shrink-0 font-mono text-[9px]">skip</span>
+        )}
+      </button>
+      {expanded && children.length > 0 && (
+        <div>
+          {children.map((child) => (
+            <FileTreeNode key={child.path} node={child} depth={depth + 1} onPreview={onPreview} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FilesTab({ workspaceRoot }: { workspaceRoot: string }) {
+  const [rootNodes, setRootNodes] = React.useState<FileTreeNode[]>([])
+  const [preview, setPreview] = React.useState<{ path: string; content: string } | null>(null)
+  const [loadingPreview, setLoadingPreview] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!workspaceRoot) return
+    fetch(`/api/workspace/browse?path=${encodeURIComponent(workspaceRoot)}&files=true`)
+      .then((r) => r.json())
+      .then(
+        (data: {
+          directories?: FileTreeNode[]
+          files?: Array<{ name: string; path: string; hidden: boolean; size: number; ext: string }>
+        }) => {
+          const dirs = (data.directories ?? []).map((d) => ({ ...d, isFile: false }))
+          const files = (data.files ?? []).map((f) => ({ ...f, isFile: true }))
+          setRootNodes([...dirs, ...files])
+        }
+      )
+      .catch(() => {})
+  }, [workspaceRoot])
+
+  const handlePreview = async (filePath: string) => {
+    setLoadingPreview(true)
+    setPreview(null)
+    try {
+      const res = await fetch(`/api/workspace/file?path=${encodeURIComponent(filePath)}`)
+      const text = await res.text()
+      setPreview({ path: filePath, content: text.slice(0, 4000) })
+    } catch {
+      setPreview({ path: filePath, content: "(Could not read file)" })
+    }
+    setLoadingPreview(false)
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {preview ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="border-border bg-surface-3 flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
+            <button
+              type="button"
+              onClick={() => setPreview(null)}
+              className="text-primary font-mono text-[10px] hover:underline"
+            >
+              ← tree
+            </button>
+            <span className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-[10px]">
+              {preview.path.split("/").slice(-2).join("/")}
+            </span>
+          </div>
+          <pre className="rk-scrollbar rk-code-block min-h-0 flex-1 overflow-auto p-3 text-[11px] leading-relaxed whitespace-pre-wrap">
+            {loadingPreview ? "Loading…" : preview.content}
+          </pre>
+        </div>
+      ) : (
+        <div className="rk-scrollbar min-h-0 flex-1 overflow-y-auto py-1">
+          {rootNodes.length === 0 ? (
+            <p className="text-muted-foreground py-8 text-center text-xs">No workspace selected.</p>
+          ) : (
+            rootNodes.map((node) => (
+              <FileTreeNode key={node.path} node={node} depth={0} onPreview={handlePreview} />
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -398,16 +687,19 @@ function summarizeAssistantOutcome(message?: string | null) {
  */
 export function WorkspacePanel({ onChangeWorkspace }: { onChangeWorkspace?: () => void }) {
   const { toolResults } = useToolResults()
-  const { currentSessionId, messages } = useChat()
+  const { currentSessionId, messages, workspaceRoot } = useChat()
   const [selectedIndex, setSelectedIndex] = React.useState(0)
   const [navigationMode, setNavigationMode] = React.useState<"scroll" | "buttons">("buttons")
   const scrollContainerRef = React.useRef<HTMLDivElement | null>(null)
   const stepNodeRefs = React.useRef(new Map<string, HTMLDivElement>())
-  const [activeTab, setActiveTab] = React.useState<"timeline" | "artifacts" | "replay">("timeline")
+  const [activeTab, setActiveTab] = React.useState<"timeline" | "artifacts" | "replay" | "files">(
+    "timeline"
+  )
   const [replayEvents, setReplayEvents] = React.useState<Array<Record<string, unknown>>>([])
   const [traces, setTraces] = React.useState<Array<Record<string, unknown>>>([])
   const [backgroundJobs, setBackgroundJobs] = React.useState<Array<Record<string, unknown>>>([])
   const [showDiagnostics, setShowDiagnostics] = React.useState(false)
+  const [artifactView, setArtifactView] = React.useState<"list" | "grid">("list")
 
   React.useEffect(() => {
     if (toolResults.length > 0) {
@@ -775,6 +1067,25 @@ export function WorkspacePanel({ onChangeWorkspace }: { onChangeWorkspace?: () =
                 {artifacts.length}
               </span>
             )}
+            {activeTab === "artifacts" && artifacts.length > 0 && (
+              <div className="border-border flex overflow-hidden rounded border">
+                {(["list", "grid"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setArtifactView(v)}
+                    className={cn(
+                      "px-2 py-0.5 font-mono text-[10px] transition-colors",
+                      artifactView === v
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {v === "list" ? "≡" : "⊞"}
+                  </button>
+                ))}
+              </div>
+            )}
             {activeTab === "timeline" && runningEntry ? (
               <span className="border-primary/25 bg-primary/10 text-primary flex items-center gap-1.5 rounded-md border px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase">
                 <span className="bg-primary h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
@@ -836,6 +1147,7 @@ export function WorkspacePanel({ onChangeWorkspace }: { onChangeWorkspace?: () =
             {[
               { id: "timeline", label: "Timeline", icon: GalleryVerticalEnd },
               { id: "artifacts", label: "Artifacts", icon: File },
+              { id: "files", label: "Files", icon: FolderTree },
               { id: "replay", label: "Activity", icon: PlayCircle },
             ].map((tab) => {
               const Icon = tab.icon
@@ -881,240 +1193,280 @@ export function WorkspacePanel({ onChangeWorkspace }: { onChangeWorkspace?: () =
               onSelect={handleStepChange}
             />
           ) : null}
-          <div
-            ref={scrollContainerRef}
-            className="rk-scrollbar min-h-0 flex-1 overflow-auto px-4 pb-4"
-          >
-            <AnimatePresence mode="wait">
-              {activeTab === "timeline" && toolResults.length === 0 ? (
-                <motion.div
-                  key="empty"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="flex h-full flex-col items-center justify-center gap-3 text-center"
-                >
-                  <div className="bg-surface-3 rounded-lg border p-4">
-                    <Globe className="text-muted-foreground/60 h-6 w-6" />
-                  </div>
-                  <div>
-                    <p className="text-foreground text-sm font-medium">No tool steps yet</p>
-                    <p className="text-muted-foreground mt-0.5 text-xs">
-                      Tool results will appear here as the agent works.
-                    </p>
-                  </div>
-                </motion.div>
-              ) : activeTab === "timeline" && isScrollMode ? (
-                <motion.div
-                  key="scroll"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15, ease: "easeOut" }}
-                  className="mt-4 space-y-6"
-                >
-                  {toolResults.map((result, index) => {
-                    const resultId = `tool-result-${result.id}`
-                    const contentPart = toContentPart(result)
-                    return (
-                      <div
-                        key={result.id}
-                        id={resultId}
-                        ref={(node) => {
-                          if (node) {
-                            stepNodeRefs.current.set(result.id, node)
-                          } else {
-                            stepNodeRefs.current.delete(result.id)
-                          }
-                        }}
-                        className="scroll-mt-4"
-                      >
-                        <div
-                          className={cn(
-                            "mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
-                            index === selectedIndex
-                              ? "border-primary/30 bg-primary/10 text-primary"
-                              : "text-muted-foreground border-transparent"
-                          )}
-                        >
-                          <span>Step {index + 1}</span>
-                          <span>{toolLabels[result.toolName] ?? result.toolName}</span>
-                          <span>{new Date(result.timestamp).toLocaleTimeString()}</span>
-                        </div>
-                        {result.status === "running" && isResultEmpty(result) ? (
-                          <ToolLoadingSkeleton toolName={result.toolName} />
-                        ) : (
-                          <ToolResultRenderer content={[contentPart]} />
-                        )}
-                      </div>
-                    )
-                  })}
-                </motion.div>
-              ) : activeTab === "timeline" && activeEntry ? (
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={selectedIndex}
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    transition={{ duration: 0.15, ease: "easeOut" }}
-                    className="mt-4"
-                  >
-                    <div className="text-muted-foreground border-border bg-surface-3 mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1 font-mono text-[10px]">
-                      <span>{stepLabel}</span>
-                      <span>{toolLabels[activeEntry.toolName] ?? activeEntry.toolName}</span>
-                      <span>{new Date(activeEntry.timestamp).toLocaleTimeString()}</span>
-                    </div>
-                    {activeEntry.status === "running" && isResultEmpty(activeEntry) ? (
-                      <ToolLoadingSkeleton toolName={activeEntry.toolName} />
-                    ) : (
-                      <ToolResultRenderer content={[toContentPart(activeEntry)]} />
-                    )}
-                  </motion.div>
-                </AnimatePresence>
-              ) : activeTab === "artifacts" ? (
-                <motion.div
-                  key="artifacts"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15, ease: "easeOut" }}
-                  className="mt-4 space-y-3"
-                >
-                  {artifacts.length === 0 ? (
-                    <div className="text-muted-foreground py-10 text-center text-sm">
-                      No artifacts captured yet.
-                    </div>
-                  ) : (
-                    artifacts.map((artifact) => (
-                      <a
-                        key={artifact.url}
-                        href={artifact.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="group bg-surface-3 hover:bg-surface-4 border-border block rounded-lg border p-3 transition-colors"
-                      >
-                        <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
-                          Artifact
-                        </div>
-                        <div className="mt-1 text-sm font-medium">{artifact.label}</div>
-                        <div className="text-muted-foreground font-mono text-[11px] wrap-anywhere">
-                          {artifact.url}
-                        </div>
-                      </a>
-                    ))
-                  )}
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="activity"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15, ease: "easeOut" }}
-                  className="mt-4 space-y-3"
-                >
-                  {!showDiagnostics && activityItems.length > 0
-                    ? activityItems.map((item, index) => (
-                        <motion.div
-                          key={item.id}
-                          initial={{ opacity: 0, y: 6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.18, ease: "easeOut", delay: index * 0.04 }}
-                          className="bg-surface-3 hover:bg-surface-4 border-border rounded-lg border p-3 transition-colors"
-                        >
-                          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="flex min-w-0 items-start gap-2 text-sm font-medium wrap-anywhere">
-                              <PlayCircle className="mt-0.5 size-4 shrink-0" />
-                              {item.title}
-                            </div>
-                            {item.timestamp ? (
-                              <div className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs">
-                                <Clock className="size-3" />
-                                {item.timestamp}
-                              </div>
-                            ) : null}
-                          </div>
-                          <p className="text-muted-foreground mt-1 text-sm whitespace-pre-wrap">
-                            {item.detail}
-                          </p>
-                          {item.tone ? (
-                            <div className="mt-2">
-                              <Badge
-                                variant="outline"
-                                className={
-                                  item.tone === "success"
-                                    ? "border-tool-data/25 bg-tool-data/10 text-tool-data"
-                                    : item.tone === "warning"
-                                      ? "border-destructive/25 bg-destructive/10 text-destructive"
-                                      : "border-tool-json/25 bg-tool-json/10 text-tool-json"
-                                }
-                              >
-                                {item.tone === "success"
-                                  ? "Completed"
-                                  : item.tone === "warning"
-                                    ? "Attention"
-                                    : "In progress"}
-                              </Badge>
-                            </div>
-                          ) : null}
-                        </motion.div>
-                      ))
-                    : null}
-                  {showDiagnostics && traces.length > 0 ? (
-                    <div className="space-y-3">
-                      {traces.map((trace) => (
-                        <div
-                          key={String(trace.id)}
-                          className="bg-surface-3 border-border rounded-lg border p-3"
-                        >
-                          <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
-                            Diagnostic trace · {String(trace.mode ?? "general")} ·{" "}
-                            {String(trace.model ?? "model")}
-                          </div>
-                          <JsonTreeViewer
-                            json={trace as unknown as JsonValue}
-                            className="px-0 pt-3 pb-0"
-                            showOnlyKeys={{ keys: [...TRACE_SHOW_ONLY_KEYS] }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                  {showDiagnostics && replayEvents.length > 0 ? (
-                    <div className="space-y-3">
-                      {replayEvents.map((event, index) => (
-                        <div
-                          key={`${String(event.id ?? index)}`}
-                          className="bg-surface-3 border-border rounded-lg border p-3"
-                        >
-                          <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
-                            Diagnostic event · {String(event.type ?? "event")}
-                          </div>
-                          <JsonTreeViewer
-                            json={(event.data ?? event) as unknown as JsonValue}
-                            className="px-0 pt-3 pb-0"
-                            showOnlyKeys={{ keys: [...REPLAY_EVENT_SHOW_ONLY_KEYS] }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                  {!showDiagnostics && activityItems.length === 0 ? (
-                    <div className="text-muted-foreground py-10 text-center text-sm">
-                      Activity will appear here after the session runs tools.
-                    </div>
-                  ) : null}
-                  {showDiagnostics && traces.length === 0 && replayEvents.length === 0 ? (
-                    <div className="text-muted-foreground py-10 text-center text-sm">
-                      Diagnostics will appear here after the session runs tools.
-                    </div>
-                  ) : null}
-                </motion.div>
+          {activeTab === "files" ? (
+            <FilesTab workspaceRoot={workspaceRoot ?? ""} />
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col">
+              {activeTab === "timeline" && toolResults.length > 1 && (
+                <TimelineHeatmap
+                  toolResults={toolResults}
+                  selectedIndex={selectedIndex}
+                  onSelect={handleStepChange}
+                />
               )}
-            </AnimatePresence>
-          </div>
+              <div
+                ref={scrollContainerRef}
+                className="rk-scrollbar min-h-0 flex-1 overflow-auto px-4 pb-4"
+              >
+                <AnimatePresence mode="wait">
+                  {activeTab === "timeline" && toolResults.length === 0 ? (
+                    <motion.div
+                      key="empty"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="flex h-full flex-col items-center justify-center gap-3 text-center"
+                    >
+                      <div className="bg-surface-3 rounded-lg border p-4">
+                        <Globe className="text-muted-foreground/60 h-6 w-6" />
+                      </div>
+                      <div>
+                        <p className="text-foreground text-sm font-medium">No tool steps yet</p>
+                        <p className="text-muted-foreground mt-0.5 text-xs">
+                          Tool results will appear here as the agent works.
+                        </p>
+                      </div>
+                    </motion.div>
+                  ) : activeTab === "timeline" && isScrollMode ? (
+                    <motion.div
+                      key="scroll"
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15, ease: "easeOut" }}
+                      className="mt-4 space-y-6"
+                    >
+                      {toolResults.map((result, index) => {
+                        const resultId = `tool-result-${result.id}`
+                        const contentPart = toContentPart(result)
+                        return (
+                          <div
+                            key={result.id}
+                            id={resultId}
+                            ref={(node) => {
+                              if (node) {
+                                stepNodeRefs.current.set(result.id, node)
+                              } else {
+                                stepNodeRefs.current.delete(result.id)
+                              }
+                            }}
+                            className="scroll-mt-4"
+                          >
+                            <div
+                              className={cn(
+                                "mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
+                                index === selectedIndex
+                                  ? "border-primary/30 bg-primary/10 text-primary"
+                                  : "text-muted-foreground border-transparent"
+                              )}
+                            >
+                              <span>Step {index + 1}</span>
+                              <span>{toolLabels[result.toolName] ?? result.toolName}</span>
+                              <span>{new Date(result.timestamp).toLocaleTimeString()}</span>
+                            </div>
+                            {result.status === "running" && isResultEmpty(result) ? (
+                              <ToolLoadingSkeleton
+                                toolName={result.toolName}
+                                startTime={result.timestamp}
+                              />
+                            ) : (
+                              <ToolResultRenderer content={[contentPart]} />
+                            )}
+                          </div>
+                        )
+                      })}
+                    </motion.div>
+                  ) : activeTab === "timeline" && activeEntry ? (
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={selectedIndex}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        transition={{ duration: 0.15, ease: "easeOut" }}
+                        className="mt-4"
+                      >
+                        <div className="text-muted-foreground border-border bg-surface-3 mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1 font-mono text-[10px]">
+                          <span>{stepLabel}</span>
+                          <span>{toolLabels[activeEntry.toolName] ?? activeEntry.toolName}</span>
+                          <span>{new Date(activeEntry.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        {activeEntry.status === "running" && isResultEmpty(activeEntry) ? (
+                          <ToolLoadingSkeleton toolName={activeEntry.toolName} />
+                        ) : (
+                          <ToolResultRenderer content={[toContentPart(activeEntry)]} />
+                        )}
+                      </motion.div>
+                    </AnimatePresence>
+                  ) : activeTab === "artifacts" ? (
+                    <motion.div
+                      key="artifacts"
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15, ease: "easeOut" }}
+                      className="mt-4 space-y-3"
+                    >
+                      {artifacts.length === 0 ? (
+                        <div className="text-muted-foreground py-10 text-center text-sm">
+                          No artifacts captured yet.
+                        </div>
+                      ) : artifactView === "grid" ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          {artifacts.map((artifact) => (
+                            <a
+                              key={artifact.url}
+                              href={artifact.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="group border-border bg-surface-3 hover:bg-surface-4 flex flex-col gap-2 overflow-hidden rounded-lg border p-2 transition-colors"
+                            >
+                              <div className="border-border h-20 overflow-hidden rounded border">
+                                <ArtifactIcon url={artifact.url} label={artifact.label} />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-foreground truncate text-xs font-medium">
+                                  {artifact.label.split(" · ").pop() ?? artifact.label}
+                                </p>
+                                <p className="text-muted-foreground truncate font-mono text-[10px]">
+                                  {artifact.url.split("/").pop()?.split("?")[0] ?? artifact.url}
+                                </p>
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        artifacts.map((artifact) => (
+                          <a
+                            key={artifact.url}
+                            href={artifact.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="group bg-surface-3 hover:bg-surface-4 border-border block rounded-lg border p-3 transition-colors"
+                          >
+                            <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
+                              Artifact
+                            </div>
+                            <div className="mt-1 text-sm font-medium">{artifact.label}</div>
+                            <div className="text-muted-foreground font-mono text-[11px] wrap-anywhere">
+                              {artifact.url}
+                            </div>
+                          </a>
+                        ))
+                      )}
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="activity"
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15, ease: "easeOut" }}
+                      className="mt-4 space-y-3"
+                    >
+                      {!showDiagnostics && activityItems.length > 0
+                        ? activityItems.map((item, index) => (
+                            <motion.div
+                              key={item.id}
+                              initial={{ opacity: 0, y: 6 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.18, ease: "easeOut", delay: index * 0.04 }}
+                              className="bg-surface-3 hover:bg-surface-4 border-border rounded-lg border p-3 transition-colors"
+                            >
+                              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="flex min-w-0 items-start gap-2 text-sm font-medium wrap-anywhere">
+                                  <PlayCircle className="mt-0.5 size-4 shrink-0" />
+                                  {item.title}
+                                </div>
+                                {item.timestamp ? (
+                                  <div className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs">
+                                    <Clock className="size-3" />
+                                    {item.timestamp}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <p className="text-muted-foreground mt-1 text-sm whitespace-pre-wrap">
+                                {item.detail}
+                              </p>
+                              {item.tone ? (
+                                <div className="mt-2">
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      item.tone === "success"
+                                        ? "border-tool-data/25 bg-tool-data/10 text-tool-data"
+                                        : item.tone === "warning"
+                                          ? "border-destructive/25 bg-destructive/10 text-destructive"
+                                          : "border-tool-json/25 bg-tool-json/10 text-tool-json"
+                                    }
+                                  >
+                                    {item.tone === "success"
+                                      ? "Completed"
+                                      : item.tone === "warning"
+                                        ? "Attention"
+                                        : "In progress"}
+                                  </Badge>
+                                </div>
+                              ) : null}
+                            </motion.div>
+                          ))
+                        : null}
+                      {showDiagnostics && traces.length > 0 ? (
+                        <div className="space-y-3">
+                          {traces.map((trace) => (
+                            <div
+                              key={String(trace.id)}
+                              className="bg-surface-3 border-border rounded-lg border p-3"
+                            >
+                              <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
+                                Diagnostic trace · {String(trace.mode ?? "general")} ·{" "}
+                                {String(trace.model ?? "model")}
+                              </div>
+                              <JsonTreeViewer
+                                json={trace as unknown as JsonValue}
+                                className="px-0 pt-3 pb-0"
+                                showOnlyKeys={{ keys: [...TRACE_SHOW_ONLY_KEYS] }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {showDiagnostics && replayEvents.length > 0 ? (
+                        <div className="space-y-3">
+                          {replayEvents.map((event, index) => (
+                            <div
+                              key={`${String(event.id ?? index)}`}
+                              className="bg-surface-3 border-border rounded-lg border p-3"
+                            >
+                              <div className="text-primary font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
+                                Diagnostic event · {String(event.type ?? "event")}
+                              </div>
+                              <JsonTreeViewer
+                                json={(event.data ?? event) as unknown as JsonValue}
+                                className="px-0 pt-3 pb-0"
+                                showOnlyKeys={{ keys: [...REPLAY_EVENT_SHOW_ONLY_KEYS] }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {!showDiagnostics && activityItems.length === 0 ? (
+                        <div className="text-muted-foreground py-10 text-center text-sm">
+                          Activity will appear here after the session runs tools.
+                        </div>
+                      ) : null}
+                      {showDiagnostics && traces.length === 0 && replayEvents.length === 0 ? (
+                        <div className="text-muted-foreground py-10 text-center text-sm">
+                          Diagnostics will appear here after the session runs tools.
+                        </div>
+                      ) : null}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          )}
         </div>
         <div className="bg-surface-2 border-border flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-2">
           <ToggleGroup

@@ -15,6 +15,8 @@ export type SlashCommandId =
   | "status"
   | "retry"
   | "model"
+  | "remember"
+  | "forget"
 
 export interface SlashCommandDefinition {
   id: SlashCommandId
@@ -118,6 +120,21 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
     label: "Model",
     usage: "/model <model-id>",
     description: "Switch the active model for the selected provider.",
+    handlerType: "client_action",
+  },
+  {
+    id: "remember",
+    label: "Remember",
+    usage: "/remember <fact>",
+    description:
+      "Save a fact to agent memory — injected into every future prompt for this workspace.",
+    handlerType: "client_action",
+  },
+  {
+    id: "forget",
+    label: "Forget",
+    usage: "/forget",
+    description: "Clear all saved agent memory for this workspace.",
     handlerType: "client_action",
   },
 ]

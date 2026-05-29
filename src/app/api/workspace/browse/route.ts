@@ -27,6 +27,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Path must be an existing directory" }, { status: 400 })
   }
 
+  const includeFiles = url.searchParams.get("files") === "true"
   const entries = await readdir(currentPath, { withFileTypes: true }).catch(() => [])
   const directories = entries
     .filter((entry) => entry.isDirectory())
@@ -45,6 +46,24 @@ export async function GET(req: Request) {
       return a.name.localeCompare(b.name)
     })
 
+  const files = includeFiles
+    ? await Promise.all(
+        entries
+          .filter((entry) => entry.isFile())
+          .map(async (entry) => {
+            const filePath = path.join(currentPath, entry.name)
+            const fileStat = await stat(filePath).catch(() => null)
+            return {
+              name: entry.name,
+              path: filePath,
+              hidden: entry.name.startsWith("."),
+              size: fileStat?.size ?? 0,
+              ext: path.extname(entry.name).toLowerCase(),
+            }
+          })
+      ).then((list) => list.filter(Boolean).sort((a, b) => a.name.localeCompare(b.name)))
+    : []
+
   const parent = path.dirname(currentPath)
 
   return NextResponse.json({
@@ -52,5 +71,6 @@ export async function GET(req: Request) {
     parentPath: parent === currentPath ? null : parent,
     defaultPath: getDefaultWorkspaceRoot(),
     directories,
+    files,
   })
 }
